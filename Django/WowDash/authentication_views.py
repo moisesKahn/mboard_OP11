@@ -74,12 +74,13 @@ def signin(request):
                     return redirect('operador_home')
             except Exception:
                 pass
-            # Redirección específica para rol autoservicio: ahora unificada en /optimizador/
-            try:
-                if getattr(perfil, 'rol', None) == 'autoservicio':
-                    return redirect('optimizador_home')
-            except Exception:
-                pass
+            # Redirección específica para rol autoservicio:
+            # Los usuarios autoservicio ahora van a proyectos como cualquier usuario normal
+            # try:
+            #     if getattr(perfil, 'rol', None) == 'autoservicio':
+            #         return redirect('optimizador_autoservicio_home_clone')
+            # except Exception:
+            #     pass
             return redirect('proyectos')  # Redirige a la página de proyectos por defecto
         else:
             messages.error(request, 'Usuario o contraseña incorrectos.')

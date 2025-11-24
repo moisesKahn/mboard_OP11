@@ -625,8 +625,12 @@ goOptimizerBtn.addEventListener('click', async () => {
       await fetch('{% url "optimizar_material" %}', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     } catch(_e) { /* fallback en optimizador */ }
 
-    // Redirigir al optimizador con el proyecto cargado; el overlay del optimizador se encargará de ocultarse al terminar
+    // Redirigir al optimizador: si es autoservicio, usar el clon, sino el normal
+    {% if es_autoservicio %}
+    const abrirUrl = '{% url "optimizador_autoservicio_home_clone" %}';
+    {% else %}
     const abrirUrl = '{% url "optimizador_abrir" 0 %}'.replace('/0/', `/${proyectoId}/`);
+    {% endif %}
     window.location.href = abrirUrl;
   } catch(e){ console.error(e); hideProcess(); alert('No se pudo abrir el optimizador: '+(e.message||e)); }
 });

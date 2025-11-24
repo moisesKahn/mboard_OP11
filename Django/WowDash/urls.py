@@ -36,6 +36,7 @@ from WowDash import users_views
 from WowDash import material_views
 from WowDash import core_views
 from WowDash import optimizer_views
+from WowDash import optimizer_autoservicio_clone
 from WowDash import operator_views
 from WowDash import chat_views
 from WowDash import search_views
@@ -60,6 +61,7 @@ urlpatterns = [
     path('proyectos/agregar/', core_views.add_proyecto, name='add_proyecto'),
     path('proyectos/editar/<int:proyecto_id>/', core_views.edit_proyecto, name='edit_proyecto'),
     path('proyectos/eliminar/<int:proyecto_id>/', core_views.delete_proyecto, name='delete_proyecto'),
+    path('proyectos/duplicar/<int:proyecto_id>/', core_views.duplicate_proyecto, name='duplicate_proyecto'),
     path('proyectos/actualizar-estado/', core_views.update_project_status, name='update_project_status'),
     path('proyectos/asignar-operador/', core_views.asignar_operador, name='asignar_operador'),
 
@@ -120,16 +122,20 @@ urlpatterns = [
     path('optimizador/proyectos/', optimizer_views.proyectos_optimizador, name='proyectos_optimizador'),
     path('optimizador/abrir/<int:proyecto_id>/', optimizer_views.optimizador_abrir, name='optimizador_abrir'),
     path('optimizador/proyectos/preview-json/<int:proyecto_id>/', optimizer_views.preview_proyecto_json, name='preview_proyecto_json'),
+    # Optimizador autoservicio clon independiente
+    path('optimizador_autoservicio/', optimizer_autoservicio_clone.optimizador_autoservicio_home_clone, name='optimizador_autoservicio_home_clone'),
+    path('optimizador_autoservicio/crear-proyecto/', optimizer_autoservicio_clone.crear_proyecto_optimizacion_clone, name='crear_proyecto_optimizacion_clone'),
+    path('optimizador_autoservicio/optimizar/', optimizer_autoservicio_clone.optimizar_material_clone, name='optimizar_material_clone'),
+    path('optimizador_autoservicio/exportar-entrada/<int:proyecto_id>/', optimizer_autoservicio_clone.exportar_json_entrada_clone, name='exportar_json_entrada_clone'),
+    path('optimizador_autoservicio/exportar-salida/<int:proyecto_id>/', optimizer_autoservicio_clone.exportar_json_salida_clone, name='exportar_json_salida_clone'),
+    path('optimizador_autoservicio/exportar-pdf/<int:proyecto_id>/', optimizer_autoservicio_clone.exportar_pdf_clone, name='exportar_pdf_clone'),
     
     # AJAX endpoints para clientes
     # Nota: Evitar colisión de nombre con la API general en core_views
     path('optimizador/buscar-clientes/', optimizer_views.buscar_clientes_ajax, name='opt_buscar_clientes_ajax'),
     path('optimizador/crear-cliente/', optimizer_views.crear_cliente_ajax, name='crear_cliente_ajax'),
-    # Optimizador autoservicio dedicado
-    path('autoservicio/optimizador/', optimizer_views.optimizador_autoservicio, name='optimizador_autoservicio'),
-    path('autoservicio/portada-pdf/<int:proyecto_id>/', optimizer_views.autoservicio_portada_pdf, name='autoservicio_portada_pdf'),
-
-    # Autoservicio routes
+    
+    # Rutas de autoservicio
     path('autoservicio/', autoservicio_views.autoservicio_landing, name='autoservicio_landing'),
     path('autoservicio/hub/', autoservicio_views.autoservicio_hub, name='autoservicio_hub'),
     path('autoservicio/mis-proyectos/', autoservicio_views.autoservicio_mis_proyectos, name='autoservicio_mis_proyectos'),
@@ -137,11 +143,14 @@ urlpatterns = [
     path('autoservicio/api/buscar-rut/', autoservicio_views.autoservicio_buscar_rut, name='autoservicio_buscar_rut'),
     path('autoservicio/api/crear-cliente/', autoservicio_views.autoservicio_crear_cliente, name='autoservicio_crear_cliente'),
     path('autoservicio/logout-cliente/', autoservicio_views.autoservicio_logout_cliente, name='autoservicio_logout_cliente'),
+    path('autoservicio/optimizador/', optimizer_views.optimizador_autoservicio, name='optimizador_autoservicio'),
+    path('autoservicio/portada-pdf/<int:proyecto_id>/', optimizer_views.autoservicio_portada_pdf, name='autoservicio_portada_pdf'),
 
 # operador routes
     path('operador/', operator_views.operador_home, name='operador_home'),
     path('operador/historial/', operator_views.operador_historial, name='operador_historial'),
     path('operador/proyecto/<int:proyecto_id>/', operator_views.operador_proyecto, name='operador_proyecto'),
+    path('operador/corte-guiado/<int:proyecto_id>/', operator_views.operador_corte_guiado, name='operador_corte_guiado'),
 
 # chat routes (real functionality)
     path('chat/', chat_views.chat_lista, name='chat'),

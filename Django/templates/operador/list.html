@@ -44,7 +44,16 @@
             <td>{{ p.cliente.nombre }}</td>
             <td><span class="badge {{ p.estado|estado_badge }}">{{ p.get_estado_display }}</span></td>
             <td>{{ p.fecha_creacion|date:'Y-m-d H:i' }}</td>
-            <td class="text-end"><a class="btn btn-sm btn-primary" href="{% url 'operador_proyecto' p.id %}">Abrir</a></td>
+            <td class="text-end">
+              <div class="btn-group" role="group">
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'operador_proyecto' p.id %}" title="Vista cl\u00e1sica del proyecto">
+                  <i class="ri-file-list-3-line"></i> Vista cl\u00e1sica
+                </a>
+                <a class="btn btn-sm btn-primary" href="{% url 'operador_corte_guiado' p.id %}" title="Gu\u00eda paso a paso para cortar el tablero">
+                  <i class="ri-scissors-cut-line"></i> Corte guiado
+                </a>
+              </div>
+            </td>
           </tr>
           {% empty %}
           <tr>

@@ -1,4 +1,4 @@
-#optimizerAnimOverlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2000;background:rgba(0,0,0,.50);opacity:0;transition:opacity .3s;pointer-events:none;font-family:system-ui,sans-serif}
+#optimizerAnimOverlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2000;background:rgba(255,255,255,.85);opacity:0;transition:opacity .3s;pointer-events:none;font-family:system-ui,sans-serif}
 #optimizerAnimOverlay.oa-visible{opacity:1;pointer-events:auto}
-#optimizerAnimOverlay canvas{width:320px;height:220px;max-width:90vw;max-height:60vh;border:2px solid rgba(255,255,255,.25);border-radius:12px;background:rgba(255,255,255,.06);backdrop-filter:blur(2px)}
-#optimizerAnimOverlay .oa-label{margin-top:12px;color:#fff;font-size:15px;font-weight:600;letter-spacing:.5px;text-shadow:0 2px 4px rgba(0,0,0,.4)}
+#optimizerAnimOverlay canvas{width:320px;height:220px;max-width:90vw;max-height:60vh;border:2px solid #9e9e9e;border-radius:12px;background:repeating-linear-gradient(135deg,#f9f9f9,#f9f9f9 8px,#f3f3f3 8px,#f3f3f3 16px);backdrop-filter:blur(2px);box-shadow:0 10px 30px rgba(0,0,0,.08)}
+#optimizerAnimOverlay .oa-label{margin-top:16px;color:#333;font-size:15px;font-weight:600;letter-spacing:.5px;text-shadow:0 1px 2px rgba(0,0,0,.2)}

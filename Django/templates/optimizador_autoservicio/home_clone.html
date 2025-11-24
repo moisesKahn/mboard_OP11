@@ -1,0 +1,156 @@
+{% extends '../layout/layout.html' %}
+{% block content %}
+<h6 class="fw-semibold mb-3">Optimizador Autoservicio (Clonado Independiente)</h6>
+<div class="alert alert-info">Esta es una versión clonada. Las modificaciones aquí no afectan al optimizador original.</div>
+{% if acceso_directo_autoservicio %}
+<div class="alert alert-success py-2 mb-2">Ingreso directo autoservicio activo. Se omitió captura de RUT y se generó/recuperó proyecto borrador.</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3">
+      {% if not acceso_directo_autoservicio %}
+      <div class="col-md-4">
+        <label class="form-label">Cliente</label>
+        <input type="text" class="form-control" id="clienteInputClone" placeholder="Nombre cliente">
+      </div>
+      {% endif %}
+      <div class="col-md-2">
+        <label class="form-label">ID Proyecto</label>
+        <input type="text" class="form-control" id="folioProyectoClone" placeholder="—" disabled>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Nombre Proyecto</label>
+        <input type="text" class="form-control" id="nombreProyectoClone" placeholder="Se generará...">
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <button class="btn btn-primary w-100" id="btnCrearProyectoClone" onclick="crearProyectoClone()">Crear Proyecto Clone</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header">Material y Piezas</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Material</label>
+        <select class="form-select" id="materialSelectClone">
+          <option value="">Seleccionar...</option>
+          {% for m in tableros %}
+          <option value="{{ m.id }}" data-ancho="{{ m.ancho }}" data-largo="{{ m.largo }}">{{ m.nombre }} ({{ m.ancho }}×{{ m.largo }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Ancho (mm)</label>
+        <input type="number" class="form-control" id="anchoMaterialClone" placeholder="—" disabled>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Largo (mm)</label>
+        <input type="number" class="form-control" id="largoMaterialClone" placeholder="—" disabled>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Margen X</label>
+        <input type="number" class="form-control" id="margenXClone" value="10">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Margen Y</label>
+        <input type="number" class="form-control" id="margenYClone" value="10">
+      </div>
+    </div>
+    <hr>
+    <h6>Piezas</h6>
+    <table class="table table-sm" id="tablaPiezasClone">
+      <thead><tr><th>Nombre</th><th>Ancho</th><th>Largo</th><th>Cantidad</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button class="btn btn-outline-secondary btn-sm" onclick="agregarFilaPiezaClone()">Agregar Pieza</button>
+    <button class="btn btn-success btn-sm ms-2" onclick="optimizarClone()">Optimizar</button>
+  </div>
+</div>
+
+<div id="resultadoClone" style="display:none" class="card">
+  <div class="card-header">Resultado Optimización Clone</div>
+  <div class="card-body">
+    <pre id="resultadoJsonClone" style="max-height:300px; overflow:auto; font-size:13px;"></pre>
+  </div>
+</div>
+
+<div id="optimizerAnimOverlayClone" class="oa-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);z-index:999;opacity:0;pointer-events:none;transition:opacity .25s;">
+  <canvas></canvas>
+</div>
+<div id="cloneFlags" data-acceso="{{ acceso_directo_autoservicio|yesno:'true,false' }}" data-proyecto-id="{% if proyecto_actual %}{{ proyecto_actual.id }}{% endif %}" data-proyecto-public-id="{% if proyecto_actual %}{{ proyecto_actual.public_id }}{% endif %}"></div>
+<style>
+  .oa-overlay.oa-visible{opacity:1;pointer-events:auto;}
+  .oa-overlay .oa-label{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);color:#fff;font-weight:600;font-size:14px;letter-spacing:.5px;}
+</style>
+<script src="/static/js/optimizador_autoservicio/optimizer_anim_clone.js"></script>
+<script>
+let proyectoCloneId = null;
+const ACCESO_AUTOSERVICIO = document.getElementById('cloneFlags').dataset.acceso === 'true';
+
+function crearProyectoClone(){
+  const nombre = document.getElementById('nombreProyectoClone').value.trim() || 'Proyecto Clone';
+  let clienteNombre = '';
+  if(!ACCESO_AUTOSERVICIO){
+    clienteNombre = document.getElementById('clienteInputClone').value.trim();
+    if(!clienteNombre){ alert('Ingresa cliente'); return; }
+  }
+  const payload = { nombre, cliente_id: 1, descripcion: 'Clone', configuracion: {} };
+  const anim = OptimizerAnimClone.start('#optimizerAnimOverlayClone','opt');
+  fetch('/optimizador_autoservicio/crear-proyecto/', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r=>r.json()).then(d=>{
+      if(!d.success){ alert(d.message||'Error'); return; }
+      proyectoCloneId = d.proyecto_id; document.getElementById('folioProyectoClone').value = d.folio;
+      anim.finish();
+      document.getElementById('btnCrearProyectoClone').disabled = true;
+      alert('Proyecto clone creado');
+    }).catch(()=>{ alert('Error creando clone'); });
+}
+
+function agregarFilaPiezaClone(){
+  const tb = document.querySelector('#tablaPiezasClone tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input class='form-control form-control-sm' placeholder='Pieza'></td>
+    <td><input type='number' class='form-control form-control-sm' value='100'></td>
+    <td><input type='number' class='form-control form-control-sm' value='200'></td>
+    <td><input type='number' class='form-control form-control-sm' value='1'></td>
+    <td><button class='btn btn-sm btn-danger' onclick='this.closest("tr").remove()'>&times;</button></td>`;
+  tb.appendChild(tr);
+}
+
+function optimizarClone(){
+  if(!proyectoCloneId){ alert('Primero crea el proyecto clone'); return; }
+  const materialSel = document.getElementById('materialSelectClone');
+  const materialId = materialSel.value;
+  if(!materialId){ alert('Selecciona material'); return; }
+  const ancho = parseInt(materialSel.selectedOptions[0].dataset.ancho);
+  const largo = parseInt(materialSel.selectedOptions[0].dataset.largo);
+  const piezas = []; document.querySelectorAll('#tablaPiezasClone tbody tr').forEach(tr=>{
+    const tds = tr.querySelectorAll('td');
+    piezas.push({ nombre: tds[0].querySelector('input').value||'Pieza', ancho: parseInt(tds[1].querySelector('input').value), largo: parseInt(tds[2].querySelector('input').value), cantidad: parseInt(tds[3].querySelector('input').value)||1 });
+  });
+  const payload = { proyecto_id: proyectoCloneId, configuracion_material:{ material_id: parseInt(materialId), ancho_custom: ancho, largo_custom: largo, margen_x: parseInt(document.getElementById('margenXClone').value)||0, margen_y: parseInt(document.getElementById('margenYClone').value)||0, desperdicio_sierra:3 }, piezas };
+  const anim = OptimizerAnimClone.start('#optimizerAnimOverlayClone','opt');
+  fetch('/optimizador_autoservicio/optimizar/', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r=>r.json()).then(d=>{
+      if(!d.success){ alert(d.message||'Error'); return; }
+      document.getElementById('resultadoClone').style.display='block';
+      document.getElementById('resultadoJsonClone').textContent = JSON.stringify(d.resultado, null, 2);
+      anim.finish();
+    }).catch(()=>{ alert('Error optimizando clone'); });
+}
+
+// Autoinicialización si backend ya proveyó proyecto_actual (leído vía data attributes)
+document.addEventListener('DOMContentLoaded', ()=>{
+  const flags = document.getElementById('cloneFlags').dataset;
+  if(flags.proyectoId){
+    proyectoCloneId = parseInt(flags.proyectoId);
+    if(flags.proyectoPublicId){ document.getElementById('folioProyectoClone').value = flags.proyectoPublicId; }
+    const btn = document.getElementById('btnCrearProyectoClone'); if(btn) btn.disabled = true;
+  }
+});
+</script>
+{% endblock %}

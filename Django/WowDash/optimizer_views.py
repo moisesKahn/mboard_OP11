@@ -147,38 +147,67 @@ class OptimizationEngine:
         if not tablero['piezas']:
             return {'x': 0, 'y': 0}
 
+        # Estrategia: Grid regular para piezas uniformes
+        # Si todas las piezas en el tablero tienen el mismo tamaño, usar grid estricto
+        if len(tablero['piezas']) > 0:
+            piezas_uniformes = all(
+                p['ancho'] == ancho and p['largo'] == largo 
+                for p in tablero['piezas']
+            )
+            
+            if piezas_uniformes:
+                # Calcular posiciones de grid con kerf
+                paso_x = ancho + self.desperdicio_sierra
+                paso_y = largo + self.desperdicio_sierra
+                
+                # Buscar en grid regular
+                y = 0
+                while y + largo <= self.tablero_largo:
+                    x = 0
+                    while x + ancho <= self.tablero_ancho:
+                        if self._posicion_libre(tablero, x, y, ancho, largo):
+                            return {'x': x, 'y': y}
+                        x += paso_x
+                    y += paso_y
+
+        # Estrategia: Bottom-Left mejorada con alineación estricta
+        # Crear una lista de posiciones candidatas basadas en las esquinas de piezas existentes
         posiciones = set()
         posiciones.add((0, 0))
+        
         for p in tablero['piezas']:
+            # Posición a la derecha de la pieza (considerando kerf)
             x_der = p['x'] + p['ancho'] + self.desperdicio_sierra
+            # Posición arriba de la pieza (considerando kerf)
             y_sup = p['y'] + p['largo'] + self.desperdicio_sierra
-            if x_der + ancho <= self.tablero_ancho:
-                if p['y'] + largo <= self.tablero_largo:
-                    posiciones.add((x_der, p['y']))
-                if y_sup + largo <= self.tablero_largo:
-                    posiciones.add((x_der, y_sup))
-            if y_sup + largo <= self.tablero_largo:
-                if p['x'] + ancho <= self.tablero_ancho:
-                    posiciones.add((p['x'], y_sup))
-                x_der2 = p['x'] + p['ancho'] + self.desperdicio_sierra
-                if x_der2 + ancho <= self.tablero_ancho:
-                    posiciones.add((x_der2, y_sup))
-            # Alineadas
-            if p['x'] + ancho <= self.tablero_ancho and p['y'] + largo <= self.tablero_largo:
-                posiciones.add((p['x'], p['y']))
+            
+            # Alineado a la derecha, misma Y
+            posiciones.add((x_der, p['y']))
+            # Alineado arriba, misma X
+            posiciones.add((p['x'], y_sup))
+            # Esquina superior derecha
+            posiciones.add((x_der, y_sup))
+            # Misma posición (puede caber si la otra pieza está rotada)
+            posiciones.add((p['x'], p['y']))
 
-        pos_list = list(posiciones)
-        pos_list.sort(key=lambda pos: (pos[1], pos[0]))
+        # Ordenar posiciones: primero las más abajo (menor Y), luego más a la izquierda (menor X)
+        pos_list = sorted(list(posiciones), key=lambda pos: (pos[1], pos[0]))
+        
+        # Intentar cada posición candidata
         for (x, y) in pos_list:
-            if self._posicion_libre(tablero, x, y, ancho, largo):
-                return {'x': x, 'y': y}
-        # Búsqueda sistemática si no hubo suerte
-        # Volver a la lógica anterior: paso fijo de 15 mm
-        paso = 15
+            # Validar que está dentro del tablero
+            if x + ancho <= self.tablero_ancho and y + largo <= self.tablero_largo:
+                if self._posicion_libre(tablero, x, y, ancho, largo):
+                    return {'x': x, 'y': y}
+        
+        # Si no encontró posición en candidatas, búsqueda exhaustiva con paso fino
+        # Usar un paso más fino para mejor precisión
+        paso = 5  # Paso más fino para mejor alineación
         for y in range(0, self.tablero_largo - largo + 1, paso):
             for x in range(0, self.tablero_ancho - ancho + 1, paso):
                 if self._posicion_libre(tablero, x, y, ancho, largo):
                     return {'x': x, 'y': y}
+        
         return None
 
     def _posicion_libre(self, tablero, x, y, ancho, largo):
@@ -1829,27 +1858,26 @@ def crear_proyecto_optimizacion(request):
             # Solo guardar configuración si viene explícitamente; evitar guardar el payload completo
             configuracion = data.get('configuracion') if isinstance(data.get('configuracion'), (dict, list)) else None
 
-            # Forzar cliente por sesión si flujo autoservicio
+            # Para autoservicio: priorizar cliente de sesión, pero permitir actualizarlo
             try:
                 perfil = getattr(request.user, 'usuarioperfiloptimizador', None)
                 if perfil and perfil.rol == 'autoservicio':
                     from WowDash.autoservicio_views import SESSION_KEY_CLIENTE
                     session_cliente_id = request.session.get(SESSION_KEY_CLIENTE)
+                    
+                    # Si NO hay cliente en sesión, requerir que venga en la petición
                     if not session_cliente_id:
-                        return JsonResponse({'success': False, 'message': 'Sesión autoservicio sin cliente asociado.'}, status=403)
-                    # Si vino otro cliente_id distinto, se ignora y se fuerza el de sesión
-                    if cliente_id and cliente_id != session_cliente_id:
-                        # Log opcional de discrepancia
-                        AuditLog.objects.create(
-                            actor=request.user,
-                            organizacion=getattr(perfil, 'organizacion', None),
-                            verb='WARN',
-                            target_model='Proyecto',
-                            target_id='-1',
-                            target_repr='autoservicio_pre_create',
-                            changes={'override_cliente_id': session_cliente_id, 'incoming_cliente_id': cliente_id}
-                        ) if 'AuditLog' in globals() else None
-                    cliente_id = session_cliente_id
+                        if not cliente_id:
+                            return JsonResponse({'success': False, 'message': 'Debe seleccionar o ingresar un cliente primero'}, status=400)
+                        # Guardar el cliente seleccionado en sesión para futuros proyectos
+                        request.session[SESSION_KEY_CLIENTE] = cliente_id
+                    else:
+                        # Ya hay cliente en sesión: usarlo
+                        # Si viene un cliente_id diferente, actualizarlo en sesión
+                        if cliente_id and cliente_id != session_cliente_id:
+                            request.session[SESSION_KEY_CLIENTE] = cliente_id
+                        else:
+                            cliente_id = session_cliente_id
             except Exception:
                 pass
 
@@ -2413,11 +2441,12 @@ def exportar_pdf(request, proyecto_id):
     Marcado como legado: preferir exportar_pdf_snapshot / exportar_pdf_snapshot_cached.
     Puede deshabilitarse estableciendo DISABLE_LEGACY_PDF=1 en variables de entorno.
     """
+    import os
+    from django.conf import settings
+    
     if os.getenv('DISABLE_LEGACY_PDF', '').lower() in ('1','true','yes','y','on'):
         return JsonResponse({'success': False, 'message': 'Ruta legacy PDF deshabilitada. Use snapshot.'}, status=410)
     proyecto = get_object_or_404(Proyecto, id=proyecto_id)
-    from django.conf import settings
-    import os
 
     # Leer flags/opciones de query
     q = request.GET
@@ -2586,8 +2615,27 @@ def exportar_pdf_snapshot(request, proyecto_id: int):
             fhtml.write(html_out)
     except Exception:
         pass  # Caché opcional
+    # Si se solicita solo la portada (primera página), extraerla
+    portada_only = request.GET.get('portada_only', '').lower() in ('1', 'true', 'yes')
+    if portada_only:
+        try:
+            from PyPDF2 import PdfReader, PdfWriter
+            import io
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+            if len(reader.pages) > 0:
+                writer = PdfWriter()
+                writer.add_page(reader.pages[0])
+                output_buffer = io.BytesIO()
+                writer.write(output_buffer)
+                pdf_bytes = output_buffer.getvalue()
+        except ImportError:
+            logger.warning('PyPDF2 no disponible, enviando PDF completo')
+        except Exception as e:
+            logger.warning('Error extrayendo primera página: %s', e)
+    
     resp = HttpResponse(pdf_bytes, content_type='application/pdf')
-    resp['Content-Disposition'] = 'inline; filename="snapshot_optimizacion.pdf"'
+    filename = 'portada_optimizacion.pdf' if portada_only else 'snapshot_optimizacion.pdf'
+    resp['Content-Disposition'] = f'inline; filename="{filename}"'
     resp['Cache-Control'] = 'no-store'
     return resp
 
@@ -2595,6 +2643,7 @@ def exportar_pdf_snapshot(request, proyecto_id: int):
 def exportar_pdf_snapshot_cached(request, proyecto_id: int):
     """Segunda descarga rápida: reutiliza archivos de caché si existen."""
     proyecto = get_object_or_404(Proyecto, id=proyecto_id)
+    portada_only = request.GET.get('portada_only', '').lower() in ('1', 'true', 'yes')
     from django.conf import settings
     import os, json
     rel_dir = f"proyectos/{proyecto.id}"
@@ -2624,8 +2673,27 @@ def exportar_pdf_snapshot_cached(request, proyecto_id: int):
     pdf_bytes = WEASY_HTML(string=html_out).write_pdf()
     t1 = time.time()
     logger.info('Snapshot PDF (cached) generado en %.2fs (materiales=%d)', t1 - t0, len(materiales))
+    
+    # Si se solicita solo la portada (primera página), extraerla
+    if portada_only:
+        try:
+            from PyPDF2 import PdfReader, PdfWriter
+            import io
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+            if len(reader.pages) > 0:
+                writer = PdfWriter()
+                writer.add_page(reader.pages[0])
+                output_buffer = io.BytesIO()
+                writer.write(output_buffer)
+                pdf_bytes = output_buffer.getvalue()
+        except ImportError:
+            logger.warning('PyPDF2 no disponible, enviando PDF completo')
+        except Exception as e:
+            logger.warning('Error extrayendo primera página: %s', e)
+    
     resp = HttpResponse(pdf_bytes, content_type='application/pdf')
-    resp['Content-Disposition'] = 'inline; filename="snapshot_optimizacion_cached.pdf"'
+    filename = 'portada_optimizacion_cached.pdf' if portada_only else 'snapshot_optimizacion_cached.pdf'
+    resp['Content-Disposition'] = f'inline; filename="{filename}"'
     resp['Cache-Control'] = 'no-store'
     return resp
 

@@ -43,7 +43,7 @@
         {{ cliente.nombre }} ({{ cliente.rut }})
     </div>
     <div class="acciones">
-        <a class="btn" href="/autoservicio/hub/">Continuar</a>
+        <a class="btn" href="/autoservicio/?continue=1">Continuar</a>
         <a class="btn secondary" href="/autoservicio/logout-cliente/">Cambiar Cliente</a>
     </div>
     {% else %}
@@ -94,6 +94,12 @@ const accionesInicial = document.getElementById('accionesInicial');
 const modal = document.getElementById('modalNuevoCliente');
 const formNuevo = document.getElementById('formNuevoCliente');
 const rutNuevo = document.getElementById('rutNuevo');
+const clienteInfo = document.getElementById('clienteInfo');
+
+// Si ya hay cliente en sesión y no se pidió permanecer (param stay), redirigir directo al clon
+if (clienteInfo && !location.search.includes('stay')) {
+    window.location.replace('/optimizador_autoservicio/');
+}
 
 function formatearRut(raw){
     let v = raw.replace(/[^0-9kK]/g,'');
@@ -120,8 +126,13 @@ rutInput.addEventListener('input', () => {
         .then(d=>{
             if (d.found){
                 rutEstado.innerHTML = `<span style='color:#065f46'>Encontrado: ${d.cliente.nombre}</span>`;
+                // Redirigir directamente al clon si el backend lo indica
+                if (d.redirect_clone){
+                    window.location = d.redirect_clone;
+                    return;
+                }
                 accionesInicial.style.display='none';
-                // Recargar para mostrar bloque cliente
+                // Fallback: recargar si no viene redirect
                 setTimeout(()=>{ window.location.reload(); }, 600);
             } else {
                 rutEstado.innerHTML = `<span style='color:#7c2d12'>No existe. Puede crearlo.</span>`;
@@ -155,6 +166,11 @@ formNuevo?.addEventListener('submit', e=>{
             if (d.created){
                 rutEstado.innerHTML = `<span style='color:#065f46'>Cliente creado: ${d.cliente.nombre}</span>`;
                 cerrarModal();
+                if (d.redirect_clone){
+                    window.location = d.redirect_clone;
+                    return;
+                }
+                // Fallback si no vino redirect
                 setTimeout(()=>{ window.location.reload(); }, 700);
             } else {
                 rutEstado.textContent = d.error || 'Error';
@@ -165,5 +181,11 @@ formNuevo?.addEventListener('submit', e=>{
 
 // Inactividad simple: reinicio de cliente se maneja server-side al cargar; aquí solo podríamos opcionalmente avisar.
 </script>
+<a href="/logout/" class="logout-fixed" aria-label="Cerrar sesión">Cerrar sesión</a>
+<style>
+    .logout-fixed { position:fixed; bottom:16px; left:16px; background:#dc2626; color:#fff; text-decoration:none; padding:12px 18px; font-size:14px; border-radius:10px; font-weight:600; box-shadow:0 4px 12px rgba(0,0,0,.25); transition:background .2s; }
+    .logout-fixed:hover { background:#b91c1c; }
+    @media (max-width:600px){ .logout-fixed { bottom:10px; left:10px; padding:10px 14px; font-size:13px; } }
+</style>
 </body>
 </html>

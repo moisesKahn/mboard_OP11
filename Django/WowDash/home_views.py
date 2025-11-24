@@ -70,6 +70,11 @@ def index(request):
     except UsuarioPerfilOptimizador.DoesNotExist:
         perfil = None
 
+    # Si es usuario de autoservicio, redirigir directamente al optimizador de autoservicio
+    if perfil and perfil.rol == 'autoservicio':
+        from django.shortcuts import redirect
+        return redirect('optimizador_autoservicio_home_clone')
+
     # Métricas básicas: limitar por organización si aplica
     org = None
     if ctx.get('organization_id') and not ctx.get('organization_is_general') and not ctx.get('is_support'):

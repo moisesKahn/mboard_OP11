@@ -28,14 +28,20 @@
                       <span>Historial</span>
                   </a>
               </li>
-              <li>
+              <li class="sidebar-logout-item">
                   <a href="{% url 'logout' %}">
                       <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
                       <span>Cerrar Sesión</span>
                   </a>
               </li>
             {% elif rol == 'autoservicio' %}
-              <!-- Menú reducido para Autoservicio (unificado: usa /optimizador/) -->
+              <!-- Menú reducido para Autoservicio -->
+              <li>
+                  <a href="{% url 'proyectos' %}">
+                      <iconify-icon icon="hugeicons:invoice-03" class="menu-icon"></iconify-icon>
+                      <span>Proyectos</span>
+                  </a>
+              </li>
               <li>
                   <a href="{% url 'optimizador_home' %}">
                       <iconify-icon icon="solar:widget-2-outline" class="menu-icon"></iconify-icon>
@@ -48,13 +54,7 @@
                       <span>Configurador 3D</span>
                   </a>
               </li>
-              <li>
-                  <a href="/autoservicio/mis-proyectos/">
-                      <iconify-icon icon="hugeicons:invoice-03" class="menu-icon"></iconify-icon>
-                      <span>Mis Proyectos</span>
-                  </a>
-              </li>
-              <li>
+              <li class="sidebar-logout-item">
                   <a href="{% url 'logout' %}">
                       <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
                       <span>Cerrar Sesión</span>
@@ -111,7 +111,7 @@
                       <li><a href="{% url 'tapacantos' %}"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Tapacantos</a></li>
                   </ul>
               </li>
-              <li>
+              <li class="sidebar-logout-item">
                   <a href="{% url 'logout' %}">
                       <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
                       <span>Cerrar Sesión</span>
@@ -122,3 +122,15 @@
         </ul>
     </div>
 </aside>
+
+<style>
+/* Posicionar botón de cerrar sesión al final del sidebar */
+.sidebar-menu {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+.sidebar-logout-item {
+    margin-top: auto !important;
+}
+</style>

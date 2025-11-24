@@ -250,14 +250,35 @@ def proyectos_list(request):
     except ValueError:
         page = 1
     
+    # Verificar si el usuario es autoservicio
+    es_autoservicio = False
+    try:
+        perfil = getattr(request.user, 'usuarioperfiloptimizador', None)
+        es_autoservicio = getattr(perfil, 'rol', None) == 'autoservicio'
+    except Exception:
+        pass
+    
     # Query base con relaciones
     proyectos = Proyecto.objects.select_related('cliente', 'creado_por').all()
     if not (ctx.get('organization_is_general') or ctx.get('is_support')):
         # Scope por organización del proyecto
         proyectos = proyectos.filter(organizacion_id=ctx.get('organization_id'))
     
-    # Aplicar filtros
-    if search:
+    # Si es autoservicio: siempre mostrar resultados vacíos a menos que haya búsqueda
+    # El buscador siempre consulta la base de datos
+    if es_autoservicio:
+        if not search:
+            proyectos = proyectos.none()
+        else:
+            # Aplicar filtros de búsqueda
+            proyectos = proyectos.filter(
+                Q(codigo__icontains=search) | 
+                Q(nombre__icontains=search) |
+                Q(cliente__nombre__icontains=search) |
+                Q(cliente__rut__icontains=search)
+            )
+    elif search:
+        # Para usuarios no autoservicio, aplicar búsqueda normal
         proyectos = proyectos.filter(
             Q(codigo__icontains=search) | 
             Q(nombre__icontains=search) |
@@ -459,6 +480,65 @@ def delete_proyecto(request, proyecto_id):
             return JsonResponse({
                 'success': False,
                 'message': f'Error al eliminar proyecto: {str(e)}'
+            })
+    return JsonResponse({'success': False, 'message': 'Método no permitido'})
+
+@login_required
+def duplicate_proyecto(request, proyecto_id):
+    """Cargar proyecto en modo copia para duplicarlo en el optimizador"""
+    if request.method == 'POST':
+        try:
+            ctx = get_auth_context(request)
+            base_qs = Proyecto.objects
+            if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+                base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
+            proyecto_original = get_object_or_404(base_qs.select_related('cliente'), pk=proyecto_id)
+            
+            # Construir URL de redirección según el rol del usuario
+            from django.urls import reverse
+            try:
+                perfil = getattr(request.user, 'usuarioperfiloptimizador', None)
+                es_autoservicio = getattr(perfil, 'rol', None) == 'autoservicio'
+            except Exception:
+                es_autoservicio = False
+            
+            # Autoservicio va al optimizador autoservicio con el proyecto original en modo copia
+            if es_autoservicio:
+                redirect_url = reverse('optimizador_autoservicio_home_clone')
+                # Guardar el ID del proyecto ORIGINAL para cargarlo en modo copia
+                request.session['autoservicio_proyecto_copiado'] = proyecto_original.id
+            else:
+                # Para otros roles, crear copia física del proyecto
+                nuevo_proyecto = Proyecto()
+                nuevo_proyecto.nombre = f"{proyecto_original.nombre} (Copia)"
+                nuevo_proyecto.cliente = proyecto_original.cliente
+                nuevo_proyecto.creado_por = request.user
+                nuevo_proyecto.organizacion = proyecto_original.organizacion
+                nuevo_proyecto.estado = 'nuevo'
+                
+                # Auto-generar código
+                last_project = Proyecto.objects.order_by('-id').first()
+                next_number = 1 if not last_project else last_project.id + 1
+                nuevo_proyecto.codigo = f"PROJ-{next_number:03d}"
+                
+                # Copiar configuración y resultados si existen
+                if proyecto_original.configuracion:
+                    nuevo_proyecto.configuracion = proyecto_original.configuracion
+                if proyecto_original.resultado_optimizacion:
+                    nuevo_proyecto.resultado_optimizacion = proyecto_original.resultado_optimizacion
+                
+                nuevo_proyecto.save()
+                redirect_url = reverse('optimizador_abrir', args=[nuevo_proyecto.id])
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Cargando proyecto en el optimizador...',
+                'redirect_url': redirect_url
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'Error al cargar proyecto: {str(e)}'
             })
     return JsonResponse({'success': False, 'message': 'Método no permitido'})
 

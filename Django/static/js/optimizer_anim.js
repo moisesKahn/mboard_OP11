@@ -4,8 +4,8 @@
   const OptimizerAnim = {};
   function rand(min,max){ return Math.random()*(max-min)+min; }
   function lerp(a,b,t){ return a+(b-a)*t; }
-  // Paleta minimalista suave (se pueden rotar tonos)
-  const PALETTE = ['#5e81ac','#88c0d0','#81a1c1','#bf616a','#d08770','#a3be8c','#b48ead'];
+  // Paleta de grises (como el configurador 3D)
+  const PALETTE = ['#cfd8dc','#b0bec5'];
 
   class BoardAnimation {
     constructor(canvas, mode){

@@ -117,3 +117,26 @@ def operador_proyecto(request: HttpRequest, proyecto_id: int):
     }
     # Usar versión full-screen para maximizar área de visualización
     return render(request, 'operador/detalle_full.html', context)
+
+
+@login_required
+@ensure_csrf_cookie
+def operador_corte_guiado(request: HttpRequest, proyecto_id: int):
+    """Vista de corte guiado paso a paso para operadores.
+    Muestra el tablero con piezas y guía el operador cortando de forma secuencial."""
+    ctx = get_auth_context(request)
+    base_qs = Proyecto.objects.select_related('cliente')
+    if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+        base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
+    proyecto = get_object_or_404(base_qs, id=proyecto_id)
+
+    # Autorización adicional: si es operador, debe estar asignado
+    if ctx.get('role') == 'operador' and proyecto.operador_id != request.user.id:
+        return redirect('operador_home')
+
+    context = {
+        'title': f'Corte Guiado - {proyecto.codigo}',
+        'subTitle': proyecto.nombre,
+        'proyecto': proyecto,
+    }
+    return render(request, 'operador/corte_guiado.html', context)

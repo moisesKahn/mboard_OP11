@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect
+from django.urls import reverse
 from django.http import JsonResponse, HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET, require_POST
@@ -45,6 +46,14 @@ def autoservicio_landing(request):
     if not _es_autoservicio(request):
         return redirect('/')
     _check_inactividad(request)
+    # Debug: verificar si es autoservicio
+    perfil = _perfil(request)
+    print(f"DEBUG autoservicio_landing: usuario={request.user.username}, rol={getattr(perfil, 'rol', None)}, es_autoservicio={_es_autoservicio(request)}")
+    # Solo redirigir cuando venga con parámetro continue=1 (del botón Continuar)
+    if request.GET.get('continue') == '1':
+        print(f"DEBUG: Redirigiendo a optimizador_autoservicio_home_clone por botón continuar")
+        return redirect('optimizador_autoservicio_home_clone')
+    # Modo stay: mostrar página por compatibilidad/diagnóstico
     cliente_id = request.session.get(SESSION_KEY_CLIENTE)
     cliente = None
     if cliente_id:
@@ -67,7 +76,8 @@ def autoservicio_hub(request):
         request.session.pop(SESSION_KEY_CLIENTE, None)
         return redirect('/autoservicio/')
     _touch(request)
-    return render(request, 'autoservicio/hub.html', {'cliente': cliente})
+    # Nuevo: redirigir directamente al clon del optimizador tras tener cliente en sesión
+    return redirect('optimizador_autoservicio_home_clone')
 
 @login_required
 def autoservicio_mis_proyectos(request):
@@ -132,7 +142,7 @@ def autoservicio_buscar_rut(request):
             'nombre': cliente.nombre,
             'email': cliente.email,
             'telefono': cliente.telefono,
-        }})
+        }, 'redirect_clone': reverse('optimizador_autoservicio_home_clone')})
     return JsonResponse({'found': False, 'rut': rut})
 
 @login_required
@@ -172,7 +182,7 @@ def autoservicio_crear_cliente(request):
         'nombre': cliente.nombre,
         'email': cliente.email,
         'telefono': cliente.telefono,
-    }})
+    }, 'redirect_clone': reverse('optimizador_autoservicio_home_clone')})
 
 @login_required
 def autoservicio_logout_cliente(request):

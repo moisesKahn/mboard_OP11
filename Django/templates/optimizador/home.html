@@ -13,6 +13,7 @@
     #cfg3dOverlay .box { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px 22px; box-shadow: 0 10px 30px rgba(0,0,0,.08); min-width: 260px; text-align:center; }
     #cfg3dOverlay .spinner { width: 42px; height: 42px; border: 3px solid #cfd8dc; border-top-color: #1976d2; border-radius: 50%; margin: 0 auto 10px; animation: spin 0.9s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes hourglassFlip { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(180deg); } }
     #cfg3dOverlay.show { display: flex; }
     /* Placeholders más claros para inputs de ejemplo (EJ: 600/400) */
     .placeholder-ejemplo::placeholder {
@@ -69,13 +70,12 @@
     <div class="card-body">
         <div class="row g-3">
             <div class="col-md-4">
-                <label class="form-label">Cliente{% if autoservicio %} (AUTOSERVICIO){% endif %}</label>
+                <label class="form-label">Cliente</label>
                 <div class="position-relative">
                           <input type="text" class="form-control" 
                               id="clienteInput"
                               placeholder="Escribe al menos 2 letras..."
-                              autocomplete="off"
-                              {% if autoservicio and cliente_autoservicio %}value="{{ cliente_autoservicio.nombre }}" disabled{% endif %}>
+                              autocomplete="off">
                     <div id="clientesDropdown" class="dropdown-clientes" style="display:none;" aria-live="polite"></div>
                 </div>
             </div>
@@ -83,8 +83,7 @@
                   <label class="form-label">RUT</label>
                   <input type="text" class="form-control" 
                       id="rutCliente" placeholder="12.345.678-9" maxlength="12" 
-                      oninput="formatearRUT(this)"
-                      {% if autoservicio and cliente_autoservicio %}value="{{ cliente_autoservicio.rut }}" disabled{% endif %}>
+                      oninput="formatearRUT(this)">
             </div>
             <div class="col-md-2">
                 <label class="form-label">ID del proyecto</label>
@@ -96,17 +95,6 @@
                        id="nombreProyecto" placeholder="Se generará automáticamente">
             </div>
         </div>
-        {% if autoservicio %}
-        <div id="autoservicioResumen" style="display:none" class="mt-3"></div>
-        <div class="mt-3 d-flex gap-2">
-            <button type="button" class="btn btn-success btn-sm" onclick="abrirModalResumenAutoservicio()">Finalizar y Descargar Portada PDF</button>
-            <a href="/autoservicio/hub/" class="btn btn-outline-secondary btn-sm">Volver al Hub</a>
-        </div>
-        <div id="autoservicioPagoPlaceholder" class="mt-2" style="display:none;">
-            <button type="button" class="btn btn-warning btn-sm" disabled title="Disponible próximamente">Pagar (Próximamente)</button>
-            <small class="text-muted ms-2">La opción de pago se habilitará tras la integración.</small>
-        </div>
-        {% endif %}
     </div>
 </div>
 
@@ -353,7 +341,11 @@
     <button id="btnOptimizar" class="btn btn-primary" onclick="(function(){ window._manualOptimizeRequested=true; optimizarPiezas(); })()" disabled>
         <i class="fas fa-magic"></i> Optimizar
     </button>
-    {% if not autoservicio %}
+    {% if autoservicio %}
+    <button type="button" id="btnGuardarFinalizar" class="btn btn-success ms-2" onclick="abrirModalResumenAutoservicio();" disabled title="Ver resumen del proyecto optimizado">
+        <i class="ri-checkbox-circle-line"></i> Finalizar
+    </button>
+    {% else %}
     <button id="btnDescargarPDF" class="btn btn-outline-secondary ms-2" onclick="descargarPDF()">
         <i class="ri-file-download-line"></i> PDF
     </button>
@@ -365,7 +357,12 @@
 <div id="toastGenerandoPdf" class="alert alert-secondary shadow-sm py-2 px-3">
     <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
     Generando PDF…
-    <button type="button" class="btn-close ms-2" aria-label="Close" onclick="document.getElementById('toastGenerandoPdf').style.display='none'"></button>
+    <button type="button" id="btnCancelarPDF" class="btn btn-sm btn-danger ms-3" style="display:none;" 
+            onclick="if(window._pdfTimeoutId) clearTimeout(window._pdfTimeoutId); document.getElementById('toastGenerandoPdf').style.display='none'; this.style.display='none';">
+        Cancelar
+    </button>
+    <button type="button" class="btn-close ms-2" aria-label="Close" 
+            onclick="if(window._pdfTimeoutId) clearTimeout(window._pdfTimeoutId); if(window._pdfCancelBtnTimeoutId) clearTimeout(window._pdfCancelBtnTimeoutId); document.getElementById('toastGenerandoPdf').style.display='none'; document.getElementById('btnCancelarPDF').style.display='none';"></button>
  </div>
 
 <!-- Resumen del proyecto (compacto, sin tarjetas) -->
@@ -391,27 +388,57 @@
 <!-- Área de resultados de optimización -->
     {% if autoservicio %}
     <div class="modal fade" id="modalResumenAutoservicio" tabindex="-1" aria-hidden="true" style="display:none;">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Resumen del Proyecto</h5>
-                    <button type="button" class="btn-close" aria-label="Cerrar" onclick="cerrarModalResumenAutoservicio()"></button>
+                <div class="modal-header bg-light">
+                    <div class="w-100">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="modal-title mb-1" data-field="tituloProyecto"></h5>
+                                <div class="text-muted small">
+                                    Cliente: <span data-field="cliente"></span><br>
+                                    Proyecto: <span data-field="nombre"></span>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="text-end">
+                                    <div class="fw-bold" style="font-size: 1.2rem; color: #0d6efd;">
+                                        ID: <span data-field="folio"></span>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-close" aria-label="Cerrar" onclick="cerrarModalResumenAutoservicio()"></button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-body small">
-                    <p class="mb-2">Verifica la información antes de generar la Portada PDF.</p>
-                    <ul class="list-unstyled mb-0">
-                        <li><strong>Nombre:</strong> <span data-field="nombre"></span></li>
-                        <li><strong>Folio:</strong> <span data-field="folio"></span></li>
-                        <li><strong>Cliente:</strong> <span data-field="cliente"></span></li>
-                        <li><strong>RUT:</strong> <span data-field="rut"></span></li>
-                        <li><strong>Material:</strong> <span data-field="material"></span></li>
-                        <li><strong>Tableros usados:</strong> <span data-field="tableros"></span></li>
-                        <li><strong>Aprovechamiento:</strong> <span data-field="aprovechamiento"></span></li>
-                    </ul>
+                <div class="modal-body" style="max-height: 70vh; overflow-y: auto; font-size: 0.85rem;">
+                    
+                    <!-- Resumen de materiales y optimización -->
+                    <h6 class="fw-bold mb-2">Resumen del Proyecto</h6>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-bordered" style="font-size: 0.9rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 20%;">Material</th>
+                                    <th class="text-center" style="width: 10%;">Tableros</th>
+                                    <th style="width: 40%;">Piezas</th>
+                                    <th style="width: 30%;">Tapacanto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaResumenCompleto"></tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer d-flex justify-content-between">
                     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="cerrarModalResumenAutoservicio()">Cancelar</button>
-                    <button type="button" class="btn btn-success btn-sm" onclick="confirmarModalResumenAutoservicio()">Generar Portada PDF</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-success btn-sm" onclick="iniciarPagoAutoservicio()" title="Proceder al pago del proyecto">
+                            <i class="ri-bank-card-line"></i> Pagar
+                        </button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="cerrarModalResumenAutoservicio(); descargarPDFAutoservicio();">
+                            <i class="ri-file-pdf-line"></i> Descargar PDF
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -487,6 +514,419 @@
     // Visualización manual
     let modoManual = false;
     let currentTablerosVis = [];
+
+    // ===== FUNCIONES AUTOSERVICIO (SCOPE GLOBAL) =====
+    async function abrirModalResumenAutoservicio(){
+        // Mostrar animación de reloj de arena en el botón
+        const btnFinalizar = document.getElementById('btnGuardarFinalizar');
+        const textoOriginal = btnFinalizar ? btnFinalizar.innerHTML : '';
+        if(btnFinalizar) {
+            btnFinalizar.disabled = true;
+            btnFinalizar.innerHTML = '<i class="ri-hourglass-2-line me-1" style="display:inline-block; animation: hourglassFlip 1.5s ease-in-out infinite;"></i> Optimizando...';
+        }
+        
+        // Optimizar todos los materiales silenciosamente (sin confirmaciones)
+        try {
+            for (let i = 1; i <= contadorMateriales; i++) {
+                const estadoMaterial = materialState[i];
+                if (estadoMaterial && estadoMaterial.piezas && estadoMaterial.piezas.length > 0) {
+                    // Cambiar al material
+                    const tabButton = document.querySelector(`button[data-bs-target="#material${i}"]`);
+                    if (tabButton) {
+                        tabButton.click();
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                    
+                    // Optimizar silenciosamente (sin prompts)
+                    window._autoOptimizeSilent = true; // Flag para indicar modo silencioso
+                    window._manualOptimizeRequested = true; // Forzar optimización completa
+                    optimizarPiezas(); // Llamar función de optimización (síncrona)
+                    window._autoOptimizeSilent = false;
+                    await new Promise(resolve => setTimeout(resolve, 300)); // Esperar a que termine
+                }
+            }
+        } catch(e) {
+            console.error('Error optimizando materiales:', e);
+            window._autoOptimizeSilent = false;
+            if(btnFinalizar) {
+                btnFinalizar.disabled = false;
+                btnFinalizar.innerHTML = textoOriginal;
+            }
+            alert('Error al optimizar materiales. Intenta nuevamente.');
+            return;
+        }
+        
+        const modal = document.getElementById('modalResumenAutoservicio');
+        if(!modal){ 
+            alert('Modal de resumen no disponible'); 
+            return; 
+        }
+        
+        // Obtener datos del proyecto
+        const nombre = document.getElementById('resNombre')?.textContent || '';
+        const folio = document.getElementById('resFolio')?.textContent || '';
+        const cliente = document.getElementById('resCliente')?.textContent || '';
+        const rut = document.getElementById('resClienteRut')?.textContent || '';
+        
+        // Generar fecha actual en formato DD-MM-YYYY
+        const hoy = new Date();
+        const fechaFormato = `${hoy.getDate().toString().padStart(2,'0')}-${(hoy.getMonth()+1).toString().padStart(2,'0')}-${hoy.getFullYear()}`;
+        
+        // Actualizar título y datos básicos
+        modal.querySelector('[data-field="tituloProyecto"]').textContent = `${nombre} - ${fechaFormato}`;
+        modal.querySelector('[data-field="nombre"]').textContent = nombre;
+        modal.querySelector('[data-field="folio"]').textContent = folio || '—';
+        modal.querySelector('[data-field="cliente"]').textContent = cliente;
+        
+        // Arrays para acumular datos - usar materialState directamente
+        const materialesData = [];
+        const piezasData = [];
+        
+        console.log('materialState completo:', materialState);
+        
+        // Iterar sobre cada material usando materialState
+        for (let i = 1; i <= contadorMateriales; i++) {
+            const estadoMaterial = materialState[i];
+            if (!estadoMaterial) {
+                console.log(`Material ${i}: no existe en materialState`);
+                continue;
+            }
+            
+            console.log(`Material ${i} - estado:`, estadoMaterial);
+            
+            // Obtener datos básicos del material
+            const materialSelect = document.getElementById(`tableroSelect${i}`);
+            const tapacantoSelect = document.getElementById(`tapacantoSelect${i}`);
+            const materialNombre = materialSelect?.selectedOptions[0]?.text || 'Sin seleccionar';
+            const tapacantoNombre = tapacantoSelect?.selectedOptions[0]?.text || '—';
+            
+            // Obtener piezas directamente desde materialState (las piezas originales antes de optimizar)
+            const piezasOriginales = estadoMaterial.piezas || [];
+            console.log(`Material ${i} - piezas originales:`, piezasOriginales);
+            
+            let totalPiezas = 0;
+            piezasOriginales.forEach(pieza => {
+                const cantidad = parseInt(pieza.cantidad) || 0;
+                totalPiezas += cantidad;
+                
+                // Construir lados de tapacanto
+                const tapacantos = pieza.tapacantos || {};
+                const lados = [];
+                if (tapacantos.arriba) lados.push('A');
+                if (tapacantos.derecha) lados.push('D');
+                if (tapacantos.abajo) lados.push('B');
+                if (tapacantos.izquierda) lados.push('I');
+                const ladosStr = lados.length > 0 ? lados.join('/') : '—';
+                
+                piezasData.push({
+                    nombre: pieza.nombre || 'Sin nombre',
+                    cantidad: cantidad,
+                    ancho: pieza.ancho || 0,
+                    alto: pieza.alto || 0,
+                    material: `Material ${i}`,
+                    tapacanto: tapacantoNombre,
+                    lados: ladosStr
+                });
+            });
+            
+            // Obtener resultado de optimización
+            let tablerosUsados = '—';
+            let aprovechamiento = '—';
+            
+            if (estadoMaterial.resultado) {
+                const resultado = estadoMaterial.resultado;
+                if (resultado.tableros) {
+                    tablerosUsados = resultado.tableros.length;
+                    const totalArea = resultado.tableros.reduce((sum, t) => sum + (t.ancho * t.alto), 0);
+                    const areaUsada = resultado.tableros.reduce((sum, t) => {
+                        return sum + (t.piezas || []).reduce((s, p) => s + (p.ancho * p.alto * p.cantidad), 0);
+                    }, 0);
+                    aprovechamiento = totalArea > 0 ? ((areaUsada / totalArea) * 100).toFixed(1) + '%' : '0%';
+                }
+            }
+            
+            // Guardar datos del material
+            materialesData.push({
+                numero: i,
+                nombre: materialNombre,
+                tableros: tablerosUsados,
+                piezas: totalPiezas,
+                aprovechamiento,
+                tapacanto: tapacantoNombre
+            });
+        }
+        
+        console.log('Materiales procesados:', materialesData);
+        console.log('Piezas procesadas:', piezasData);
+        
+        // Construir tabla resumen completo por material
+        let htmlResumenCompleto = '';
+        
+        // Agrupar piezas por material para construir las filas
+        for (let i = 1; i <= contadorMateriales; i++) {
+            const material = materialesData.find(m => m.numero === i);
+            if (!material) continue;
+            
+            // Filtrar piezas de este material
+            const piezasMaterial = piezasData.filter(p => p.material === `Material ${i}`);
+            
+            // Construir lista de piezas con formato: "nombre (cant): ancho×alto mm"
+            let htmlPiezas = '<div style="max-height: 150px; overflow-y: auto;">';
+            if (piezasMaterial.length > 0) {
+                piezasMaterial.forEach(p => {
+                    htmlPiezas += `<div class="small mb-1"><strong>${p.nombre}</strong> (${p.cantidad}): ${p.ancho}×${p.alto} mm</div>`;
+                });
+            } else {
+                htmlPiezas += '<div class="text-muted small">Sin piezas</div>';
+            }
+            htmlPiezas += '</div>';
+            
+            // Calcular metros lineales de tapacanto
+            let metrosLineales = 0;
+            const tipoTapacanto = material.tapacanto;
+            
+            piezasMaterial.forEach(p => {
+                const ancho = parseFloat(p.ancho) || 0;
+                const alto = parseFloat(p.alto) || 0;
+                const cantidad = parseInt(p.cantidad) || 0;
+                const lados = p.lados;
+                
+                // Calcular perímetro según lados con tapacanto
+                let perimetro = 0;
+                if (lados && lados !== '—') {
+                    const ladosArray = lados.split('/');
+                    if (ladosArray.includes('A')) perimetro += ancho; // Arriba
+                    if (ladosArray.includes('D')) perimetro += alto;  // Derecha
+                    if (ladosArray.includes('B')) perimetro += ancho; // Bajo
+                    if (ladosArray.includes('I')) perimetro += alto;  // Izquierda
+                }
+                
+                metrosLineales += (perimetro * cantidad) / 1000; // Convertir mm a metros
+            });
+            
+            // Construir info de tapacanto
+            let htmlTapacanto = '';
+            if (tipoTapacanto !== '—' && piezasMaterial.length > 0) {
+                htmlTapacanto = `<div class="small"><strong>Tipo:</strong> ${tipoTapacanto}</div>`;
+                htmlTapacanto += `<div class="small"><strong>Total:</strong> ${metrosLineales.toFixed(2)} metros lineales</div>`;
+                
+                // Mostrar lados por pieza
+                htmlTapacanto += '<div class="small mt-2" style="max-height: 120px; overflow-y: auto;">';
+                piezasMaterial.forEach(p => {
+                    if (p.lados && p.lados !== '—') {
+                        htmlTapacanto += `<div class="mb-1">${p.nombre}: Lados ${p.lados}</div>`;
+                    }
+                });
+                htmlTapacanto += '</div>';
+            } else {
+                htmlTapacanto = '<div class="text-muted small">Sin tapacanto</div>';
+            }
+            
+            htmlResumenCompleto += `
+                <tr>
+                    <td><strong>${material.numero}. ${material.nombre}</strong><br><small class="text-muted">Aprovech: ${material.aprovechamiento}</small></td>
+                    <td class="text-center"><strong>${material.tableros}</strong></td>
+                    <td>${htmlPiezas}</td>
+                    <td>${htmlTapacanto}</td>
+                </tr>
+            `;
+        }
+        
+        modal.querySelector('#tablaResumenCompleto').innerHTML = htmlResumenCompleto;
+        
+        // Restaurar botón antes de mostrar el modal
+        if(btnFinalizar) {
+            btnFinalizar.disabled = false;
+            btnFinalizar.innerHTML = textoOriginal;
+        }
+        
+        // Mostrar modal
+        modal.style.display='block';
+        modal.classList.add('show');
+        document.body.classList.add('modal-open');
+        const backdrop = document.createElement('div');
+        backdrop.className='modal-backdrop fade show';
+        backdrop.id='modalResumenAutoservicioBackdrop';
+        document.body.appendChild(backdrop);
+    }
+
+    // Descargar PDF completo para autoservicio (copia independiente de descargarPDF)
+    async function descargarPDFAutoservicio() {
+        if (window._bloquearPDF) { alert('Actualizando ID/archivo. Intenta nuevamente en unos segundos.'); return; }
+        const resumenEl = document.getElementById('resumenProyecto');
+        let proyectoId = resumenEl ? resumenEl.getAttribute('data-proyecto-id') : null;
+        if (!proyectoId) {
+            const proyectoIdEl = document.getElementById('resultadosOptimizacion');
+            proyectoId = proyectoIdEl ? proyectoIdEl.getAttribute('data-proyecto-id') : null;
+        }
+        if (!proyectoId) { alert('Primero crea y guarda un proyecto para poder exportar PDF.'); return; }
+        // Mostrar toast solo en primera generación (POST); caché no lo necesita
+        const toast = (!window._snapshotPdfEnviadoAutoservicio) ? document.getElementById('toastGenerandoPdf') : null;
+        const btnCancelar = document.getElementById('btnCancelarPDF');
+        let timeoutId = null;
+        let cancelBtnTimeoutId = null;
+        if (toast && !window._snapshotPdfEnviadoAutoservicio) {
+            // Evitar parpadeo: esperar breve para confirmar que no se completó instantáneo
+            window._snapshotPdfCompletedAutoservicio = false;
+            setTimeout(()=>{ if (!window._snapshotPdfCompletedAutoservicio) { toast.style.display='block'; } }, 250);
+            
+            // Mostrar botón Cancelar después de 5 segundos
+            cancelBtnTimeoutId = setTimeout(()=>{
+                if (toast && toast.style.display === 'block' && btnCancelar) {
+                    btnCancelar.style.display='inline-block';
+                }
+            }, 5000);
+            window._pdfCancelBtnTimeoutId = cancelBtnTimeoutId;
+            
+            // Timeout de seguridad: cerrar toast después de 30 segundos si no hay respuesta
+            timeoutId = setTimeout(()=>{
+                if (toast && toast.style.display === 'block') {
+                    toast.style.display='none';
+                    if(btnCancelar) btnCancelar.style.display='none';
+                    alert('La generación del PDF está tomando más tiempo del esperado. Por favor, intenta nuevamente.');
+                }
+            }, 30000);
+            window._pdfTimeoutId = timeoutId;
+        }
+        // Si ya se generó una vez, usar caché GET instantáneo (solo primera página para autoservicio)
+        if (window._snapshotPdfEnviadoAutoservicio) {
+            const urlCached = `/optimizador/exportar-pdf-snapshot-cached/${encodeURIComponent(proyectoId)}/?portada_only=1`;
+            setTimeout(()=>{
+                try { window.open(urlCached, '_blank', 'noopener'); } finally {
+                    setTimeout(()=>{ if (toast) toast.style.display='none'; }, 800);
+                }
+            }, 40);
+            return;
+        }
+        // Construir materiales desde estado
+        try {
+            const materiales = [];
+            Object.keys(materialState).sort((a,b)=>parseInt(a)-parseInt(b)).forEach(idxStr => {
+                const idx = parseInt(idxStr,10);
+                const st = materialState[idx];
+                if (!st || !st.resultado) return;
+                const layoutHTML = (window._materialVisualizations && window._materialVisualizations[idx]) ? window._materialVisualizations[idx] : (document.getElementById('visualizacionTableros')?.innerHTML||'');
+                // Extraer piezas de resultado tableros
+                // Usar lista cacheada de piezas finalizadas si existe; generar si falta
+                let piezas = st.piezasFinalizadas || [];
+                if (!piezas.length){
+                    piezas = [];
+                    try {
+                        (st.resultado.tableros||[]).forEach((t,ti)=>{
+                            (t.piezas||[]).forEach(p=>{
+                                piezas.push({
+                                    nombre: p.nombre || p.id_unico || 'Pieza',
+                                    tablero: ti+1,
+                                    x: typeof p.x === 'number'? p.x: (p.posicion && p.posicion.x)||0,
+                                    y: typeof p.y === 'number'? p.y: (p.posicion && p.posicion.y)||0,
+                                    ancho: p.ancho || p.w || 0,
+                                    alto: p.largo || p.h || p.alto || 0,
+                                    rotada: !!p.rotada
+                                });
+                            });
+                        });
+                        st.piezasFinalizadas = piezas; // cachear para siguientes usos
+                    } catch(eP){ console.warn('No se pudieron preparar piezas para PDF snapshot', eP); }
+                }
+                // Calcular eficiencia material si existe en resultado
+                let eficiencia = 0;
+                try { if (typeof st.resultado.aprovechamiento === 'number') eficiencia = st.resultado.aprovechamiento; } catch(_e){}
+                materiales.push({
+                    titulo: `Material ${idx}`,
+                    eficiencia: eficiencia,
+                    layout_html: layoutHTML,
+                    piezas: piezas
+                });
+            });
+            if (!materiales.length){ 
+                if(timeoutId) clearTimeout(timeoutId);
+                if(cancelBtnTimeoutId) clearTimeout(cancelBtnTimeoutId);
+                if(btnCancelar) btnCancelar.style.display='none';
+                alert('No hay resultados optimizados para generar PDF.'); 
+                if(toast) toast.style.display='none'; 
+                return; 
+            }
+            const urlPost = `/optimizador/exportar-pdf-snapshot/${encodeURIComponent(proyectoId)}/?portada_only=1`;
+            const resp = await fetch(urlPost, { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrfToken()}, body: JSON.stringify({ materiales }) });
+            if (!resp.ok){
+                // Fallback: generar PDF directo desde JSON del proyecto (estilo legacy rápido)
+                console.warn('Fallo snapshot; intentando fallback JSON → PDF…');
+                const urlJson = `/optimizador/exportar-pdf-json/${encodeURIComponent(proyectoId)}/`;
+                const resp2 = await fetch(urlJson, { method:'GET' });
+                if (!resp2.ok){
+                    if(timeoutId) clearTimeout(timeoutId);
+                    if(cancelBtnTimeoutId) clearTimeout(cancelBtnTimeoutId);
+                    if(btnCancelar) btnCancelar.style.display='none';
+                    const txt = await resp.text().catch(()=>''), txt2 = await resp2.text().catch(()=>'');
+                    console.warn('Snapshot error:', txt); console.warn('JSON-PDF error:', txt2);
+                    alert('Error al generar PDF.');
+                    if(toast) toast.style.display='none';
+                    return;
+                }
+                if(timeoutId) clearTimeout(timeoutId);
+                if(cancelBtnTimeoutId) clearTimeout(cancelBtnTimeoutId);
+                if(btnCancelar) btnCancelar.style.display='none';
+                const blob2 = await resp2.blob();
+                const pdfUrl2 = URL.createObjectURL(blob2);
+                window.open(pdfUrl2, '_blank','noopener');
+                window._snapshotPdfCompletedAutoservicio = true;
+                if (toast) setTimeout(()=>{ toast.style.display='none'; }, 800);
+                return;
+            }
+            if(timeoutId) clearTimeout(timeoutId);
+            if(cancelBtnTimeoutId) clearTimeout(cancelBtnTimeoutId);
+            if(btnCancelar) btnCancelar.style.display='none';
+            const blob = await resp.blob();
+            const pdfUrl = URL.createObjectURL(blob);
+            window.open(pdfUrl, '_blank','noopener');
+            window._snapshotPdfEnviadoAutoservicio = true;
+            window._snapshotPdfCompletedAutoservicio = true;
+            if (toast) setTimeout(()=>{ toast.style.display='none'; }, 1000);
+        } catch(e){ 
+            if(timeoutId) clearTimeout(timeoutId);
+            if(cancelBtnTimeoutId) clearTimeout(cancelBtnTimeoutId);
+            if(btnCancelar) btnCancelar.style.display='none';
+            console.error(e); 
+            alert('Error inesperado generando PDF.'); 
+            if(toast){ toast.style.display='none'; } 
+        }
+    }
+
+    function cerrarModalResumenAutoservicio(){
+        const modal = document.getElementById('modalResumenAutoservicio');
+        if(modal){ modal.classList.remove('show'); modal.style.display='none'; }
+        document.body.classList.remove('modal-open');
+        const backdrop = document.getElementById('modalResumenAutoservicioBackdrop');
+        if(backdrop){ backdrop.remove(); }
+    }
+
+    function confirmarModalResumenAutoservicio(){
+        cerrarModalResumenAutoservicio();
+        generarPortadaAutoservicio();
+        const pay = document.getElementById('autoservicioPagoPlaceholder');
+        if (pay) pay.style.display='block';
+    }
+
+    function iniciarPagoAutoservicio(){
+        cerrarModalResumenAutoservicio();
+        const containerResultados = document.getElementById('resultadosOptimizacion');
+        const proyectoId = containerResultados?.getAttribute('data-proyecto-id');
+        
+        if (!proyectoId) {
+            alert('No se encontró el proyecto. Por favor, optimiza primero.');
+            return;
+        }
+        
+        alert('🚀 Funcionalidad de pago en desarrollo\n\nPronto podrás proceder al pago del proyecto #' + proyectoId);
+    }
+
+    function generarPortadaAutoservicio(){
+        const pid = document.getElementById('resultadosOptimizacion')?.getAttribute('data-proyecto-id');
+        if (!pid){ alert('Proyecto aún no persistido. Optimice primero.'); return; }
+        // Usar el PDF clásico completo (mismo que el optimizador normal)
+        window.open(`/optimizador/exportar-pdf/${encodeURIComponent(pid)}/`, '_blank');
+    }
+    // ===== FIN FUNCIONES AUTOSERVICIO =====
     let dragState = null; // {g, startX, startY}
 
     // Aplica configuración (tablero, medidas, márgenes, kerf y tapacanto) a una pestaña de material
@@ -709,7 +1149,7 @@
             return;
         }
         if (_dirty){
-            if (!confirm('Hay cambios sin optimizar. ¿Deseas descartarlos y empezar un proyecto nuevo?')) return;
+            if (!window._autoOptimizeSilent && !confirm('Hay cambios sin optimizar. ¿Deseas descartarlos y empezar un proyecto nuevo?')) return;
         }
         limpiarProyectoCompleto();
     }
@@ -999,8 +1439,10 @@
     function agregarMaterial() {
         // Confirmar si hay cambios sin optimizar en pestaña activa
         if (!hayResultadoOptimizado() && _dirty){
-            const ok = confirm('Tienes cambios sin optimizar. ¿Deseas continuar y agregar otro material igualmente?');
-            if (!ok) return;
+            if (!window._autoOptimizeSilent) {
+                const ok = confirm('Tienes cambios sin optimizar. ¿Deseas continuar y agregar otro material igualmente?');
+                if (!ok) return;
+            }
         }
         contadorMateriales++;
         const tabsContainer = document.getElementById('materialTabs');
@@ -1722,7 +2164,7 @@
 
     // Función para limpiar todo
     function limpiarTodo() {
-        if (!confirm('¿Limpiar piezas de la tabla actual?')) return;
+        if (!window._autoOptimizeSilent && !confirm('¿Limpiar piezas de la tabla actual?')) return;
         const tbody = document.querySelector('.table tbody');
         if (tbody) tbody.innerHTML = '';
         contadorPiezas = 0; agregarFilaRapida();
@@ -2632,45 +3074,7 @@
                     if (!pid){ alert('Proyecto aún no persistido. Optimice primero.'); return; }
                     window.open(`/autoservicio/portada-pdf/${encodeURIComponent(pid)}/`, '_blank');
                 }
-                function abrirModalResumenAutoservicio(){
-                    if(!window.IS_AUTOSERVICIO){ return; }
-                    const modal = document.getElementById('modalResumenAutoservicio');
-                    if(!modal){ generarPortadaAutoservicio(); return; }
-                    const nombre = document.getElementById('resNombre')?.textContent || '';
-                    const folio = document.getElementById('resFolio')?.textContent || '';
-                    const cliente = document.getElementById('resCliente')?.textContent || '';
-                    const rut = document.getElementById('resClienteRut')?.textContent || '';
-                    const material = document.getElementById('resMaterial')?.textContent || '';
-                    const tableros = document.getElementById('tablerosUsados')?.textContent || '';
-                    const aprovechamiento = document.getElementById('aprovechamiento')?.textContent || '';
-                    modal.querySelector('[data-field="nombre"]').textContent = nombre;
-                    modal.querySelector('[data-field="folio"]').textContent = folio || '—';
-                    modal.querySelector('[data-field="cliente"]').textContent = cliente;
-                    modal.querySelector('[data-field="rut"]').textContent = rut;
-                    modal.querySelector('[data-field="material"]').textContent = material;
-                    modal.querySelector('[data-field="tableros"]').textContent = tableros || '—';
-                    modal.querySelector('[data-field="aprovechamiento"]').textContent = aprovechamiento || '—';
-                    modal.style.display='block';
-                    modal.classList.add('show');
-                    document.body.classList.add('modal-open');
-                    const backdrop = document.createElement('div');
-                    backdrop.className='modal-backdrop fade show';
-                    backdrop.id='modalResumenAutoservicioBackdrop';
-                    document.body.appendChild(backdrop);
-                }
-                function cerrarModalResumenAutoservicio(){
-                    const modal = document.getElementById('modalResumenAutoservicio');
-                    if(modal){ modal.classList.remove('show'); modal.style.display='none'; }
-                    document.body.classList.remove('modal-open');
-                    const backdrop = document.getElementById('modalResumenAutoservicioBackdrop');
-                    if(backdrop){ backdrop.remove(); }
-                }
-                function confirmarModalResumenAutoservicio(){
-                    cerrarModalResumenAutoservicio();
-                    generarPortadaAutoservicio();
-                    const pay = document.getElementById('autoservicioPagoPlaceholder');
-                    if (pay) pay.style.display='block';
-                }
+                // Funciones autoservicio ya están en scope global (arriba)
             // Bloquear edición de cliente y RUT tras primera optimización
             try {
                 const inCli = document.getElementById('clienteInput');
@@ -4112,6 +4516,22 @@
         // Mostrar área de resultados
         document.getElementById('resultadosOptimizacion').style.display = 'block';
         
+        // Habilitar botón "Guardar y Finalizar" en modo autoservicio después de optimizar
+        try {
+            const btnGuardarFinalizar = document.getElementById('btnGuardarFinalizar');
+            if (btnGuardarFinalizar) {
+                btnGuardarFinalizar.disabled = false;
+                // Guardar proyecto ID actual para el modal
+                const containerResultados = document.getElementById('resultadosOptimizacion');
+                const proyectoId = containerResultados?.getAttribute('data-proyecto-id');
+                if (proyectoId) {
+                    btnGuardarFinalizar.setAttribute('data-proyecto-id', proyectoId);
+                }
+            }
+        } catch(e) {
+            console.warn('Error habilitando btnGuardarFinalizar:', e);
+        }
+        
         // Scroll hacia los resultados
         document.getElementById('resultadosOptimizacion').scrollIntoView({ 
             behavior: 'smooth' 
@@ -4121,8 +4541,6 @@
     // Descargar PDF del proyecto; si no hay resultado, intentar forzar optimización primero
     // Nuevo flujo rápido de PDF (snapshot HTML + caché)
     async function descargarPDF() {
-        // Bloqueo explícito en modo autoservicio: sólo se permite portada resumida
-        if (window.IS_AUTOSERVICIO) { alert('En modo autoservicio sólo se permite descargar la Portada PDF resumida.'); return; }
         if (window._bloquearPDF) { alert('Actualizando ID/archivo. Intenta nuevamente en unos segundos.'); return; }
         const btn = document.getElementById('btnDescargarPDF');
         if (btn) { btn.disabled = true; btn.classList.add('disabled'); btn.style.cursor = 'progress'; }

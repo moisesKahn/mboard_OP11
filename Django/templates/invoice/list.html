@@ -35,7 +35,9 @@
         </div>
         <div class="d-flex flex-wrap align-items-center gap-3">
             <a href="{% url 'optimizador_home' %}" class="btn btn-sm btn-primary-600"><i class="ri-add-line"></i> Crear Proyecto</a>
+            {% if not user.usuarioperfiloptimizador.rol == 'autoservicio' %}
             <a href="{% url 'clientes_agregar' %}" class="btn btn-sm btn-success-600"><i class="ri-user-add-line"></i> Nuevo Cliente</a>
+            {% endif %}
         </div>
     </div>
     <div class="card-body">
@@ -46,9 +48,13 @@
                     <th scope="col" style="width: 140px;">ID del proyecto</th>
                     <th scope="col" style="width: 280px;">Nombre del Proyecto</th>
                     <th scope="col" style="width: 200px;">Cliente</th>
+                    {% if not user.usuarioperfiloptimizador.rol == 'autoservicio' %}
                     <th scope="col" style="width: 200px;">Operador</th>
+                    {% endif %}
                     <th scope="col" style="width: 120px;">Fecha de Creación</th>
+                    {% if not user.usuarioperfiloptimizador.rol == 'autoservicio' %}
                     <th scope="col" style="width: 120px;">Estado</th>
+                    {% endif %}
                     <th scope="col" style="width: 140px;">Acción</th>
                 </tr>
             </thead>
@@ -82,6 +88,7 @@
                             <span class="text-xs text-secondary-light">{{ proyecto.cliente.rut }}</span>
                         </div>
                     </td>
+                    {% if not user.usuarioperfiloptimizador.rol == 'autoservicio' %}
                     <td>
                         <!-- Selector de operadores por organización -->
                         <select class="form-select form-select-sm operador-select" data-project-id="{{ proyecto.id }}" onchange="assignOperador(this)" style="max-width: 240px;">
@@ -91,7 +98,9 @@
                             {% endfor %}
                         </select>
                     </td>
+                    {% endif %}
                     <td><span class="text-sm text-secondary-light">{{ proyecto.fecha_creacion|date:"d M Y" }}</span></td>
+                    {% if not user.usuarioperfiloptimizador.rol == 'autoservicio' %}
                     <td>
                         <select class="form-select form-select-sm status-select" data-project-id="{{ proyecto.id }}" onchange="updateProjectStatus(this)" style="max-width: 120px;">
                             {% for value, label in estados %}
@@ -99,16 +108,23 @@
                             {% endfor %}
                         </select>
                     </td>
+                    {% endif %}
                     <td>
                         <a href="{% url 'exportar_pdf_json' proyecto.id %}" target="_blank" class="w-32-px h-32-px bg-primary-light text-primary-600 rounded-circle d-inline-flex align-items-center justify-content-center" title="Ver/descargar PDF">
                             <iconify-icon icon="iconamoon:eye-light"></iconify-icon>
                         </a>
-                        <a href="{% url 'optimizador_abrir' proyecto.id %}" class="w-32-px h-32-px bg-success-focus text-success-main rounded-circle d-inline-flex align-items-center justify-content-center">
+                        {% if user.usuarioperfiloptimizador.rol == 'autoservicio' %}
+                        <a href="javascript:void(0)" class="w-32-px h-32-px bg-info-focus text-info-main rounded-circle d-inline-flex align-items-center justify-content-center" onclick="duplicateProject('{{ proyecto.id }}')" title="Copiar proyecto">
+                            <iconify-icon icon="solar:copy-outline"></iconify-icon>
+                        </a>
+                        {% else %}
+                        <a href="{% url 'optimizador_abrir' proyecto.id %}" class="w-32-px h-32-px bg-success-focus text-success-main rounded-circle d-inline-flex align-items-center justify-content-center" title="Editar proyecto">
                             <iconify-icon icon="lucide:edit"></iconify-icon>
                         </a>
-                        <a href="javascript:void(0)" class="w-32-px h-32-px bg-danger-focus text-danger-main rounded-circle d-inline-flex align-items-center justify-content-center" onclick="deleteProject('{{ proyecto.id }}')">
+                        <a href="javascript:void(0)" class="w-32-px h-32-px bg-danger-focus text-danger-main rounded-circle d-inline-flex align-items-center justify-content-center" onclick="deleteProject('{{ proyecto.id }}')" title="Eliminar proyecto">
                             <iconify-icon icon="mingcute:delete-2-line"></iconify-icon>
                         </a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
@@ -150,12 +166,14 @@
                         {% endif %}
                     {% endwith %}
                 </div>
+                {% if not user.usuarioperfiloptimizador.rol == 'autoservicio' %}
                 <a href="{% url 'clientes_lista' %}" class="btn btn-outline-secondary btn-sm">
                     <i class="ri-user-line"></i> Gestionar Clientes
                 </a>
                 <a href="{% url 'tableros' %}" class="btn btn-outline-primary btn-sm">
                     <i class="ri-box-3-line"></i> Gestionar Materiales
                 </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -263,6 +281,38 @@ function assignOperador(selectElement) {
         showNotification('error', 'Error al asignar operador');
         setTimeout(() => location.reload(), 800);
     });
+}
+
+// Función para duplicar proyecto (autoservicio)
+function duplicateProject(projectId) {
+    if (confirm('¿Deseas copiar este proyecto? Se creará un nuevo proyecto con todos los materiales y piezas.')) {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch(`/proyectos/duplicar/${projectId}/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('success', data.message);
+                // Redirigir al nuevo proyecto después de 1 segundo
+                setTimeout(() => {
+                    window.location.href = data.redirect_url;
+                }, 1000);
+            } else {
+                showNotification('error', data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('error', 'Error al copiar el proyecto');
+        });
+    }
 }
 
 // Función para mostrar notificaciones

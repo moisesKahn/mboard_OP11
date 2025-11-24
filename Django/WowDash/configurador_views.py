@@ -15,17 +15,24 @@ from django.utils import timezone
 
 @login_required
 def configurador_3d(request):
-    """Vista del Configurador 3D. Solo accesible para superusuarios/administradores de organización."""
+    """Vista del Configurador 3D. Accesible para superusuarios/administradores de organización y autoservicio."""
     allowed = False
+    es_autoservicio = False
     try:
         perfil = getattr(request.user, 'usuarioperfiloptimizador', None)
         rol = getattr(perfil, 'rol', None)
-        allowed = request.user.is_superuser or rol in ('super_admin', 'org_admin')
+        allowed = request.user.is_superuser or rol in ('super_admin', 'org_admin', 'autoservicio')
+        es_autoservicio = rol == 'autoservicio'
     except Exception:
         allowed = request.user.is_superuser
     if not allowed:
         return render(request, "403.html", status=403)
-    return render(request, "tools/configurador_3d.html")
+    
+    # Pasar flag autoservicio al template para modificar redirección del botón
+    context = {
+        'es_autoservicio': es_autoservicio
+    }
+    return render(request, "tools/configurador_3d.html", context)
 
 
 @login_required

@@ -231,58 +231,73 @@
                     </div>
                 </div><!-- Notification dropdown end -->
 
-                {% if user.is_authenticated and user.usuarioperfiloptimizador.rol != 'autoservicio' %}
-                <div class="dropdown">
-                    <button class="d-flex justify-content-center align-items-center rounded-circle" type="button" data-bs-toggle="dropdown">
-                        <div class="w-40-px h-40-px rounded-circle d-flex align-items-center justify-content-center fw-bold text-white"
-                             style="background-color:#6c5ce7;">
-                            {{ user|user_initials }}
-                        </div>
-                    </button>
-                    <div class="dropdown-menu to-top dropdown-menu-sm">
-                        <div class="py-12 px-16 radius-8 bg-primary-50 mb-16 d-flex align-items-center justify-content-between gap-2">
-                            <div>
-                                <h6 class="text-lg text-primary-light fw-semibold mb-2">
-                                    {{ user.get_full_name|default:user.username }}
-                                </h6>
-                                <span class="text-secondary-light fw-medium text-sm">
-                                    {% if user.usuarioperfiloptimizador.rol == 'super_admin' %}
-                                        Super Administrador
-                                    {% elif user.usuarioperfiloptimizador.rol == 'org_admin' %}
-                                        Admin de Organización
-                                    {% elif user.usuarioperfiloptimizador.rol == 'agente' %}
-                                        Agente
-                                    {% else %}
-                                        Usuario
-                                    {% endif %}
-                                    {% if user.usuarioperfiloptimizador.organizacion %}
-                                        - {{ user.usuarioperfiloptimizador.organizacion.nombre }}
-                                    {% endif %}
-                                </span>
+                {% if user.is_authenticated %}
+                    {% if user.usuarioperfiloptimizador.rol == 'autoservicio' %}
+                    <!-- Modo Autoservicio: Solo mostrar nombre del usuario -->
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="text-end">
+                            <div class="text-sm fw-semibold text-primary-light">
+                                <i class="ri-user-line"></i> <span>{{ user.get_full_name|default:user.username }}</span>
                             </div>
-                            <button type="button" class="hover-text-danger">
-                                <iconify-icon icon="radix-icons:cross-1" class="icon text-xl"></iconify-icon>
-                            </button>
+                            <div class="text-xs text-secondary-light">
+                                Rol: Autoservicio
+                            </div>
                         </div>
-                        <ul class="to-top-list">
-                            <li>
-                                <a class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-primary d-flex align-items-center gap-3" href="{% url 'viewProfile' %}">
-                                    <iconify-icon icon="fluent:person-32-regular" class="icon text-xl"></iconify-icon> Perfil
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-primary d-flex align-items-center gap-3" href="{% if user.is_authenticated %}{% url 'editOwnProfile' %}{% else %}{% url 'signin' %}{% endif %}">
-                                    <iconify-icon icon="solar:user-linear" class="icon text-xl"></iconify-icon> Editar Perfil
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-danger d-flex align-items-center gap-3" href="{% url 'logout' %}">
-                                    <iconify-icon icon="lucide:power" class="icon text-xl"></iconify-icon> Cerrar Sesión
-                                </a>
-                            </li>
-                        </ul>
                     </div>
-                </div><!-- Profile dropdown end -->
+                    {% else %}
+                    <!-- Modo Normal: Dropdown de usuario -->
+                    <div class="dropdown">
+                        <button class="d-flex justify-content-center align-items-center rounded-circle" type="button" data-bs-toggle="dropdown">
+                            <div class="w-40-px h-40-px rounded-circle d-flex align-items-center justify-content-center fw-bold text-white"
+                                 style="background-color:#6c5ce7;">
+                                {{ user|user_initials }}
+                            </div>
+                        </button>
+                        <div class="dropdown-menu to-top dropdown-menu-sm">
+                            <div class="py-12 px-16 radius-8 bg-primary-50 mb-16 d-flex align-items-center justify-content-between gap-2">
+                                <div>
+                                    <h6 class="text-lg text-primary-light fw-semibold mb-2">
+                                        {{ user.get_full_name|default:user.username }}
+                                    </h6>
+                                    <span class="text-secondary-light fw-medium text-sm">
+                                        {% if user.usuarioperfiloptimizador.rol == 'super_admin' %}
+                                            Super Administrador
+                                        {% elif user.usuarioperfiloptimizador.rol == 'org_admin' %}
+                                            Admin de Organización
+                                        {% elif user.usuarioperfiloptimizador.rol == 'agente' %}
+                                            Agente
+                                        {% else %}
+                                            Usuario
+                                        {% endif %}
+                                        {% if user.usuarioperfiloptimizador.organizacion %}
+                                            - {{ user.usuarioperfiloptimizador.organizacion.nombre }}
+                                        {% endif %}
+                                    </span>
+                                </div>
+                                <button type="button" class="hover-text-danger">
+                                    <iconify-icon icon="radix-icons:cross-1" class="icon text-xl"></iconify-icon>
+                                </button>
+                            </div>
+                            <ul class="to-top-list">
+                                <li>
+                                    <a class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-primary d-flex align-items-center gap-3" href="{% url 'viewProfile' %}">
+                                        <iconify-icon icon="fluent:person-32-regular" class="icon text-xl"></iconify-icon> Perfil
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-primary d-flex align-items-center gap-3" href="{% if user.is_authenticated %}{% url 'editOwnProfile' %}{% else %}{% url 'signin' %}{% endif %}">
+                                        <iconify-icon icon="solar:user-linear" class="icon text-xl"></iconify-icon> Editar Perfil
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-danger d-flex align-items-center gap-3" href="{% url 'logout' %}">
+                                        <iconify-icon icon="lucide:power" class="icon text-xl"></iconify-icon> Cerrar Sesión
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div><!-- Profile dropdown end -->
+                    {% endif %}
                 {% endif %}
             </div>
         </div>

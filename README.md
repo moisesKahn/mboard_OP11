@@ -73,6 +73,34 @@ python manage.py runserver 0.0.0.0:8000
 - Optimizador: exportación a PDF, gating del botón durante la generación.
 - Dashboard con resumen del perfil y métricas por organización.
 
+## Clon del Optimizador Autoservicio
+Se agregó un clon independiente del optimizador para el rol `autoservicio` con ruta dedicada `/optimizador_autoservicio/`.
+
+Motivación:
+- Permitir evolución del flujo autoservicio sin riesgo de romper el optimizador principal.
+- Aislar cambios visuales y lógicos (multi-material, PDF, historial) manteniendo compatibilidad.
+
+Características del clon:
+- Lógica completa duplicada (`optimizer_autoservicio_clone.py`) incluyendo multi-material, folio (public_id) y generación de PDF.
+- Contexto aislado mediante flags: `clone_mode=True`, `optimizer_variant='autoservicio_clone'`.
+- Acceso directo: usuarios con rol `autoservicio` saltan captura de RUT y reciben un proyecto borrador inicial.
+- Animación separada (`static/js/optimizador_autoservicio/optimizer_anim_clone.js`).
+- Plantilla dedicada (`templates/optimizador_autoservicio/home_clone.html`).
+
+Flujo de redirección:
+1. Login con rol `autoservicio` → redirect a `optimizador_autoservicio_home_clone`.
+2. Búsqueda/creación de cliente en autoservicio retorna `redirect_clone` para navegar al clon.
+
+Mantenimiento futuro:
+- Realizar cambios del flujo autoservicio únicamente dentro de archivos `*_clone` y carpeta `optimizador_autoservicio/`.
+- Si se requieren nuevas opciones PDF, duplicar primero en el clon y luego evaluar portarlo al original.
+- Documentar diferencias cuando se añadan nuevas capacidades para evitar divergencias silenciosas.
+
+Para pruebas rápidas (usuario `autoservicio_demo`):
+```powershell
+python manage.py shell -c "from django.contrib.auth import get_user_model; U=get_user_model(); u=U.objects.get(username='autoservicio_demo'); print('User existe:',u.username)"
+```
+
 ## Importación de materiales
 Consulta `Django/static/docs/IMPORTACION_MATERIALES.md` para el formato CSV de Tableros y Tapacantos.
 
