@@ -33,7 +33,7 @@
             <th>Cliente</th>
             <th>Estado</th>
             <th>Creado</th>
-            <th></th>
+            <th class="text-end">Tipo de vista</th>
           </tr>
         </thead>
         <tbody>
@@ -46,10 +46,10 @@
             <td>{{ p.fecha_creacion|date:'Y-m-d H:i' }}</td>
             <td class="text-end">
               <div class="btn-group" role="group">
-                <a class="btn btn-sm btn-outline-primary" href="{% url 'operador_proyecto' p.id %}" title="Vista cl\u00e1sica del proyecto">
-                  <i class="ri-file-list-3-line"></i> Vista cl\u00e1sica
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'operador_proyecto' p.id %}" title="Vista clásica del proyecto">
+                  <i class="ri-file-list-3-line"></i> Vista clásica
                 </a>
-                <a class="btn btn-sm btn-primary" href="{% url 'operador_corte_guiado' p.id %}" title="Gu\u00eda paso a paso para cortar el tablero">
+                <a class="btn btn-sm btn-primary" href="{% url 'operador_corte_guiado' p.id %}" title="Guía paso a paso para cortar el tablero">
                   <i class="ri-scissors-cut-line"></i> Corte guiado
                 </a>
               </div>

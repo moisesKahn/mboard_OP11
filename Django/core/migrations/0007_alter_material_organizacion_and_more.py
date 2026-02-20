@@ -43,10 +43,10 @@ class Migration(migrations.Migration):
         migrations.RunPython(fix_ancho_mayor, reverse_code=migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name='material',
-            constraint=models.CheckConstraint(condition=models.Q(('ancho__gte', models.F('largo'))), name='material_ancho_mayor_igual_largo'),
+            constraint=models.CheckConstraint(check=models.Q(('ancho__gte', models.F('largo'))), name='material_ancho_mayor_igual_largo'),
         ),
         migrations.AddConstraint(
             model_name='material',
-            constraint=models.CheckConstraint(condition=models.Q(('ancho__gt', 0), ('largo__gt', 0)), name='material_dimensiones_positivas'),
+            constraint=models.CheckConstraint(check=models.Q(('ancho__gt', 0), ('largo__gt', 0)), name='material_dimensiones_positivas'),
         ),
     ]

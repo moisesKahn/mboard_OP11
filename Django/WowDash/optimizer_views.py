@@ -9,6 +9,7 @@ from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
+from typing import Optional
 import json
 import uuid
 from datetime import datetime
@@ -394,7 +395,7 @@ def _materiales_desde_resultado(resultado):
         return [resultado]
     return []
 
-def _pdf_from_result(proyecto, resultado, opts: dict | None = None):
+def _pdf_from_result(proyecto, resultado, opts: Optional[dict] = None):
     """Genera un PDF (bytes) que dibuja cada tablero y sus piezas según el resultado guardado.
     Paridad 1:1 con la vista: coords relativas al área útil con origen arriba-izquierda.
     """
