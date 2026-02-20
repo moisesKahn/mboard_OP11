@@ -262,76 +262,56 @@ function generarSecuenciaCortes(tablero) {
   // 2. Luego separar sobrante inferior completo (si existe)
   // 3. Luego dividir por filas horizontales
   // 4. Finalmente dividir cada fila en columnas verticales
+  // seccionOrigen: {x,y,ancho,alto} de la sección donde se generó el corte.
+  // calcularSecciones lo usa para aplicar el corte solo a la sección correcta.
+  function pushCorte(obj) {
+    secuencia.push(obj);
+  }
+
   function procesarSeccion(x, y, ancho, alto, piezasEnSeccion, nivel = 0) {
     if (piezasEnSeccion.length === 0) return;
+    // Sección de origen de todos los cortes generados aquí
+    const origen = {x, y, ancho, alto};
+
     if (piezasEnSeccion.length === 1) {
-      // Una sola pieza: separar sobrante derecho si lo hay
-      const p = piezasEnSeccion[0];
-      const bordeDerechoPieza = p.x + (p.ancho || 0);
-      const bordeInferiorPieza = p.y + (p.alto || p.largo || 0);
-      if (bordeDerechoPieza < x + ancho - 1) {
-        secuencia.push({
-          tipo: 'vertical',
-          x: bordeDerechoPieza,
-          y1: y,
-          y2: y + alto,
-          descripcion: `Corte vertical en X=${Math.round(bordeDerechoPieza)}mm (separar sobrante derecho)`
-        });
-      }
-      if (bordeInferiorPieza < y + alto - 1) {
-        secuencia.push({
-          tipo: 'horizontal',
-          x1: x,
-          y: bordeInferiorPieza,
-          x2: x + ancho,
-          descripcion: `Corte horizontal en Y=${Math.round(bordeInferiorPieza)}mm (separar sobrante inferior)`
-        });
-      }
+      // Pieza individual: no generar más cortes, el operador
+      // maneja el sobrante restante de esta pieza por separado.
       return;
     }
 
     // === PASO 1: Separar sobrante derecho completo ===
-    // Si ninguna pieza llega al borde derecho de la sección, hacer corte vertical ahí
     const maxXPiezas = Math.max(...piezasEnSeccion.map(p => p.x + (p.ancho || 0)));
     if (maxXPiezas < x + ancho - 1) {
-      secuencia.push({
-        tipo: 'vertical',
-        x: maxXPiezas,
-        y1: y,
-        y2: y + alto,
+      pushCorte({
+        tipo: 'vertical', x: maxXPiezas, y1: y, y2: y + alto,
+        origen: {x, y, ancho, alto},
         descripcion: `Corte vertical en X=${Math.round(maxXPiezas)}mm (separar sobrante derecho)`
       });
-      // Continuar solo con la zona útil
       ancho = maxXPiezas - x;
     }
 
     // === PASO 2: Separar sobrante inferior completo ===
     const maxYPiezas = Math.max(...piezasEnSeccion.map(p => p.y + (p.alto || p.largo || 0)));
     if (maxYPiezas < y + alto - 1) {
-      secuencia.push({
-        tipo: 'horizontal',
-        x1: x,
-        y: maxYPiezas,
-        x2: x + ancho,
+      pushCorte({
+        tipo: 'horizontal', x1: x, y: maxYPiezas, x2: x + ancho,
+        origen: {x, y, ancho, alto},
         descripcion: `Corte horizontal en Y=${Math.round(maxYPiezas)}mm (separar sobrante inferior)`
       });
-      // Continuar solo con la zona útil
       alto = maxYPiezas - y;
     }
 
     // === PASO 3: Buscar corte horizontal que divida filas ===
     const corteH = encontrarCorteHorizontal(piezasEnSeccion, y, alto);
     if (corteH) {
-      secuencia.push({
-        tipo: 'horizontal',
-        x1: x,
-        y: corteH.y,
-        x2: x + ancho,
+      pushCorte({
+        tipo: 'horizontal', x1: x, y: corteH.y, x2: x + ancho,
+        origen: {x, y, ancho, alto},
         descripcion: `Corte horizontal en Y=${Math.round(corteH.y)}mm`
       });
       const superior = piezasEnSeccion.filter(p => p.y + (p.alto || p.largo) <= corteH.y);
       const inferior = piezasEnSeccion.filter(p => p.y >= corteH.y);
-      if (superior.length > 0) procesarSeccion(x, y, ancho, corteH.y - y, superior, nivel + 1);
+      if (superior.length > 0) procesarSeccion(x, y,       ancho, corteH.y - y,          superior, nivel + 1);
       if (inferior.length > 0) procesarSeccion(x, corteH.y, ancho, (y + alto) - corteH.y, inferior, nivel + 1);
       return;
     }
@@ -339,17 +319,15 @@ function generarSecuenciaCortes(tablero) {
     // === PASO 4: Buscar corte vertical que divida columnas ===
     const corteV = encontrarCorteVertical(piezasEnSeccion, x, ancho);
     if (corteV) {
-      secuencia.push({
-        tipo: 'vertical',
-        x: corteV.x,
-        y1: y,
-        y2: y + alto,
+      pushCorte({
+        tipo: 'vertical', x: corteV.x, y1: y, y2: y + alto,
+        origen: {x, y, ancho, alto},
         descripcion: `Corte vertical en X=${Math.round(corteV.x)}mm`
       });
       const izquierda = piezasEnSeccion.filter(p => p.x + p.ancho <= corteV.x);
       const derecha   = piezasEnSeccion.filter(p => p.x >= corteV.x);
-      if (izquierda.length > 0) procesarSeccion(x, y, corteV.x - x, alto, izquierda, nivel + 1);
-      if (derecha.length > 0)   procesarSeccion(corteV.x, y, (x + ancho) - corteV.x, alto, derecha, nivel + 1);
+      if (izquierda.length > 0) procesarSeccion(x,       y, corteV.x - x,          alto, izquierda, nivel + 1);
+      if (derecha.length > 0)   procesarSeccion(corteV.x, y, (x + ancho) - corteV.x, alto, derecha,   nivel + 1);
       return;
     }
   }
@@ -357,56 +335,68 @@ function generarSecuenciaCortes(tablero) {
   // Iniciar procesamiento
   procesarSeccion(0, 0, anchoTablero, altoTablero, piezas, 0);
 
+  console.log('Secuencia de cortes generada:', secuencia.map((c,i) =>
+    `${i+1}. ${c.tipo} ${c.tipo==='horizontal' ? 'y='+c.y : 'x='+c.x} — ${c.descripcion}`
+  ));
+
   return secuencia;
 }
 
 function encontrarCorteHorizontal(piezas, yBase, alto) {
-  // Buscar una línea Y donde ninguna pieza la cruce
-  const bordesY = new Set();
-  piezas.forEach(p => {
-    bordesY.add(p.y);
-    bordesY.add(p.y + (p.alto || p.largo));
-  });
-  
-  const bordesOrdenados = Array.from(bordesY).sort((a, b) => a - b);
-  
-  // Encontrar el primer borde que divida el conjunto
-  for (let y of bordesOrdenados) {
-    if (y <= yBase || y >= yBase + alto) continue;
-    
-    const superior = piezas.filter(p => p.y + (p.alto || p.largo) <= y);
-    const inferior = piezas.filter(p => p.y >= y);
-    
+  // Solo cortar en Y donde NINGUNA pieza cruce el plano (corte guillotina válido)
+  const EPS = 0.5;
+  // Usar solo los bordes inferiores de las piezas como candidatos
+  const bordesY = [...new Set(piezas.map(p => p.y + ((p.alto || p.largo) || 0)))];
+  const bordesOrdenados = bordesY.sort((a, b) => a - b);
+
+  for (const y of bordesOrdenados) {
+    if (y <= yBase + EPS || y >= yBase + alto - EPS) continue;
+
+    // Rechazar si cualquier pieza cruza esta línea
+    const cruzada = piezas.some(p => {
+      const py1 = p.y || 0;
+      const py2 = py1 + ((p.alto || p.largo) || 0);
+      return py1 < y - EPS && py2 > y + EPS;
+    });
+    if (cruzada) continue;
+
+    const superior = piezas.filter(p => (p.y + ((p.alto || p.largo) || 0)) <= y + EPS);
+    const inferior = piezas.filter(p => (p.y || 0) >= y - EPS);
+
     if (superior.length > 0 && inferior.length > 0) {
       return {y, superior, inferior};
     }
   }
-  
+
   return null;
 }
 
 function encontrarCorteVertical(piezas, xBase, ancho) {
-  // Buscar una línea X donde ninguna pieza la cruce
-  const bordesX = new Set();
-  piezas.forEach(p => {
-    bordesX.add(p.x);
-    bordesX.add(p.x + p.ancho);
-  });
-  
-  const bordesOrdenados = Array.from(bordesX).sort((a, b) => a - b);
-  
-  // Encontrar el primer borde que divida el conjunto
-  for (let x of bordesOrdenados) {
-    if (x <= xBase || x >= xBase + ancho) continue;
-    
-    const izquierda = piezas.filter(p => p.x + p.ancho <= x);
-    const derecha = piezas.filter(p => p.x >= x);
-    
+  // Solo cortar en X donde NINGUNA pieza cruce el plano (corte guillotina válido)
+  const EPS = 0.5;
+  // Usar solo los bordes derechos de las piezas como candidatos
+  const bordesX = [...new Set(piezas.map(p => (p.x || 0) + (p.ancho || 0)))];
+  const bordesOrdenados = bordesX.sort((a, b) => a - b);
+
+  for (const x of bordesOrdenados) {
+    if (x <= xBase + EPS || x >= xBase + ancho - EPS) continue;
+
+    // Rechazar si cualquier pieza cruza esta línea
+    const cruzada = piezas.some(p => {
+      const px1 = p.x || 0;
+      const px2 = px1 + (p.ancho || 0);
+      return px1 < x - EPS && px2 > x + EPS;
+    });
+    if (cruzada) continue;
+
+    const izquierda = piezas.filter(p => ((p.x || 0) + (p.ancho || 0)) <= x + EPS);
+    const derecha   = piezas.filter(p => (p.x || 0)  >= x - EPS);
+
     if (izquierda.length > 0 && derecha.length > 0) {
       return {x, izquierda, derecha};
     }
   }
-  
+
   return null;
 }
 
@@ -481,13 +471,7 @@ function dibujarTablero() {
       ctx.strokeRect(secX, secY, secW, secH);
       ctx.setLineDash([]);
       
-      ctx.fillStyle = '#757575';
-      ctx.font = 'italic 11px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Sobrante', secX + secW/2, secY + secH/2);
-      ctx.fillText(`${Math.round(seccion.ancho)}×${Math.round(seccion.alto)}mm`, secX + secW/2, secY + secH/2 + 14);
-      
+      // Líneas en X dentro del sobrante
       ctx.strokeStyle = '#d32f2f';
       ctx.lineWidth = 2;
       ctx.setLineDash([10, 5]);
@@ -498,6 +482,13 @@ function dibujarTablero() {
       ctx.lineTo(secX, secY + secH);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      // Etiqueta de medidas debajo del rectángulo
+      ctx.fillStyle = '#555';
+      ctx.font = 'italic 11px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${Math.round(seccion.ancho)}×${Math.round(seccion.alto)}mm`, secX + secW/2, secY + secH + 4);
       return;
     }
     
@@ -515,13 +506,20 @@ function dibujarTablero() {
     ctx.lineWidth   = seccion.activa ? 3 : 1.5;
     ctx.strokeRect(secX, secY, secW, secH);
     
-    // Piezas
+    // Piezas — clip al borde de la sección para evitar que una pieza
+    // que abarca varias filas/columnas se dibuje fuera de su sección actual
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(secX, secY, secW, secH);
+    ctx.clip();
+
     seccion.piezas.forEach((pieza, idx) => {
-      // Offset de la pieza dentro de su sección (relativo al origen de la sección lógica)
+      // Posición render de la pieza relativa al origen lógico de la sección
       const px = seccion.renderX + (pieza.x - seccion.x) * SCALE;
       const py = seccion.renderY + ((pieza.y !== undefined ? pieza.y : 0) - seccion.y) * SCALE;
-      const pw = (pieza.ancho || 0) * SCALE;
-      const ph = ((pieza.alto || pieza.largo) || 0) * SCALE;
+      // Dimensiones recortadas al área visible dentro de la sección
+      const pw = Math.min((pieza.ancho || 0) * SCALE, secX + secW - px);
+      const ph = Math.min(((pieza.alto || pieza.largo) || 0) * SCALE, secY + secH - py);
       
       if (pw <= 0 || ph <= 0) return;
       
@@ -532,18 +530,23 @@ function dibujarTablero() {
       ctx.lineWidth   = 2;
       ctx.strokeRect(px, py, pw, ph);
       
+      // Texto centrado en la parte visible de la pieza
+      const textX = px + pw / 2;
+      const textY = py + ph / 2;
       ctx.fillStyle     = seccion.activa ? '#e65100' : '#1565c0';
       ctx.font          = '12px Arial';
       ctx.textAlign     = 'center';
       ctx.textBaseline  = 'middle';
       const nombre = pieza.nombre || `Pieza ${pieza.numero || idx + 1}`;
-      ctx.fillText(nombre, px + pw/2, py + ph/2);
+      ctx.fillText(nombre, textX, textY);
       
       ctx.font      = '10px Arial';
       ctx.fillStyle = '#666';
       const dim = `${Math.round(pieza.ancho || 0)}×${Math.round((pieza.alto || pieza.largo) || 0)}`;
-      ctx.fillText(dim, px + pw/2, py + ph/2 + 15);
+      ctx.fillText(dim, textX, textY + 15);
     });
+
+    ctx.restore();
   });
   
   // Dibujar corte actual (en rojo) en la sección activa
@@ -647,17 +650,34 @@ function calcularSecciones(piezas, cortesRealizados) {
       }
       
       let corteDividio = false;
-      
+      const EPS = 0.5; // Tolerancia para comparaciones de coordenadas flotantes
+
+      // Verificar que este corte fue generado para esta sección concreta.
+      // Si el corte tiene origen definido, la sección activa debe coincidir
+      // (con tolerancia) para evitar aplicar cortes de sub-secciones hermanas.
+      if (corte.origen) {
+        const o = corte.origen;
+        const seccionCoincide =
+          Math.abs(seccion.minX - o.x)     < EPS &&
+          Math.abs(seccion.minY - o.y)     < EPS &&
+          Math.abs((seccion.maxX - seccion.minX) - o.ancho) < EPS &&
+          Math.abs((seccion.maxY - seccion.minY) - o.alto)  < EPS;
+        if (!seccionCoincide) {
+          nuevasSecciones.push(seccion);
+          return; // saltar, este corte no aplica aquí
+        }
+      }
+
       if (corte.tipo === 'horizontal') {
         if (corte.y > seccion.minY && corte.y < seccion.maxY) {
           const piezasSup = seccion.piezas.filter(p => {
             const py = p.y || 0;
             const pAlto = (p.alto || p.largo) || 0;
-            return (py + pAlto) <= corte.y;
+            return (py + pAlto) <= corte.y + EPS;
           });
           const piezasInf = seccion.piezas.filter(p => {
             const py = p.y || 0;
-            return py >= corte.y;
+            return py >= corte.y - EPS;
           });
           
           if (piezasSup.length > 0) {
@@ -682,11 +702,11 @@ function calcularSecciones(piezas, cortesRealizados) {
           const piezasIzq = seccion.piezas.filter(p => {
             const px = p.x || 0;
             const pAncho = p.ancho || 0;
-            return (px + pAncho) <= corte.x;
+            return (px + pAncho) <= corte.x + EPS;
           });
           const piezasDer = seccion.piezas.filter(p => {
             const px = p.x || 0;
-            return px >= corte.x;
+            return px >= corte.x - EPS;
           });
           
           if (piezasIzq.length > 0) {
