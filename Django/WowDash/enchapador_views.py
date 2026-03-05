@@ -128,9 +128,6 @@ def enchapador_proyecto(request: HttpRequest, proyecto_id: int):
 
     proyecto = get_object_or_404(base_qs, id=proyecto_id)
 
-    if ctx.get('role') == 'enchapador' and proyecto.operador_id != request.user.id:
-        return redirect('enchapador_home')
-
     return render(request, 'enchapador/detalle.html', {
         'title': f'Enchapado - {proyecto.codigo}',
         'subTitle': proyecto.nombre,
@@ -155,9 +152,6 @@ def enchapador_completar_api(request: HttpRequest, proyecto_id: int):
         base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
 
     p = get_object_or_404(base_qs, id=proyecto_id)
-
-    if ctx.get('role') == 'enchapador' and p.operador_id != request.user.id:
-        return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
 
     p.estado = 'completado'
     p.save(update_fields=['estado'])
