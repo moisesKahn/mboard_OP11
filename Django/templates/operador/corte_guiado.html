@@ -92,14 +92,16 @@
           <h5 class="modal-title"><i class="ri-checkbox-circle-line"></i> Tablero Completado</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body text-center py-4">
+        <div class="modal-body text-center py-4" id="modalCompletadoBody">
           <i class="ri-checkbox-circle-fill text-success" style="font-size: 64px;"></i>
           <h4 class="mt-3">¡Todos los cortes completados!</h4>
-          <p class="text-muted">Has terminado de cortar este tablero.</p>
+          <p class="text-muted">El avance ha sido guardado.</p>
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer" id="modalCompletadoFooter">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-          <button type="button" class="btn btn-primary" onclick="seleccionarOtroTablero()">Otro Tablero</button>
+          <button type="button" class="btn btn-primary" onclick="seleccionarOtroTablero()">
+            <i class="ri-scissors-cut-line"></i> Siguiente Tablero
+          </button>
         </div>
       </div>
     </div>
@@ -132,11 +134,18 @@ const proyectoId = {{ proyecto.id }};
 
 // ===== ESTADO GLOBAL =====
 let tableroActual = null;
+let tableroActualMatIdx = null;  // índice de material del tablero actual
+let tableroActualTabIdx = null;  // índice de tablero dentro del material
 let cortes = [];
 let corteIndex = 0;
 let canvas, ctx;
 const SCALE = 0.3; // Escala para visualización (reducida para ver completo)
 const PADDING = 30; // Padding del canvas
+
+function getCsrf() {
+  return document.cookie.split(';').map(c => c.trim())
+    .find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+}
 
 // ===== INICIALIZACIÓN =====
 document.addEventListener('DOMContentLoaded', function() {
@@ -196,26 +205,35 @@ function cargarTablero(value) {
     const {matIdx, tabIdx} = JSON.parse(value);
     const material = proyectoData.materiales[matIdx];
     tableroActual = material.tableros[tabIdx];
-    
+    tableroActualMatIdx = matIdx;
+    tableroActualTabIdx = tabIdx;
+
     console.log('Tablero cargado:', tableroActual);
-    
+
+    // Marcar proyecto como en_proceso automáticamente al iniciar corte
+    fetch(`/api/operador/proyectos/${proyectoId}/estado`, {
+      method: 'PATCH', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({estado: 'en_proceso'})
+    }).catch(() => {});
+
     // Ocultar mensaje inicial y mostrar canvas
     const mensajeInicial = document.getElementById('mensajeInicial');
     if (mensajeInicial) mensajeInicial.style.display = 'none';
     canvas.style.display = 'block';
-    
+
     // Generar secuencia de cortes
     cortes = generarSecuenciaCortes(tableroActual);
     corteIndex = 0;
-    
+
     console.log('Cortes generados:', cortes.length);
-    
+
     // Actualizar UI
     document.getElementById('corteActual').textContent = '0';
     document.getElementById('totalCortes').textContent = cortes.length;
     document.getElementById('btnSiguiente').disabled = false;
     document.getElementById('btnReiniciar').disabled = false;
-    
+
     // Dibujar estado inicial
     dibujarTablero();
   } catch(e) {
@@ -273,12 +291,6 @@ function generarSecuenciaCortes(tablero) {
     // Sección de origen de todos los cortes generados aquí
     const origen = {x, y, ancho, alto};
 
-    if (piezasEnSeccion.length === 1) {
-      // Pieza individual: no generar más cortes, el operador
-      // maneja el sobrante restante de esta pieza por separado.
-      return;
-    }
-
     // === PASO 1: Separar sobrante derecho completo ===
     const maxXPiezas = Math.max(...piezasEnSeccion.map(p => p.x + (p.ancho || 0)));
     if (maxXPiezas < x + ancho - 1) {
@@ -295,10 +307,15 @@ function generarSecuenciaCortes(tablero) {
     if (maxYPiezas < y + alto - 1) {
       pushCorte({
         tipo: 'horizontal', x1: x, y: maxYPiezas, x2: x + ancho,
-        origen: {x, y, ancho, alto},
+        origen: {x, y, ancho, alto},  // ancho ya ajustado por PASO 1 si aplica
         descripcion: `Corte horizontal en Y=${Math.round(maxYPiezas)}mm (separar sobrante inferior)`
       });
       alto = maxYPiezas - y;
+    }
+
+    if (piezasEnSeccion.length === 1) {
+      // Pieza individual: los sobrantes ya fueron separados arriba, no hay más cortes.
+      return;
     }
 
     // === PASO 3: Buscar corte horizontal que divida filas ===
@@ -549,11 +566,27 @@ function dibujarTablero() {
     ctx.restore();
   });
   
-  // Dibujar corte actual (en rojo) en la sección activa
+  // Dibujar corte actual (en rojo) en la sección correspondiente al origen del corte
   if (corteIndex < cortes.length && !cortes[corteIndex].esMargen) {
-    const seccionActiva = secciones.find(s => s.activa);
-    if (seccionActiva) {
-      dibujarCorteActual(cortes[corteIndex], '#f44336', 4, seccionActiva);
+    const corteActual = cortes[corteIndex];
+    const EPS = 0.5;
+    // Buscar la sección cuyas coordenadas coincidan con el origen del corte
+    let seccionParaCorte = null;
+    if (corteActual.origen) {
+      const o = corteActual.origen;
+      seccionParaCorte = secciones.find(s =>
+        Math.abs(s.x - o.x) < EPS &&
+        Math.abs(s.y - o.y) < EPS &&
+        Math.abs(s.ancho - o.ancho) < EPS &&
+        Math.abs(s.alto  - o.alto)  < EPS
+      );
+    }
+    // Fallback: usar la sección activa si no se encontró por origen
+    if (!seccionParaCorte) {
+      seccionParaCorte = secciones.find(s => s.activa);
+    }
+    if (seccionParaCorte) {
+      dibujarCorteActual(corteActual, '#f44336', 4, seccionParaCorte);
     }
   }
   
@@ -634,26 +667,18 @@ function calcularSecciones(piezas, cortesRealizados) {
     }
     
     const nuevasSecciones = [];
-    
-    // Solo procesar la primera sección no terminada (la que está activa)
-    let corteAplicado = false;
+    const EPS = 0.5; // Tolerancia para comparaciones de coordenadas flotantes
     
     secciones.forEach((seccion) => {
-      if (seccion.terminada || seccion.piezas.length <= 1) {
-        nuevasSecciones.push({...seccion, terminada: true});
-        return;
-      }
-      
-      if (corteAplicado) {
+      if (seccion.terminada) {
         nuevasSecciones.push(seccion);
         return;
       }
       
       let corteDividio = false;
-      const EPS = 0.5; // Tolerancia para comparaciones de coordenadas flotantes
 
       // Verificar que este corte fue generado para esta sección concreta.
-      // Si el corte tiene origen definido, la sección activa debe coincidir
+      // Si el corte tiene origen definido, la sección debe coincidir
       // (con tolerancia) para evitar aplicar cortes de sub-secciones hermanas.
       if (corte.origen) {
         const o = corte.origen;
@@ -682,18 +707,17 @@ function calcularSecciones(piezas, cortesRealizados) {
           
           if (piezasSup.length > 0) {
             corteDividio = true;
-            corteAplicado = true;
             nuevasSecciones.push({
               minX: seccion.minX, minY: seccion.minY,
               maxX: seccion.maxX, maxY: corte.y,
               piezas: piezasSup,
-              terminada: piezasSup.length <= 1
+              terminada: false
             });
             nuevasSecciones.push({
               minX: seccion.minX, minY: corte.y,
               maxX: seccion.maxX, maxY: seccion.maxY,
               piezas: piezasInf,
-              terminada: piezasInf.length <= 1
+              terminada: false
             });
           }
         }
@@ -711,18 +735,17 @@ function calcularSecciones(piezas, cortesRealizados) {
           
           if (piezasIzq.length > 0) {
             corteDividio = true;
-            corteAplicado = true;
             nuevasSecciones.push({
               minX: seccion.minX, minY: seccion.minY,
               maxX: corte.x,      maxY: seccion.maxY,
               piezas: piezasIzq,
-              terminada: piezasIzq.length <= 1
+              terminada: false
             });
             nuevasSecciones.push({
               minX: corte.x,      minY: seccion.minY,
               maxX: seccion.maxX, maxY: seccion.maxY,
               piezas: piezasDer,
-              terminada: piezasDer.length <= 1
+              terminada: false
             });
           }
         }
@@ -740,6 +763,8 @@ function calcularSecciones(piezas, cortesRealizados) {
   let activaMarcada = false;
   return secciones.map((sec) => {
     const esSobrante = sec.piezas.length === 0;
+    // Una sección está terminada si: fue explícitamente marcada, o tiene 0 ó 1 piezas
+    // (1 pieza = ya no hay más cortes de guillotina necesarios para separar piezas)
     const esTerminada = sec.terminada || sec.piezas.length <= 1;
     const esActiva = !activaMarcada && !esTerminada && !esSobrante;
     if (esActiva) activaMarcada = true;
@@ -853,9 +878,86 @@ function reiniciarTablero() {
   dibujarTablero();
 }
 
-function mostrarModalCompletado() {
+async function mostrarModalCompletado() {
+  // Guardar progreso: marcar todas las piezas del tablero actual como cortadas
+  let todosCompletos = false;
+  let tablerosCompletos = 0;
+  let totalTableros = 0;
+  try {
+    const r = await fetch(`/api/operador/proyectos/${proyectoId}/tablero-completado`, {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+      body: JSON.stringify({mat_idx: tableroActualMatIdx, tab_idx: tableroActualTabIdx})
+    });
+    const jr = await r.json().catch(() => ({}));
+    if (jr.success) {
+      todosCompletos = jr.todos_tableros_completos;
+      tablerosCompletos = jr.tableros_completos;
+      totalTableros = jr.total_tableros;
+    }
+  } catch(e) {
+    console.error('Error guardando progreso del tablero:', e);
+  }
+
+  // Actualizar contenido del modal según si hay más tableros o no
+  const bodyEl = document.getElementById('modalCompletadoBody');
+  const footerEl = document.getElementById('modalCompletadoFooter');
+
+  if (todosCompletos) {
+    bodyEl.innerHTML = `
+      <i class="ri-award-fill text-success" style="font-size:64px"></i>
+      <h4 class="mt-3">¡Proyecto listo para completar!</h4>
+      <p class="text-muted">Todos los tableros han sido cortados (${tablerosCompletos}/${totalTableros}).<br>Puedes marcar el proyecto como <strong>Completado</strong>.</p>`;
+    footerEl.innerHTML = `
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      <button type="button" class="btn btn-success fw-bold" id="btnCompletarProyecto">
+        <i class="ri-checkbox-circle-line"></i> Completar Proyecto
+      </button>`;
+    // Handler completar proyecto
+    setTimeout(() => {
+      const btn = document.getElementById('btnCompletarProyecto');
+      if (btn) btn.addEventListener('click', completarProyecto);
+    }, 100);
+  } else {
+    bodyEl.innerHTML = `
+      <i class="ri-checkbox-circle-fill text-success" style="font-size:64px"></i>
+      <h4 class="mt-3">¡Tablero completado!</h4>
+      <p class="text-muted">El avance ha sido guardado.<br>
+        ${totalTableros > 1 ? `Tableros completados: <strong>${tablerosCompletos} de ${totalTableros}</strong>.` : ''}
+      </p>`;
+    footerEl.innerHTML = `
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      <button type="button" class="btn btn-primary" onclick="seleccionarOtroTablero()">
+        <i class="ri-scissors-cut-line"></i> Siguiente Tablero
+      </button>`;
+  }
+
   const modal = new bootstrap.Modal(document.getElementById('modalCompletado'));
   modal.show();
+}
+
+async function completarProyecto() {
+  const btn = document.getElementById('btnCompletarProyecto');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando…'; }
+  try {
+    const r = await fetch(`/api/operador/proyectos/${proyectoId}/completar`, {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()}
+    });
+    const jr = await r.json().catch(() => ({}));
+    if (r.ok && jr.success) {
+      // Cerrar modal y redirigir al home del operador
+      const modalEl = bootstrap.Modal.getInstance(document.getElementById('modalCompletado'));
+      if (modalEl) modalEl.hide();
+      window.location.href = '{% url "operador_home" %}';
+    } else {
+      alert(jr.message || 'No se pudo completar el proyecto.');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ri-checkbox-circle-line"></i> Completar Proyecto'; }
+    }
+  } catch(e) {
+    alert('Error de red al completar el proyecto.');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ri-checkbox-circle-line"></i> Completar Proyecto'; }
+  }
 }
 
 function seleccionarOtroTablero() {

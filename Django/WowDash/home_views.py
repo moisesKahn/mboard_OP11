@@ -70,6 +70,11 @@ def index(request):
     except UsuarioPerfilOptimizador.DoesNotExist:
         perfil = None
 
+    # Si es operador, redirigir a su panel de proyectos (no tiene acceso al dashboard)
+    if perfil and perfil.rol == 'operador':
+        from django.shortcuts import redirect
+        return redirect('operador_home')
+
     # Si es usuario de autoservicio, redirigir directamente al optimizador de autoservicio
     if perfil and perfil.rol == 'autoservicio':
         from django.shortcuts import redirect

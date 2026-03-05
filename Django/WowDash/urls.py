@@ -175,6 +175,7 @@ urlpatterns = [
     path('api/operador/proyectos/<int:proyecto_id>/piezas/marcar-todas', api_views.operador_proyecto_marcar_todas_cortadas_api, name='api_operador_proyecto_marcar_todas'),
     path('api/operador/proyectos/<int:proyecto_id>/piezas/<str:pieza_id>', api_views.operador_pieza_estado_api, name='api_operador_pieza_estado'),
     path('api/operador/proyectos/<int:proyecto_id>/completar', api_views.operador_proyecto_completar_api, name='api_operador_proyecto_completar'),
+    path('api/operador/proyectos/<int:proyecto_id>/tablero-completado', api_views.operador_tablero_completado_api, name='api_operador_tablero_completado'),
 
 # home routes
 

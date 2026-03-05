@@ -575,3 +575,102 @@ def operador_proyecto_completar_api(request: HttpRequest, proyecto_id: int):
         pass
     return JsonResponse({'success': True})
 
+
+@csrf_exempt
+@login_required
+@require_http_methods(["POST"])
+def operador_tablero_completado_api(request: HttpRequest, proyecto_id: int):
+    """POST /api/operador/proyectos/<id>/tablero-completado
+    Body: { mat_idx: int, tab_idx: int }
+    Marca todas las piezas del tablero indicado como 'cortada', persiste el JSON
+    y cambia el estado del proyecto a 'en_proceso' si no estaba ya completado.
+    Devuelve también si TODOS los tableros del proyecto ya están completos.
+    """
+    ctx = get_auth_context(request)
+    base_qs = Proyecto.objects
+    if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+        base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
+    p = get_object_or_404(base_qs, id=proyecto_id)
+    if ctx.get('role') == 'operador' and p.operador_id != request.user.id:
+        return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
+
+    try:
+        payload = _json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        payload = {}
+
+    mat_idx = payload.get('mat_idx')
+    tab_idx = payload.get('tab_idx')
+    if mat_idx is None or tab_idx is None:
+        return JsonResponse({'success': False, 'message': 'Se requieren mat_idx y tab_idx.'}, status=400)
+
+    res = p.resultado_optimizacion
+    if not res:
+        return JsonResponse({'success': False, 'message': 'Proyecto sin resultado.'}, status=404)
+    try:
+        resd = _json.loads(res) if isinstance(res, str) else res
+    except Exception:
+        return JsonResponse({'success': False, 'message': 'Resultado inválido.'}, status=500)
+
+    materiales = resd.get('materiales') if isinstance(resd.get('materiales'), list) else [resd]
+
+    try:
+        tablero = materiales[int(mat_idx)]['tableros'][int(tab_idx)]
+    except (IndexError, KeyError, TypeError):
+        return JsonResponse({'success': False, 'message': 'Tablero no encontrado.'}, status=404)
+
+    # Marcar todas las piezas de este tablero como cortada
+    count = 0
+    for pi in (tablero.get('piezas') or []):
+        if pi.get('estado') != 'cortada':
+            pi['estado'] = 'cortada'
+            count += 1
+
+    # Persistir
+    if 'materiales' in resd:
+        p.resultado_optimizacion = _json.dumps(resd, ensure_ascii=False)
+    else:
+        p.resultado_optimizacion = _json.dumps(materiales[0], ensure_ascii=False)
+
+    # Actualizar estado del proyecto a en_proceso si corresponde
+    campos_a_guardar = ['resultado_optimizacion']
+    if p.estado not in ('completado', 'en_proceso', 'produccion'):
+        p.estado = 'en_proceso'
+        campos_a_guardar.append('estado')
+
+    p.save(update_fields=campos_a_guardar)
+
+    # Verificar si TODOS los tableros de todos los materiales están completamente cortados
+    todos_cortados = True
+    total_tableros = 0
+    tableros_completos = 0
+    for mat in materiales:
+        for t in (mat.get('tableros') or []):
+            total_tableros += 1
+            piezas = t.get('piezas') or []
+            if piezas and all(pi.get('estado') == 'cortada' for pi in piezas):
+                tableros_completos += 1
+            else:
+                todos_cortados = False
+
+    try:
+        AuditLog.objects.create(
+            actor=request.user,
+            organizacion=p.organizacion,
+            verb='EDIT',
+            target_model='Proyecto',
+            target_id=str(p.id),
+            target_repr=p.codigo,
+            changes={'tablero_completado': f'mat={mat_idx},tab={tab_idx}', 'piezas_marcadas': count},
+        )
+    except Exception:
+        pass
+
+    return JsonResponse({
+        'success': True,
+        'updated': count,
+        'todos_tableros_completos': todos_cortados,
+        'tableros_completos': tableros_completos,
+        'total_tableros': total_tableros,
+    })
+

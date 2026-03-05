@@ -14,10 +14,28 @@ PUBLIC_PATH_PREFIXES = (
     settings.MEDIA_URL,
 )
 
+# Rutas permitidas para el rol 'operador' (prefijos).
+# Cualquier ruta que NO comience con alguno de estos prefijos será redirigida
+# al panel de operador si el usuario tiene ese rol.
+OPERADOR_ALLOWED_PREFIXES = (
+    '/operador/',
+    '/authentication/',
+    '/login/',
+    '/logout/',
+    '/auth/',
+    '/api/',
+    '/chat/',
+    '/search/',
+    '/password-change/',
+    settings.STATIC_URL,
+    settings.MEDIA_URL,
+)
+
 
 class RequireLoginMiddleware:
     """Redirige a LOGIN_URL si el usuario no está autenticado.
     Excepciones: rutas de signin/logout, login API, y archivos estáticos/media.
+    También restringe el rol 'operador' para que solo acceda a sus rutas permitidas.
     """
     def __init__(self, get_response):
         self.get_response = get_response
@@ -32,6 +50,16 @@ class RequireLoginMiddleware:
         user = getattr(request, 'user', None)
         if not (user and user.is_authenticated):
             return redirect(settings.LOGIN_URL + f"?next={path}")
+
+        # Restricción de rutas para el rol 'operador'
+        try:
+            perfil = user.usuarioperfiloptimizador
+            if perfil.rol == 'operador':
+                allowed = any(path.startswith(p or '') for p in OPERADOR_ALLOWED_PREFIXES if p)
+                if not allowed:
+                    return redirect('operador_home')
+        except Exception:
+            pass
 
         return self.get_response(request)
 
@@ -55,3 +83,4 @@ class NoCacheMiddleware:
             response['Pragma'] = 'no-cache'
             response['Expires'] = '0'
         return response
+
