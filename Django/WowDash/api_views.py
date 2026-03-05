@@ -558,8 +558,31 @@ def operador_proyecto_completar_api(request: HttpRequest, proyecto_id: int):
                     missing += 1
     if missing > 0:
         return JsonResponse({'success': False, 'message': f'Faltan {missing} pieza(s) por cortar de {total}.'}, status=400)
-    # Ok: completar
-    p.estado = 'completado'
+
+    # Verificar si alguna pieza tiene tapacanto para determinar el estado destino
+    tiene_tapacanto = False
+    for mat in materiales:
+        tap = mat.get('tapacanto') or {}
+        tap_nombre = (tap.get('nombre') or '').strip()
+        if tap_nombre:
+            tiene_tapacanto = True
+            break
+        # También revisar a nivel de pieza
+        if not tiene_tapacanto:
+            for t in (mat.get('tableros') or []):
+                for pi in (t.get('piezas') or []):
+                    tc = pi.get('tapacantos') or {}
+                    if any(tc.values()):
+                        tiene_tapacanto = True
+                        break
+                if tiene_tapacanto:
+                    break
+        if tiene_tapacanto:
+            break
+
+    # Si hay tapacanto pendiente → enchapado_pendiente, si no → completado directamente
+    nuevo_estado = 'enchapado_pendiente' if tiene_tapacanto else 'completado'
+    p.estado = nuevo_estado
     p.save(update_fields=['estado'])
     try:
         AuditLog.objects.create(
@@ -569,11 +592,11 @@ def operador_proyecto_completar_api(request: HttpRequest, proyecto_id: int):
             target_model='Proyecto',
             target_id=str(p.id),
             target_repr=p.codigo,
-            changes={'estado': 'completado'},
+            changes={'estado': nuevo_estado},
         )
     except Exception:
         pass
-    return JsonResponse({'success': True})
+    return JsonResponse({'success': True, 'estado': nuevo_estado, 'enchapado_pendiente': nuevo_estado == 'enchapado_pendiente'})
 
 
 @csrf_exempt

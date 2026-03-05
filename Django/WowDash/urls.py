@@ -45,6 +45,7 @@ from WowDash import configurador_views
 from WowDash import operator_views
 from WowDash import api_views
 from WowDash import autoservicio_views
+from WowDash import enchapador_views
 
 urlpatterns = [
     # API (mínima)
@@ -152,6 +153,11 @@ urlpatterns = [
     path('operador/proyecto/<int:proyecto_id>/', operator_views.operador_proyecto, name='operador_proyecto'),
     path('operador/corte-guiado/<int:proyecto_id>/', operator_views.operador_corte_guiado, name='operador_corte_guiado'),
 
+# enchapador routes
+    path('enchapador/', enchapador_views.enchapador_home, name='enchapador_home'),
+    path('enchapador/historial/', enchapador_views.enchapador_historial, name='enchapador_historial'),
+    path('enchapador/proyecto/<int:proyecto_id>/', enchapador_views.enchapador_proyecto, name='enchapador_proyecto'),
+
 # chat routes (real functionality)
     path('chat/', chat_views.chat_lista, name='chat'),
     path('chat/conversacion/<int:conversacion_id>/', chat_views.chat_conversacion, name='chat_conversacion'),
@@ -176,6 +182,9 @@ urlpatterns = [
     path('api/operador/proyectos/<int:proyecto_id>/piezas/<str:pieza_id>', api_views.operador_pieza_estado_api, name='api_operador_pieza_estado'),
     path('api/operador/proyectos/<int:proyecto_id>/completar', api_views.operador_proyecto_completar_api, name='api_operador_proyecto_completar'),
     path('api/operador/proyectos/<int:proyecto_id>/tablero-completado', api_views.operador_tablero_completado_api, name='api_operador_tablero_completado'),
+
+    # enchapador API
+    path('api/enchapador/proyectos/<int:proyecto_id>/completar-enchapado', enchapador_views.enchapador_completar_api, name='api_enchapador_completar'),
 
 # home routes
 

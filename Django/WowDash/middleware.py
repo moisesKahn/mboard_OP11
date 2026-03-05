@@ -15,10 +15,23 @@ PUBLIC_PATH_PREFIXES = (
 )
 
 # Rutas permitidas para el rol 'operador' (prefijos).
-# Cualquier ruta que NO comience con alguno de estos prefijos será redirigida
-# al panel de operador si el usuario tiene ese rol.
 OPERADOR_ALLOWED_PREFIXES = (
     '/operador/',
+    '/authentication/',
+    '/login/',
+    '/logout/',
+    '/auth/',
+    '/api/',
+    '/chat/',
+    '/search/',
+    '/password-change/',
+    settings.STATIC_URL,
+    settings.MEDIA_URL,
+)
+
+# Rutas permitidas para el rol 'enchapador' (prefijos).
+ENCHAPADOR_ALLOWED_PREFIXES = (
+    '/enchapador/',
     '/authentication/',
     '/login/',
     '/logout/',
@@ -35,7 +48,7 @@ OPERADOR_ALLOWED_PREFIXES = (
 class RequireLoginMiddleware:
     """Redirige a LOGIN_URL si el usuario no está autenticado.
     Excepciones: rutas de signin/logout, login API, y archivos estáticos/media.
-    También restringe el rol 'operador' para que solo acceda a sus rutas permitidas.
+    También restringe los roles 'operador' y 'enchapador' para que solo accedan a sus rutas.
     """
     def __init__(self, get_response):
         self.get_response = get_response
@@ -51,13 +64,17 @@ class RequireLoginMiddleware:
         if not (user and user.is_authenticated):
             return redirect(settings.LOGIN_URL + f"?next={path}")
 
-        # Restricción de rutas para el rol 'operador'
+        # Restricción de rutas por rol
         try:
             perfil = user.usuarioperfiloptimizador
             if perfil.rol == 'operador':
                 allowed = any(path.startswith(p or '') for p in OPERADOR_ALLOWED_PREFIXES if p)
                 if not allowed:
                     return redirect('operador_home')
+            elif perfil.rol == 'enchapador':
+                allowed = any(path.startswith(p or '') for p in ENCHAPADOR_ALLOWED_PREFIXES if p)
+                if not allowed:
+                    return redirect('enchapador_home')
         except Exception:
             pass
 

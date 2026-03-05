@@ -1,0 +1,72 @@
+{% extends 'layout/layout.html' %}
+{% load static %}
+{% load ui_extras %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <form method="get" class="d-flex gap-2">
+      <input type="text" class="form-control" name="search" value="{{ search }}"
+             placeholder="Buscar por código, nombre o cliente">
+      <button class="btn btn-primary" type="submit">Buscar</button>
+    </form>
+  </div>
+  <div class="col-md-6 text-end">
+    <a class="btn btn-outline-secondary" href="{% url 'enchapador_historial' %}">
+      <i class="ri-history-line"></i> Ver historial
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex align-items-center gap-2 py-2">
+    <i class="ri-scissors-2-line text-warning fs-5"></i>
+    <strong>Proyectos pendientes de enchapado</strong>
+    <span class="badge bg-warning text-dark ms-1">{{ proyectos|length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Cliente</th>
+            <th>Estado</th>
+            <th>Última actualización</th>
+            <th class="text-end">Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in proyectos %}
+          <tr>
+            <td class="fw-semibold">{{ p.public_id|default:p.id }}</td>
+            <td>{{ p.nombre }}</td>
+            <td>{{ p.cliente.nombre }}</td>
+            <td>
+              <span class="badge" style="background:#fd7e14;">
+                <i class="ri-scissors-2-line me-1"></i>{{ p.get_estado_display }}
+              </span>
+            </td>
+            <td>{{ p.fecha_modificacion|date:'d-m-Y H:i' }}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-warning fw-semibold"
+                 href="{% url 'enchapador_proyecto' p.id %}">
+                <i class="ri-scissors-2-line"></i> Encharpar
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">
+              <i class="ri-check-double-line fs-3 d-block mb-2"></i>
+              No hay proyectos pendientes de enchapado.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

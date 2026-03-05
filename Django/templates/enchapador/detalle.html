@@ -1,0 +1,346 @@
+{% extends 'layout/layout.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Encabezado -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <a href="{% url 'enchapador_home' %}" class="btn btn-sm btn-outline-secondary me-2">
+        <i class="ri-arrow-left-line"></i> Volver
+      </a>
+      <strong>{{ proyecto.nombre }}</strong>
+      <span class="text-muted small ms-2">| #{{ proyecto.public_id|default:proyecto.id }} | {{ proyecto.cliente.nombre }}</span>
+    </div>
+    <div>
+      <span class="badge" style="background:#fd7e14;">{{ proyecto.get_estado_display }}</span>
+    </div>
+  </div>
+
+  <!-- Barra de progreso global -->
+  <div class="card mb-3">
+    <div class="card-body py-2 px-3">
+      <div class="d-flex align-items-center gap-3">
+        <span class="text-muted small">Progreso de enchapado:</span>
+        <div class="flex-grow-1">
+          <div class="progress" style="height:18px;">
+            <div id="barraProgreso" class="progress-bar bg-warning" role="progressbar" style="width:0%">0%</div>
+          </div>
+        </div>
+        <span id="labelProgreso" class="small text-muted">0 / 0 tipos</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grupos por material (generados dinámicamente) -->
+  <div id="gruposMateriales"></div>
+
+  <!-- Botón completar (aparece solo cuando todo está marcado) -->
+  <div id="seccionCompletar" style="display:none;" class="text-center my-4">
+    <div class="card border-success">
+      <div class="card-body py-4">
+        <i class="ri-award-fill text-success" style="font-size:52px;"></i>
+        <h4 class="mt-3">¡Enchapado completado!</h4>
+        <p class="text-muted">Todas las piezas han sido enchapadas. Confirma para marcar el proyecto como <strong>Completado</strong>.</p>
+        <button id="btnCompletarEnchapado" class="btn btn-success btn-lg px-5">
+          <i class="ri-checkbox-circle-line"></i> Completar Proyecto
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de éxito -->
+<div class="modal fade" id="modalExito" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="ri-checkbox-circle-line"></i> Proyecto Completado</h5>
+      </div>
+      <div class="modal-body text-center py-4">
+        <i class="ri-checkbox-circle-fill text-success" style="font-size:64px;"></i>
+        <h4 class="mt-3">¡Proceso de enchapado finalizado!</h4>
+        <p class="text-muted">El proyecto ha sido marcado como <strong>Completado</strong>.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-success"
+                onclick="window.location.href='{% url 'enchapador_home' %}'">
+          <i class="ri-home-line"></i> Volver al inicio
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Visualización de pieza con tapacanto */
+.pieza-esquema-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 90px;
+}
+.pieza-svg {
+  overflow: visible;
+}
+.tap-lado {
+  stroke: #fd7e14;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.tap-flecha text {
+  font-size: 9px;
+  fill: #fd7e14;
+  font-weight: bold;
+}
+.grupo-material-header {
+  background: linear-gradient(90deg, #fff3cd 0%, #fff 100%);
+  border-left: 4px solid #fd7e14;
+}
+.check-tipo-row {
+  transition: background .2s;
+}
+.check-tipo-row.completado {
+  background: #f0fff4;
+}
+.check-tipo-row.completado .nombre-pieza {
+  text-decoration: line-through;
+  color: #6c757d;
+}
+</style>
+
+<script>
+const proyectoId = {{ proyecto.id }};
+const rawData = '{{ proyecto.resultado_optimizacion|escapejs }}';
+let proyectoData = null;
+try {
+  if (rawData && rawData !== 'None' && rawData !== 'null') {
+    proyectoData = JSON.parse(rawData);
+  }
+} catch(e) { console.error('Error parseando datos:', e); }
+
+function getCsrf() {
+  return document.cookie.split(';').map(c => c.trim())
+    .find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+// Estado de checks: Map<checkKey, boolean>
+const checkState = new Map();
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (!proyectoData) {
+    document.getElementById('gruposMateriales').innerHTML =
+      '<div class="alert alert-warning">Este proyecto no tiene datos de optimización.</div>';
+    return;
+  }
+
+  const materiales = proyectoData.materiales || [proyectoData];
+  renderGrupos(materiales);
+
+  document.getElementById('btnCompletarEnchapado')?.addEventListener('click', completarEnchapado);
+});
+
+// ─── Renderizado de grupos ───────────────────────────────────────────────────
+
+function renderGrupos(materiales) {
+  const container = document.getElementById('gruposMateriales');
+  container.innerHTML = '';
+
+  materiales.forEach((mat, matIdx) => {
+    const matNombre = (mat.material?.nombre) || `Material ${matIdx + 1}`;
+    const tapNombre = (mat.tapacanto?.nombre || '').trim() || 'Sin tapacanto definido';
+    const tapCodigo = (mat.tapacanto?.codigo || '').trim();
+
+    // Recopilar TODAS las piezas de todos los tableros de este material
+    const todasLasPiezas = [];
+    (mat.tableros || []).forEach(t => {
+      (t.piezas || []).forEach(p => todasLasPiezas.push(p));
+    });
+
+    // Filtrar solo piezas con algún tapacanto
+    const piezasConTap = todasLasPiezas.filter(p => {
+      const tc = p.tapacantos || {};
+      return tc.arriba || tc.abajo || tc.izquierda || tc.derecha;
+    });
+
+    if (piezasConTap.length === 0) return; // Material sin enchapado: omitir
+
+    // Agrupar piezas por nombre+dimensiones (mismo tipo)
+    const tiposMap = new Map();
+    piezasConTap.forEach(p => {
+      const key = `${p.nombre}|${p.ancho}|${p.largo}|${JSON.stringify(p.tapacantos)}`;
+      if (!tiposMap.has(key)) {
+        tiposMap.set(key, { ...p, cantidad: 0 });
+      }
+      tiposMap.get(key).cantidad++;
+    });
+
+    const tipos = Array.from(tiposMap.values());
+    const grupoId = `grupo-mat-${matIdx}`;
+
+    // Inicializar checks para este grupo
+    tipos.forEach((_, i) => {
+      const ck = `${matIdx}-${i}`;
+      checkState.set(ck, false);
+    });
+
+    const grupoDiv = document.createElement('div');
+    grupoDiv.className = 'card mb-4';
+    grupoDiv.innerHTML = `
+      <div class="card-header grupo-material-header d-flex justify-content-between align-items-center py-3">
+        <div>
+          <i class="ri-layout-2-line text-warning me-2"></i>
+          <strong class="fs-5">${escH(matNombre)}</strong>
+          <span class="badge bg-secondary ms-2">${piezasConTap.length} piezas con enchapado</span>
+        </div>
+        <div class="text-end">
+          <div class="small text-muted">Tapacanto:</div>
+          <strong class="text-warning">${escH(tapNombre)}${tapCodigo ? ' · ' + escH(tapCodigo) : ''}</strong>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <table class="table align-middle mb-0" id="${grupoId}">
+          <thead class="table-light">
+            <tr>
+              <th style="width:110px;" class="text-center">Esquema</th>
+              <th>Nombre / Tipo de pieza</th>
+              <th>Medidas</th>
+              <th class="text-center">Cantidad</th>
+              <th class="text-center">Tapacanto</th>
+              <th class="text-center">✔ Completado</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tipos.map((tipo, i) => renderFilaTipo(tipo, matIdx, i)).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    container.appendChild(grupoDiv);
+
+    // Eventos de los checks
+    tipos.forEach((_, i) => {
+      const ck = `${matIdx}-${i}`;
+      document.getElementById(`check-${ck}`)?.addEventListener('change', function() {
+        checkState.set(ck, this.checked);
+        const fila = document.getElementById(`fila-${ck}`);
+        if (fila) fila.classList.toggle('completado', this.checked);
+        actualizarProgreso();
+      });
+    });
+  });
+
+  actualizarProgreso();
+}
+
+function renderFilaTipo(tipo, matIdx, tipoIdx) {
+  const ck = `${matIdx}-${tipoIdx}`;
+  const tc = tipo.tapacantos || {};
+  const lados = [];
+  if (tc.arriba)     lados.push('Arriba');
+  if (tc.derecha)    lados.push('Derecha');
+  if (tc.abajo)      lados.push('Abajo');
+  if (tc.izquierda)  lados.push('Izquierda');
+
+  return `
+    <tr class="check-tipo-row" id="fila-${ck}">
+      <td class="text-center py-3">
+        <div class="pieza-esquema-wrap">
+          ${generarEsquemaSVG(tipo.ancho, tipo.largo, tc)}
+        </div>
+      </td>
+      <td>
+        <span class="nombre-pieza fw-semibold">${escH(tipo.nombre)}</span>
+      </td>
+      <td class="text-nowrap">
+        <span class="badge bg-light text-dark border">${tipo.ancho} × ${tipo.largo} mm</span>
+        ${tipo.rotada ? '<span class="badge bg-info text-dark ms-1">Rotada</span>' : ''}
+      </td>
+      <td class="text-center fw-bold">${tipo.cantidad}</td>
+      <td>
+        <div class="d-flex flex-wrap gap-1 justify-content-center">
+          ${lados.map(l => `<span class="badge bg-warning text-dark">${l}</span>`).join('')}
+        </div>
+      </td>
+      <td class="text-center">
+        <div class="form-check d-flex justify-content-center">
+          <input class="form-check-input" type="checkbox" id="check-${ck}" style="width:1.4rem;height:1.4rem;">
+        </div>
+      </td>
+    </tr>`;
+}
+
+// ─── Esquema SVG de la pieza con tapacanto ───────────────────────────────────
+
+function generarEsquemaSVG(ancho, largo, tc) {
+  // Dibujar rectángulo proporcional máx 80×60
+  const maxW = 76, maxH = 56;
+  const scale = Math.min(maxW / ancho, maxH / largo);
+  const w = Math.round(ancho * scale);
+  const h = Math.round(largo * scale);
+  const pad = 12; // espacio para línea de tapacanto exterior
+  const svgW = w + pad * 2;
+  const svgH = h + pad * 2;
+  const rx = pad, ry = pad;
+
+  let lines = '';
+  const grosor = 5;
+
+  if (tc.arriba)    lines += `<line class="tap-lado" x1="${rx}" y1="${ry}" x2="${rx+w}" y2="${ry}"/>`;
+  if (tc.abajo)     lines += `<line class="tap-lado" x1="${rx}" y1="${ry+h}" x2="${rx+w}" y2="${ry+h}"/>`;
+  if (tc.izquierda) lines += `<line class="tap-lado" x1="${rx}" y1="${ry}" x2="${rx}" y2="${ry+h}"/>`;
+  if (tc.derecha)   lines += `<line class="tap-lado" x1="${rx+w}" y1="${ry}" x2="${rx+w}" y2="${ry+h}"/>`;
+
+  return `<svg class="pieza-svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}">
+    <rect x="${rx}" y="${ry}" width="${w}" height="${h}"
+          fill="#e3f2fd" stroke="#2196f3" stroke-width="1.5" rx="2"/>
+    ${lines}
+  </svg>`;
+}
+
+// ─── Progreso ────────────────────────────────────────────────────────────────
+
+function actualizarProgreso() {
+  const total = checkState.size;
+  const done  = Array.from(checkState.values()).filter(Boolean).length;
+  const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const barra  = document.getElementById('barraProgreso');
+  const label  = document.getElementById('labelProgreso');
+  const seccion = document.getElementById('seccionCompletar');
+
+  if (barra)  { barra.style.width = pct + '%'; barra.textContent = pct + '%'; }
+  if (label)  label.textContent = `${done} / ${total} tipos completados`;
+
+  if (seccion) seccion.style.display = (done === total && total > 0) ? 'block' : 'none';
+}
+
+// ─── Completar enchapado ─────────────────────────────────────────────────────
+
+async function completarEnchapado() {
+  const btn = document.getElementById('btnCompletarEnchapado');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando…'; }
+  try {
+    const r = await fetch(`/api/enchapador/proyectos/${proyectoId}/completar-enchapado`, {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()}
+    });
+    const jr = await r.json().catch(() => ({}));
+    if (r.ok && jr.success) {
+      const modal = new bootstrap.Modal(document.getElementById('modalExito'));
+      modal.show();
+    } else {
+      alert(jr.message || 'No se pudo completar el proyecto.');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ri-checkbox-circle-line"></i> Completar Proyecto'; }
+    }
+  } catch(e) {
+    alert('Error de red.');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ri-checkbox-circle-line"></i> Completar Proyecto'; }
+  }
+}
+
+function escH(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}

@@ -144,6 +144,7 @@ class Proyecto(models.Model):
         ('optimizado', 'Optimizado'),
         ('aprobado', 'Aprobado'),
         ('produccion', 'En Producción'),
+        ('enchapado_pendiente', 'Enchapado Pendiente'),
         ('completado', 'Completado'),
         ('cancelado', 'Cancelado')
     ]
@@ -231,6 +232,7 @@ class UsuarioPerfilOptimizador(models.Model):
         ('agente', 'Agente'),  # AGENTE
         ('subordinador', 'Subordinador'),  # SUBORDINADOR (solo lectura en materiales)
         ('operador', 'Operador'),  # OPERADOR (nuevo)
+        ('enchapador', 'Enchapador'),  # ENCHAPADOR (proceso de tapacanto)
         ('supervisor', 'Supervisor'),  # SUPERVISOR (ver proyectos y métricas, sin administración global)
         ('autoservicio', 'Autoservicio'),  # AUTOSERVICIO (portal restringido de cliente)
     ]

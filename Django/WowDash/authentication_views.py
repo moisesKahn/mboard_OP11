@@ -74,6 +74,12 @@ def signin(request):
                     return redirect('operador_home')
             except Exception:
                 pass
+            # Si el usuario es enchapador, dirigir a su panel
+            try:
+                if getattr(perfil, 'rol', None) == 'enchapador':
+                    return redirect('enchapador_home')
+            except Exception:
+                pass
             # Redirección específica para rol autoservicio:
             # Los usuarios autoservicio ahora van a proyectos como cualquier usuario normal
             # try:

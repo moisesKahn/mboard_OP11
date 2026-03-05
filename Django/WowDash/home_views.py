@@ -75,6 +75,11 @@ def index(request):
         from django.shortcuts import redirect
         return redirect('operador_home')
 
+    # Si es enchapador, redirigir a su panel
+    if perfil and perfil.rol == 'enchapador':
+        from django.shortcuts import redirect
+        return redirect('enchapador_home')
+
     # Si es usuario de autoservicio, redirigir directamente al optimizador de autoservicio
     if perfil and perfil.rol == 'autoservicio':
         from django.shortcuts import redirect

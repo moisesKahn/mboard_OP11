@@ -44,6 +44,7 @@ def estado_badge(estado: str) -> str:
             'optimizado': 'bg-info text-dark',
             'aprobado': 'bg-primary',
             'produccion': 'bg-primary',
+            'enchapado_pendiente': 'bg-orange text-white',
             'completado': 'bg-success',
             'cancelado': 'bg-danger',
         }

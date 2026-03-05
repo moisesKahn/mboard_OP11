@@ -1,0 +1,66 @@
+{% extends 'layout/layout.html' %}
+{% load static %}
+{% load ui_extras %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <form method="get" class="d-flex gap-2">
+      <input type="text" class="form-control" name="search" value="{{ search }}"
+             placeholder="Buscar por código, nombre o cliente">
+      <select class="form-select" name="estado" title="Estado">
+        <option value="">Completados</option>
+        <option value="completado" {% if estado == 'completado' %}selected{% endif %}>Completado</option>
+        <option value="enchapado_pendiente" {% if estado == 'enchapado_pendiente' %}selected{% endif %}>Enchapado Pendiente</option>
+        <option value="cancelado" {% if estado == 'cancelado' %}selected{% endif %}>Cancelado</option>
+      </select>
+      <button class="btn btn-primary" type="submit">Filtrar</button>
+    </form>
+  </div>
+  <div class="col-md-6 text-end">
+    <a class="btn btn-outline-secondary" href="{% url 'enchapador_home' %}">
+      ← Volver a pendientes
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Cliente</th>
+            <th>Estado</th>
+            <th>Actualizado</th>
+            <th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in proyectos %}
+          <tr>
+            <td class="fw-semibold">{{ p.public_id|default:p.id }}</td>
+            <td>{{ p.nombre }}</td>
+            <td>{{ p.cliente.nombre }}</td>
+            <td><span class="badge {{ p.estado|estado_badge }}">{{ p.get_estado_display }}</span></td>
+            <td>{{ p.fecha_modificacion|date:'d-m-Y H:i' }}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{% url 'enchapador_proyecto' p.id %}">Ver</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">
+              No hay proyectos en el historial.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
