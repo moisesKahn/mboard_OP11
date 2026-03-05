@@ -188,9 +188,15 @@ function cargarTableros() {
     proyectoData.materiales.forEach((material, matIdx) => {
       if (material.tableros && material.tableros.length > 0) {
         material.tableros.forEach((tablero, tabIdx) => {
+          const piezas = tablero.piezas || [];
+          const yaCompletado = piezas.length > 0 && piezas.every(p => p.estado === 'cortada');
           const option = document.createElement('option');
           option.value = JSON.stringify({matIdx, tabIdx});
-          option.textContent = `Material ${matIdx + 1} - Tablero ${tablero.numero || (tabIdx + 1)} (${tablero.piezas ? tablero.piezas.length : 0} piezas)`;
+          option.textContent = `${yaCompletado ? '✓ ' : ''}Material ${matIdx + 1} - Tablero ${tablero.numero || (tabIdx + 1)} (${piezas.length} piezas)`;
+          if (yaCompletado) {
+            option.style.color = '#198754';
+            option.dataset.completado = '1';
+          }
           select.appendChild(option);
         });
       }
@@ -221,6 +227,37 @@ function cargarTablero(value) {
     const mensajeInicial = document.getElementById('mensajeInicial');
     if (mensajeInicial) mensajeInicial.style.display = 'none';
     canvas.style.display = 'block';
+
+    // Verificar si ya fue completado
+    const piezas = tableroActual.piezas || [];
+    const yaCompletado = piezas.length > 0 && piezas.every(p => p.estado === 'cortada');
+
+    if (yaCompletado) {
+      // Mostrar tablero en modo solo-lectura (todas las piezas verdes)
+      cortes = generarSecuenciaCortes(tableroActual);
+      corteIndex = cortes.length; // saltar al final
+      document.getElementById('corteActual').textContent = cortes.length;
+      document.getElementById('totalCortes').textContent = cortes.length;
+      document.getElementById('btnSiguiente').disabled = true;
+      document.getElementById('btnReiniciar').disabled = false;
+      dibujarTablero();
+      // Mostrar banner informativo encima del canvas
+      let banner = document.getElementById('bannerCompletado');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'bannerCompletado';
+        banner.className = 'alert alert-success d-flex align-items-center gap-2 py-2 mb-2';
+        banner.innerHTML = '<i class="ri-checkbox-circle-fill fs-5"></i> <strong>Tablero ya completado.</strong> Usa "Reiniciar" si necesitas volver a recorrerlo.';
+        document.getElementById('canvasContainer').prepend(banner);
+      } else {
+        banner.style.display = '';
+      }
+      return;
+    }
+
+    // Ocultar banner si existía de una selección anterior
+    const banner = document.getElementById('bannerCompletado');
+    if (banner) banner.style.display = 'none';
 
     // Generar secuencia de cortes
     cortes = generarSecuenciaCortes(tableroActual);
@@ -978,8 +1015,30 @@ async function completarProyecto() {
 
 function seleccionarOtroTablero() {
   const modal = bootstrap.Modal.getInstance(document.getElementById('modalCompletado'));
-  modal.hide();
-  document.getElementById('tableroSelect').focus();
+  if (modal) modal.hide();
+
+  // Recargar el select para reflejar el checkmark del tablero recién completado
+  cargarTableros();
+
+  // Buscar el siguiente tablero que NO esté completado
+  const select = document.getElementById('tableroSelect');
+  let siguienteOption = null;
+  for (const opt of select.options) {
+    if (!opt.value) continue; // saltar el placeholder
+    if (opt.dataset.completado !== '1') {
+      siguienteOption = opt;
+      break;
+    }
+  }
+
+  if (siguienteOption) {
+    select.value = siguienteOption.value;
+    cargarTablero(siguienteOption.value);
+  } else {
+    // Todos completados, enfocar el select
+    select.value = '';
+    select.focus();
+  }
 }
 </script>
 {% endblock %}
