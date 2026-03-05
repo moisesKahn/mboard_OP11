@@ -10,7 +10,7 @@
                 <button type="button" class="sidebar-mobile-toggle">
                     <iconify-icon icon="heroicons:bars-3-solid" class="icon"></iconify-icon>
                 </button>
-                {% if user.is_authenticated and user.usuarioperfiloptimizador.rol != 'autoservicio' %}
+                {% if user.is_authenticated and user.usuarioperfiloptimizador.rol != 'autoservicio' and user.usuarioperfiloptimizador.rol != 'enchapador' %}
                 <div class="navbar-search position-relative">
                     <input type="text" id="globalSearch" name="search" placeholder="Buscar proyectos, clientes, usuarios..." autocomplete="off">
                     <iconify-icon icon="ion:search-outline" class="icon"></iconify-icon>
@@ -118,7 +118,7 @@
                     </div>
                 </div><!-- Language dropdown end -->
 
-                {% if user.is_authenticated and user.usuarioperfiloptimizador.rol != 'autoservicio' %}
+                {% if user.is_authenticated and user.usuarioperfiloptimizador.rol != 'autoservicio' and user.usuarioperfiloptimizador.rol != 'enchapador' %}
                 <div class="dropdown">
                     <button id="btnMessages" class="position-relative w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center" type="button" data-bs-toggle="dropdown">
                         <iconify-icon icon="mage:email" class="text-primary-light text-xl"></iconify-icon>
@@ -232,15 +232,15 @@
                 </div><!-- Notification dropdown end -->
 
                 {% if user.is_authenticated %}
-                    {% if user.usuarioperfiloptimizador.rol == 'autoservicio' %}
-                    <!-- Modo Autoservicio: Solo mostrar nombre del usuario -->
+                    {% if user.usuarioperfiloptimizador.rol == 'autoservicio' or user.usuarioperfiloptimizador.rol == 'enchapador' %}
+                    <!-- Modo restringido: Solo mostrar nombre del usuario -->
                     <div class="d-flex align-items-center gap-3">
                         <div class="text-end">
                             <div class="text-sm fw-semibold text-primary-light">
                                 <i class="ri-user-line"></i> <span>{{ user.get_full_name|default:user.username }}</span>
                             </div>
                             <div class="text-xs text-secondary-light">
-                                Rol: Autoservicio
+                                {% if user.usuarioperfiloptimizador.rol == 'enchapador' %}Enchapador{% else %}Autoservicio{% endif %}
                             </div>
                         </div>
                     </div>

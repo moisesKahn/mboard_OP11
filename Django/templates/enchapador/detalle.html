@@ -22,13 +22,13 @@
   <div class="card mb-3">
     <div class="card-body py-2 px-3">
       <div class="d-flex align-items-center gap-3">
-        <span class="text-muted small">Progreso de enchapado:</span>
+        <span class="text-muted small">Progreso:</span>
         <div class="flex-grow-1">
-          <div class="progress" style="height:18px;">
+          <div class="progress" style="height:14px;">
             <div id="barraProgreso" class="progress-bar bg-warning" role="progressbar" style="width:0%">0%</div>
           </div>
         </div>
-        <span id="labelProgreso" class="small text-muted">0 / 0 tipos</span>
+        <span id="labelProgreso" class="small text-muted">0 / 0</span>
       </div>
     </div>
   </div>
@@ -74,40 +74,102 @@
 </div>
 
 <style>
-/* Visualización de pieza con tapacanto */
-.pieza-esquema-wrap {
+/* Cabecera de grupo de material — compacta */
+.grupo-mat-header {
+  background: linear-gradient(90deg, #fff3cd 0%, #fffdf5 100%);
+  border-left: 3px solid #fd7e14;
+  padding: 6px 14px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 90px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-.pieza-svg {
-  overflow: visible;
+.grupo-mat-header .mat-nombre {
+  font-weight: 600;
+  font-size: .95rem;
 }
-.tap-lado {
-  stroke: #fd7e14;
-  stroke-width: 5;
-  stroke-linecap: round;
+.grupo-mat-header .tap-nombre {
+  font-size: .8rem;
+  color: #e67e00;
 }
-.tap-flecha text {
-  font-size: 9px;
-  fill: #fd7e14;
-  font-weight: bold;
+
+/* Grid de tarjetas de pieza */
+.piezas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 12px;
 }
-.grupo-material-header {
-  background: linear-gradient(90deg, #fff3cd 0%, #fff 100%);
-  border-left: 4px solid #fd7e14;
+
+/* Tarjeta individual de pieza */
+.pieza-card {
+  border: 2px solid #dee2e6;
+  border-radius: 10px;
+  padding: 12px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  transition: border-color .2s, background .2s, box-shadow .2s;
+  cursor: pointer;
+  position: relative;
 }
-.check-tipo-row {
-  transition: background .2s;
+.pieza-card:hover {
+  border-color: #fd7e14;
+  box-shadow: 0 2px 10px rgba(253,126,20,.15);
 }
-.check-tipo-row.completado {
+.pieza-card.completado {
   background: #f0fff4;
+  border-color: #28a745;
 }
-.check-tipo-row.completado .nombre-pieza {
+.pieza-card.completado .pieza-nombre {
   text-decoration: line-through;
   color: #6c757d;
 }
+.pieza-card .check-overlay {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+}
+.pieza-card .check-overlay input[type=checkbox] {
+  width: 1.3rem;
+  height: 1.3rem;
+  cursor: pointer;
+}
+.pieza-card .pieza-nombre {
+  font-size: .82rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+.pieza-card .pieza-medidas {
+  font-size: .75rem;
+  color: #555;
+  background: #f1f3f5;
+  border-radius: 4px;
+  padding: 1px 7px;
+}
+.pieza-card .pieza-qty {
+  font-size: .8rem;
+  color: #fff;
+  background: #6c757d;
+  border-radius: 20px;
+  padding: 1px 9px;
+  font-weight: 600;
+}
+.pieza-card .lados-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+}
+.pieza-card .lados-wrap .badge {
+  font-size: .68rem;
+  padding: 2px 6px;
+}
+.pieza-svg { overflow: visible; }
+.tap-lado  { stroke: #fd7e14; stroke-width: 5; stroke-linecap: round; }
 </style>
 
 <script>
@@ -125,7 +187,6 @@ function getCsrf() {
     .find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
 }
 
-// Estado de checks: Map<checkKey, boolean>
 const checkState = new Map();
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -134,10 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
       '<div class="alert alert-warning">Este proyecto no tiene datos de optimización.</div>';
     return;
   }
-
   const materiales = proyectoData.materiales || [proyectoData];
   renderGrupos(materiales);
-
   document.getElementById('btnCompletarEnchapado')?.addEventListener('click', completarEnchapado);
 });
 
@@ -152,140 +211,109 @@ function renderGrupos(materiales) {
     const tapNombre = (mat.tapacanto?.nombre || '').trim() || 'Sin tapacanto definido';
     const tapCodigo = (mat.tapacanto?.codigo || '').trim();
 
-    // Recopilar TODAS las piezas de todos los tableros de este material
     const todasLasPiezas = [];
     (mat.tableros || []).forEach(t => {
       (t.piezas || []).forEach(p => todasLasPiezas.push(p));
     });
 
-    // Filtrar solo piezas con algún tapacanto
     const piezasConTap = todasLasPiezas.filter(p => {
       const tc = p.tapacantos || {};
       return tc.arriba || tc.abajo || tc.izquierda || tc.derecha;
     });
 
-    if (piezasConTap.length === 0) return; // Material sin enchapado: omitir
+    if (piezasConTap.length === 0) return;
 
-    // Agrupar piezas por nombre+dimensiones (mismo tipo)
     const tiposMap = new Map();
     piezasConTap.forEach(p => {
       const key = `${p.nombre}|${p.ancho}|${p.largo}|${JSON.stringify(p.tapacantos)}`;
-      if (!tiposMap.has(key)) {
-        tiposMap.set(key, { ...p, cantidad: 0 });
-      }
+      if (!tiposMap.has(key)) tiposMap.set(key, { ...p, cantidad: 0 });
       tiposMap.get(key).cantidad++;
     });
 
     const tipos = Array.from(tiposMap.values());
-    const grupoId = `grupo-mat-${matIdx}`;
 
-    // Inicializar checks para este grupo
-    tipos.forEach((_, i) => {
-      const ck = `${matIdx}-${i}`;
-      checkState.set(ck, false);
-    });
+    tipos.forEach((_, i) => checkState.set(`${matIdx}-${i}`, false));
 
     const grupoDiv = document.createElement('div');
-    grupoDiv.className = 'card mb-4';
+    grupoDiv.className = 'card mb-3 overflow-hidden';
+
+    const tapLabel = tapCodigo ? `${tapNombre} <span class="text-secondary" style="font-size:.75rem">· ${escH(tapCodigo)}</span>` : tapNombre;
+
     grupoDiv.innerHTML = `
-      <div class="card-header grupo-material-header d-flex justify-content-between align-items-center py-3">
-        <div>
-          <i class="ri-layout-2-line text-warning me-2"></i>
-          <strong class="fs-5">${escH(matNombre)}</strong>
-          <span class="badge bg-secondary ms-2">${piezasConTap.length} piezas con enchapado</span>
-        </div>
-        <div class="text-end">
-          <div class="small text-muted">Tapacanto:</div>
-          <strong class="text-warning">${escH(tapNombre)}${tapCodigo ? ' · ' + escH(tapCodigo) : ''}</strong>
-        </div>
+      <div class="grupo-mat-header">
+        <i class="ri-layout-2-line text-warning"></i>
+        <span class="mat-nombre">${escH(matNombre)}</span>
+        <span class="badge bg-secondary" style="font-size:.72rem;">${piezasConTap.length} pzs</span>
+        <span class="ms-auto tap-nombre"><i class="ri-scissors-cut-line me-1"></i>${tapLabel}</span>
       </div>
-      <div class="card-body p-0">
-        <table class="table align-middle mb-0" id="${grupoId}">
-          <thead class="table-light">
-            <tr>
-              <th style="width:110px;" class="text-center">Esquema</th>
-              <th>Nombre / Tipo de pieza</th>
-              <th>Medidas</th>
-              <th class="text-center">Cantidad</th>
-              <th class="text-center">Tapacanto</th>
-              <th class="text-center">✔ Completado</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tipos.map((tipo, i) => renderFilaTipo(tipo, matIdx, i)).join('')}
-          </tbody>
-        </table>
+      <div class="piezas-grid" id="grid-mat-${matIdx}">
+        ${tipos.map((tipo, i) => renderTarjetaTipo(tipo, matIdx, i)).join('')}
       </div>`;
+
     container.appendChild(grupoDiv);
 
-    // Eventos de los checks
+    // Eventos: click en tarjeta O en checkbox
     tipos.forEach((_, i) => {
       const ck = `${matIdx}-${i}`;
-      document.getElementById(`check-${ck}`)?.addEventListener('change', function() {
-        checkState.set(ck, this.checked);
-        const fila = document.getElementById(`fila-${ck}`);
-        if (fila) fila.classList.toggle('completado', this.checked);
+      const card = document.getElementById(`card-${ck}`);
+      const chk  = document.getElementById(`check-${ck}`);
+
+      const toggle = (checked) => {
+        checkState.set(ck, checked);
+        chk.checked = checked;
+        card.classList.toggle('completado', checked);
         actualizarProgreso();
+      };
+
+      card.addEventListener('click', (e) => {
+        if (e.target === chk) return; // deja que el checkbox lo maneje solo
+        toggle(!chk.checked);
       });
+      chk.addEventListener('change', () => toggle(chk.checked));
     });
   });
 
   actualizarProgreso();
 }
 
-function renderFilaTipo(tipo, matIdx, tipoIdx) {
+function renderTarjetaTipo(tipo, matIdx, tipoIdx) {
   const ck = `${matIdx}-${tipoIdx}`;
   const tc = tipo.tapacantos || {};
   const lados = [];
-  if (tc.arriba)     lados.push('Arriba');
-  if (tc.derecha)    lados.push('Derecha');
-  if (tc.abajo)      lados.push('Abajo');
-  if (tc.izquierda)  lados.push('Izquierda');
+  if (tc.arriba)    lados.push('Arriba');
+  if (tc.derecha)   lados.push('Derecha');
+  if (tc.abajo)     lados.push('Abajo');
+  if (tc.izquierda) lados.push('Izquierda');
 
   return `
-    <tr class="check-tipo-row" id="fila-${ck}">
-      <td class="text-center py-3">
-        <div class="pieza-esquema-wrap">
-          ${generarEsquemaSVG(tipo.ancho, tipo.largo, tc)}
-        </div>
-      </td>
-      <td>
-        <span class="nombre-pieza fw-semibold">${escH(tipo.nombre)}</span>
-      </td>
-      <td class="text-nowrap">
-        <span class="badge bg-light text-dark border">${tipo.ancho} × ${tipo.largo} mm</span>
-        ${tipo.rotada ? '<span class="badge bg-info text-dark ms-1">Rotada</span>' : ''}
-      </td>
-      <td class="text-center fw-bold">${tipo.cantidad}</td>
-      <td>
-        <div class="d-flex flex-wrap gap-1 justify-content-center">
-          ${lados.map(l => `<span class="badge bg-warning text-dark">${l}</span>`).join('')}
-        </div>
-      </td>
-      <td class="text-center">
-        <div class="form-check d-flex justify-content-center">
-          <input class="form-check-input" type="checkbox" id="check-${ck}" style="width:1.4rem;height:1.4rem;">
-        </div>
-      </td>
-    </tr>`;
+    <div class="pieza-card" id="card-${ck}">
+      <div class="check-overlay">
+        <input type="checkbox" id="check-${ck}" class="form-check-input">
+      </div>
+      ${generarEsquemaSVG(tipo.ancho, tipo.largo, tc)}
+      <div class="pieza-nombre">${escH(tipo.nombre)}</div>
+      <div class="pieza-medidas">${tipo.ancho} × ${tipo.largo} mm</div>
+      <div class="pieza-qty">× ${tipo.cantidad}</div>
+      <div class="lados-wrap">
+        ${lados.map(l => `<span class="badge bg-warning text-dark">${l}</span>`).join('')}
+      </div>
+    </div>`;
 }
 
 // ─── Esquema SVG de la pieza con tapacanto ───────────────────────────────────
 
 function generarEsquemaSVG(ancho, largo, tc) {
-  // Dibujar rectángulo proporcional máx 80×60
-  const maxW = 76, maxH = 56;
+  // SVG más grande dentro de la tarjeta: máx 130×110
+  const maxW = 130, maxH = 110;
   const scale = Math.min(maxW / ancho, maxH / largo);
   const w = Math.round(ancho * scale);
   const h = Math.round(largo * scale);
-  const pad = 12; // espacio para línea de tapacanto exterior
+  const pad = 10;
   const svgW = w + pad * 2;
   const svgH = h + pad * 2;
   const rx = pad, ry = pad;
 
   let lines = '';
-  const grosor = 5;
-
   if (tc.arriba)    lines += `<line class="tap-lado" x1="${rx}" y1="${ry}" x2="${rx+w}" y2="${ry}"/>`;
   if (tc.abajo)     lines += `<line class="tap-lado" x1="${rx}" y1="${ry+h}" x2="${rx+w}" y2="${ry+h}"/>`;
   if (tc.izquierda) lines += `<line class="tap-lado" x1="${rx}" y1="${ry}" x2="${rx}" y2="${ry+h}"/>`;
@@ -293,7 +321,7 @@ function generarEsquemaSVG(ancho, largo, tc) {
 
   return `<svg class="pieza-svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}">
     <rect x="${rx}" y="${ry}" width="${w}" height="${h}"
-          fill="#e3f2fd" stroke="#2196f3" stroke-width="1.5" rx="2"/>
+          fill="#e3f2fd" stroke="#2196f3" stroke-width="1.5" rx="3"/>
     ${lines}
   </svg>`;
 }

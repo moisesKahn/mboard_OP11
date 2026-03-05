@@ -34,6 +34,26 @@
                       <span>Cerrar Sesión</span>
                   </a>
               </li>
+            {% elif rol == 'enchapador' %}
+              <!-- Menú exclusivo para Enchapador: solo bandeja y historial -->
+              <li>
+                  <a href="{% url 'enchapador_home' %}">
+                      <iconify-icon icon="mdi:tape-measure" class="menu-icon"></iconify-icon>
+                      <span>Pendientes</span>
+                  </a>
+              </li>
+              <li>
+                  <a href="{% url 'enchapador_historial' %}">
+                      <iconify-icon icon="mdi:history" class="menu-icon"></iconify-icon>
+                      <span>Historial</span>
+                  </a>
+              </li>
+              <li class="sidebar-logout-item">
+                  <a href="{% url 'logout' %}">
+                      <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
+                      <span>Cerrar Sesión</span>
+                  </a>
+              </li>
             {% elif rol == 'autoservicio' %}
               <!-- Menú reducido para Autoservicio -->
               <li>
