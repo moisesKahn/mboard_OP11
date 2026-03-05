@@ -44,12 +44,8 @@ def enchapador_home(request: HttpRequest):
     if not (ctx.get('organization_is_general') or ctx.get('is_support')):
         qs = qs.filter(organizacion_id=ctx.get('organization_id'))
 
-    # Enchapador: solo ve proyectos enchapado_pendiente asignados a él
-    # (se reutiliza el campo operador para la asignación)
-    if ctx.get('role') == 'enchapador':
-        qs = qs.filter(estado='enchapado_pendiente', operador=request.user)
-    else:
-        qs = qs.filter(estado='enchapado_pendiente')
+    # Enchapador y admins ven todos los proyectos enchapado_pendiente de su org
+    qs = qs.filter(estado='enchapado_pendiente')
 
     if search:
         qs = qs.filter(
