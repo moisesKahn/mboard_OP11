@@ -232,6 +232,128 @@ def buscar_clientes_ajax(request):
     
     return JsonResponse({'clientes': clientes_data})
 
+
+@login_required
+def buscar_cliente_por_rut(request):
+    """Buscar cliente por RUT. Si no existe, lo crea automáticamente.
+    GET  ?rut=...           → buscar (retorna found/not_found)
+    POST {rut, nombre?}     → buscar o crear si no existe
+    """
+    import re as _re
+
+    def _normalize(rut: str) -> str:
+        """Normaliza RUT: quita puntos y espacios, pasa a mayúsculas."""
+        if not rut:
+            return ''
+        s = str(rut).upper().strip()
+        s = s.replace('.', '').replace(' ', '')
+        return s
+
+    ctx = get_auth_context(request)
+    org_id = ctx.get('organization_id')
+    org = None
+    if org_id:
+        try:
+            org = Organizacion.objects.get(id=org_id)
+        except Organizacion.DoesNotExist:
+            pass
+
+    if request.method == 'GET':
+        rut_raw = request.GET.get('rut', '').strip()
+        if not rut_raw:
+            return JsonResponse({'found': False, 'message': 'RUT vacío'})
+
+        rut_norm = _normalize(rut_raw)
+
+        clientes_qs = Cliente.objects.filter(activo=True)
+        if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+            clientes_qs = clientes_qs.filter(organizacion_id=org_id)
+
+        # Buscar por RUT normalizado (sin puntos) o tal como está en BD
+        from django.db.models import Q as _Q
+        matches = clientes_qs.filter(
+            _Q(rut__iexact=rut_raw) |
+            _Q(rut__iexact=rut_norm)
+        )[:5]
+
+        if matches.exists():
+            data = [
+                {
+                    'id': c.id,
+                    'nombre': c.nombre,
+                    'rut': c.rut,
+                    'organizacion': c.organizacion.nombre if c.organizacion else '',
+                    'email': c.email or '',
+                    'telefono': c.telefono or '',
+                }
+                for c in matches
+            ]
+            return JsonResponse({'found': True, 'clientes': data})
+        return JsonResponse({'found': False})
+
+    elif request.method == 'POST':
+        import json as _json
+        try:
+            body = _json.loads(request.body)
+        except Exception:
+            body = {}
+
+        rut_raw = (body.get('rut') or '').strip()
+        nombre = (body.get('nombre') or '').strip()
+
+        if not rut_raw:
+            return JsonResponse({'success': False, 'message': 'RUT requerido'}, status=400)
+
+        rut_norm = _normalize(rut_raw)
+
+        clientes_qs = Cliente.objects.filter(activo=True)
+        if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+            clientes_qs = clientes_qs.filter(organizacion_id=org_id)
+
+        from django.db.models import Q as _Q
+        existing = clientes_qs.filter(
+            _Q(rut__iexact=rut_raw) | _Q(rut__iexact=rut_norm)
+        ).first()
+
+        if existing:
+            return JsonResponse({
+                'success': True,
+                'created': False,
+                'cliente': {
+                    'id': existing.id,
+                    'nombre': existing.nombre,
+                    'rut': existing.rut,
+                    'organizacion': existing.organizacion.nombre if existing.organizacion else '',
+                    'email': existing.email or '',
+                    'telefono': existing.telefono or '',
+                }
+            })
+
+        # Crear cliente nuevo
+        nombre_final = nombre if nombre else f'Cliente {rut_raw}'
+        nuevo = Cliente.objects.create(
+            rut=rut_raw,
+            nombre=nombre_final,
+            organizacion=org,
+            created_by=request.user,
+            activo=True,
+        )
+        return JsonResponse({
+            'success': True,
+            'created': True,
+            'cliente': {
+                'id': nuevo.id,
+                'nombre': nuevo.nombre,
+                'rut': nuevo.rut,
+                'organizacion': nuevo.organizacion.nombre if nuevo.organizacion else '',
+                'email': '',
+                'telefono': '',
+            }
+        })
+
+    return JsonResponse({'success': False, 'message': 'Método no permitido'}, status=405)
+
+
 @login_required
 def proyectos_list(request):
     """Lista de proyectos (página principal de proyectos)"""

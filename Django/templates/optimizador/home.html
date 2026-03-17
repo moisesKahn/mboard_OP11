@@ -69,21 +69,27 @@
 <div class="card mb-24">
     <div class="card-body">
         <div class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label">Cliente</label>
+            <div class="col-md-2">
+                <label class="form-label">RUT <small class="text-muted fw-normal">(buscar o crear cliente)</small></label>
                 <div class="position-relative">
-                          <input type="text" class="form-control" 
-                              id="clienteInput"
-                              placeholder="Escribe al menos 2 letras..."
-                              autocomplete="off">
+                    <input type="text" class="form-control"
+                        id="rutCliente"
+                        placeholder="12.345.678-9"
+                        maxlength="13"
+                        autocomplete="off">
                     <div id="clientesDropdown" class="dropdown-clientes" style="display:none;" aria-live="polite"></div>
                 </div>
             </div>
-            <div class="col-md-2">
-                  <label class="form-label">RUT</label>
-                  <input type="text" class="form-control" 
-                      id="rutCliente" placeholder="12.345.678-9" maxlength="12" 
-                      oninput="formatearRUT(this)">
+            <div class="col-md-4">
+                <label class="form-label">Nombre del cliente</label>
+                <div class="position-relative">
+                    <input type="text" class="form-control"
+                        id="clienteInput"
+                        placeholder="Se completará al seleccionar cliente..."
+                        autocomplete="off"
+                        readonly>
+                    <span id="clienteNuevoBadge" class="badge bg-warning text-dark position-absolute top-50 end-0 translate-middle-y me-2" style="display:none;font-size:0.7rem;">NUEVO</span>
+                </div>
             </div>
             <div class="col-md-2">
                 <label class="form-label">ID del proyecto</label>
@@ -1111,7 +1117,9 @@
     function limpiarProyectoCompleto(){
         try{
             // limpiar datos de cabecera
-            ['clienteInput','rutCliente','folioProyecto','nombreProyecto'].forEach(id=>{ const el=document.getElementById(id); if (el) el.value=''; });
+            ['rutCliente','folioProyecto','nombreProyecto'].forEach(id=>{ const el=document.getElementById(id); if (el) el.value=''; });
+            limpiarCliente();
+            const badge = document.getElementById('clienteNuevoBadge'); if(badge) badge.style.display='none';
             const res = document.getElementById('resultadosOptimizacion'); if (res){ res.style.display='none'; res.removeAttribute('data-proyecto-id'); res.innerHTML=''; }
             const resumen = document.getElementById('resumenProyecto'); if (resumen){ resumen.style.display='none'; resumen.removeAttribute('data-proyecto-id'); }
         }catch(_e){}
@@ -1274,80 +1282,161 @@
 
     // (Legacy manejarSeleccionCliente eliminado - reemplazado por dropdown personalizado)
 
-    // Nuevo dropdown de clientes con estado de carga
-    let timeoutId = null;
-    function buscarClientesDB(query) {
-        const queryTrimmed = query.trim();
+    // ── Búsqueda de cliente por RUT ──────────────────────────────────────────
+    let rutSearchTimeout = null;
+
+    /** Normaliza RUT: quita puntos y espacios, mayúsculas */
+    function _normRut(r){ return String(r||'').toUpperCase().trim().replace(/\./g,'').replace(/ /g,''); }
+
+    /** Selecciona un cliente del dropdown y actualiza el estado global */
+    function seleccionarCliente(c){
+        clienteSeleccionado = { id: c.id, nombre: c.nombre, rut: c.rut,
+            organizacion: c.organizacion||'', email: c.email||'', telefono: c.telefono||'' };
+        const rutIn = document.getElementById('rutCliente');
+        const nomIn = document.getElementById('clienteInput');
+        const badge = document.getElementById('clienteNuevoBadge');
+        if(rutIn) rutIn.value = c.rut || '';
+        if(nomIn){ nomIn.value = c.nombre || ''; nomIn.readOnly = true; }
+        if(badge) badge.style.display = 'none';
         const dd = document.getElementById('clientesDropdown');
-        if (!dd) return;
-        if (timeoutId) clearTimeout(timeoutId);
-        if (queryTrimmed.length < 2) {
-            dd.innerHTML = '<div class="estado">Ingresa al menos 2 letras</div>';
-            dd.style.display = 'block';
-            clienteSeleccionado = null;
+        if(dd) dd.style.display = 'none';
+        generarNombreProyecto();
+    }
+
+    /** Limpia la selección actual de cliente */
+    function limpiarCliente(){
+        clienteSeleccionado = null;
+        const nomIn = document.getElementById('clienteInput');
+        const badge = document.getElementById('clienteNuevoBadge');
+        if(nomIn){ nomIn.value = ''; nomIn.readOnly = false; }
+        if(badge) badge.style.display = 'none';
+    }
+
+    /** Busca clientes por RUT en el servidor y actualiza el dropdown */
+    function buscarPorRut(rutRaw){
+        const rutTrimmed = rutRaw.trim();
+        const dd = document.getElementById('clientesDropdown');
+        if(!dd) return;
+        if(rutSearchTimeout) clearTimeout(rutSearchTimeout);
+
+        // Limpiar si el campo está muy corto
+        if(_normRut(rutTrimmed).length < 3){
+            dd.style.display = 'none';
+            limpiarCliente();
             return;
         }
-        timeoutId = setTimeout(()=>{
-            dd.innerHTML = '<div class="estado">Consultando clientes…</div>';
-            dd.style.display = 'block';
-            fetch(`{% url 'buscar_clientes_ajax' %}?q=${encodeURIComponent(queryTrimmed)}`)
+
+        dd.innerHTML = '<div class="estado"><i class="fa fa-spinner fa-spin me-1"></i>Buscando cliente…</div>';
+        dd.style.display = 'block';
+
+        rutSearchTimeout = setTimeout(()=>{
+            fetch(`{% url 'buscar_cliente_por_rut' %}?rut=${encodeURIComponent(rutTrimmed)}`)
                 .then(r=>r.json())
                 .then(data=>{
-                    const lista = Array.isArray(data.clientes) ? data.clientes : [];
-                    renderDropdownClientes(lista);
+                    if(data.found && data.clientes && data.clientes.length){
+                        // Mostrar lista de coincidencias
+                        dd.innerHTML = data.clientes.map(c=>`
+                            <button type="button" class="item"
+                                data-id="${c.id}" data-rut="${c.rut||''}"
+                                data-nombre="${c.nombre||''}"
+                                data-organizacion="${c.organizacion||''}"
+                                data-email="${c.email||''}"
+                                data-telefono="${c.telefono||''}">
+                                <span class="fw-semibold">${c.nombre||'Cliente'}</span>
+                                <span class="text-muted ms-1">${c.rut||''}</span>
+                            </button>`).join('');
+                        dd.style.display = 'block';
+                    } else {
+                        // No encontrado → ofrecer creación automática
+                        limpiarCliente();
+                        dd.innerHTML = `
+                            <div class="estado text-warning">
+                                <i class="fa fa-user-plus me-1"></i>
+                                RUT no encontrado.
+                                <button type="button" class="btn btn-sm btn-warning mt-1 w-100"
+                                    id="btnCrearCliente">
+                                    Crear cliente con RUT <strong>${rutTrimmed}</strong>
+                                </button>
+                            </div>`;
+                        dd.style.display = 'block';
+                        document.getElementById('btnCrearCliente').addEventListener('click', ()=>{
+                            crearClientePorRut(rutTrimmed);
+                        });
+                    }
                 })
                 .catch(err=>{
-                    console.error('Error al buscar clientes:', err);
-                    dd.innerHTML = '<div class="estado">Error consultando clientes</div>';
+                    console.error('Error al buscar cliente por RUT:', err);
+                    dd.innerHTML = '<div class="estado text-danger">Error al consultar clientes</div>';
                 });
-        },250);
+        }, 300);
     }
-    function renderDropdownClientes(lista){
+
+    /** Crea un cliente nuevo con el RUT dado y lo selecciona */
+    function crearClientePorRut(rut){
         const dd = document.getElementById('clientesDropdown');
-        if (!dd) return;
-        if (!lista.length){
-            dd.innerHTML = '<div class="estado">Sin coincidencias. <span class="nuevo">[Nuevo cliente]</span></div>';
-            dd.style.display = 'block';
-            return;
-        }
-        dd.innerHTML = lista.map(c=>`<button type="button" class="item" data-id="${c.id}" data-rut="${c.rut||''}" data-nombre="${c.nombre||''}" data-organizacion="${c.organizacion||''}" data-email="${c.email||''}" data-telefono="${c.telefono||''}">${c.nombre || 'Cliente'} <span class='text-muted'>${c.rut||''}</span></button>`).join('');
-        dd.style.display = 'block';
+        if(dd){ dd.innerHTML = '<div class="estado"><i class="fa fa-spinner fa-spin me-1"></i>Creando cliente…</div>'; dd.style.display = 'block'; }
+        fetch(`{% url 'buscar_cliente_por_rut' %}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+            body: JSON.stringify({rut: rut})
+        })
+        .then(r=>r.json())
+        .then(data=>{
+            if(data.success && data.cliente){
+                seleccionarCliente(data.cliente);
+                const badge = document.getElementById('clienteNuevoBadge');
+                if(badge && data.created) badge.style.display = 'inline-block';
+                if(dd) dd.style.display = 'none';
+            } else {
+                if(dd) dd.innerHTML = `<div class="estado text-danger">${data.message||'Error al crear cliente'}</div>`;
+            }
+        })
+        .catch(err=>{
+            console.error('Error al crear cliente:', err);
+            if(dd) dd.innerHTML = '<div class="estado text-danger">Error al crear cliente</div>';
+        });
     }
-    (function initClienteDropdown(){
+
+    (function initClienteRutDropdown(){
         document.addEventListener('DOMContentLoaded', ()=>{
-            const inp = document.getElementById('clienteInput');
-            if(!inp) return;
+            const rutIn = document.getElementById('rutCliente');
+            const nomIn = document.getElementById('clienteInput');
             const dd = document.getElementById('clientesDropdown');
-            inp.addEventListener('focus', ()=>{
-                dd.innerHTML = '<div class="estado">Ingresa al menos 2 letras</div>';
-                dd.style.display = 'block';
+            if(!rutIn || !dd) return;
+
+            // Formatear RUT mientras se escribe y lanzar búsqueda
+            rutIn.addEventListener('input', e=>{
+                formatearRUT(rutIn);
+                limpiarCliente();
+                buscarPorRut(rutIn.value);
             });
-            inp.addEventListener('input', e=>{ 
-                buscarClientesDB(e.target.value); 
-                generarNombreProyecto(); 
-                // Si se está modificando texto luego de seleccionar cliente, re-habilitar RUT
-                const rutIn = document.getElementById('rutCliente');
-                if (rutIn && (!clienteSeleccionado || clienteSeleccionado.nombre !== e.target.value.trim())) {
-                    rutIn.disabled = false;
-                }
-                if (!clienteSeleccionado) {
-                    const rutIn2 = document.getElementById('rutCliente');
-                    if (rutIn2) rutIn2.disabled = false;
-                }
+
+            rutIn.addEventListener('focus', ()=>{
+                if(rutIn.value.trim().length >= 3) buscarPorRut(rutIn.value);
             });
+
+            // Permitir editar nombre del cliente (quitar readonly al hacer clic)
+            if(nomIn){
+                nomIn.addEventListener('dblclick', ()=>{ nomIn.readOnly = false; nomIn.select(); });
+                nomIn.addEventListener('input', ()=>{ generarNombreProyecto(); });
+            }
+
+            // Delegación de clicks en el dropdown
             document.addEventListener('click', e=>{
                 if(e.target.closest('#clientesDropdown button.item')){
                     const btn = e.target.closest('button.item');
-                    inp.value = btn.dataset.nombre || btn.textContent.trim();
-                    const rutIn = document.getElementById('rutCliente');
-                    if (rutIn){ rutIn.value = btn.dataset.rut || ''; rutIn.disabled = true; }
-                    clienteSeleccionado = { id: btn.dataset.id, nombre: inp.value, rut: btn.dataset.rut||'', organizacion: btn.dataset.organizacion||'', email: btn.dataset.email||'', telefono: btn.dataset.telefono||'' };
-                    dd.style.display = 'none';
-                    generarNombreProyecto();
+                    seleccionarCliente({
+                        id: btn.dataset.id,
+                        nombre: btn.dataset.nombre || btn.textContent.trim(),
+                        rut: btn.dataset.rut||'',
+                        organizacion: btn.dataset.organizacion||'',
+                        email: btn.dataset.email||'',
+                        telefono: btn.dataset.telefono||''
+                    });
                     return;
                 }
-                if(!e.target.closest('#clienteInput') && !e.target.closest('#clientesDropdown')){
-                    dd.style.display = 'none';
+                if(!e.target.closest('#rutCliente') && !e.target.closest('#clientesDropdown')){
+                    if(dd) dd.style.display = 'none';
                 }
             });
         });
@@ -1888,57 +1977,33 @@
         try {
             // 0) Cliente y proyecto de ejemplo
             try {
-                const clienteInput = document.getElementById('clienteInput');
                 const rutInput = document.getElementById('rutCliente');
                 const nombreProyecto = document.getElementById('nombreProyecto');
-                const exampleName = 'Cliente Ejemplo S.A.';
                 const exampleRut = '76.543.210-9';
-                if (clienteInput) clienteInput.value = exampleName;
+                if (rutInput) rutInput.value = exampleRut;
                 if (nombreProyecto && (!nombreProyecto.value || nombreProyecto.value === nombreProyecto.placeholder)) {
                     nombreProyecto.value = 'Proyecto de Ejemplo Doble Material';
                 }
-                // Intentar buscar cliente existente y seleccionarlo en lugar de solo escribir el nombre
+                // Buscar o crear cliente por RUT de ejemplo
                 try{
-                    fetch(`{% url 'buscar_clientes_ajax' %}?q=${encodeURIComponent(exampleName)}`)
+                    fetch(`{% url 'buscar_cliente_por_rut' %}?rut=${encodeURIComponent(exampleRut)}`)
                         .then(r=>r.json()).then(data=>{
-                            const lista = Array.isArray(data.clientes) ? data.clientes : [];
-                            if (lista.length){
-                                // Buscar coincidencia exacta por nombre o por RUT
-                                let found = lista.find(c => (c.nombre||'').toLowerCase() === exampleName.toLowerCase() || (c.rut||'') === exampleRut);
-                                if (!found) found = lista[0];
-                                if (found){
-                                    // Actualizar inputs y estado seleccionado
-                                    if (clienteInput) clienteInput.value = found.nombre || exampleName;
-                                    if (rutInput){ rutInput.value = found.rut || exampleRut; rutInput.disabled = true; }
-                                    clienteSeleccionado = {
-                                        id: found.id,
-                                        nombre: found.nombre,
-                                        rut: found.rut,
-                                        organizacion: found.organizacion,
-                                        email: found.email,
-                                        telefono: found.telefono
-                                    };
-                                    // Refrescar datalist con este cliente para coherencia
-                                    renderDropdownClientes(lista);
-                                }
+                            if (data.found && data.clientes && data.clientes.length){
+                                seleccionarCliente(data.clientes[0]);
                             } else {
-                                // No encontrado: dejar RUT editable con valor de ejemplo
-                                if (rutInput){ rutInput.disabled = false; rutInput.value = exampleRut; }
-                                clienteSeleccionado = null;
+                                // Crear cliente de ejemplo
+                                fetch(`{% url 'buscar_cliente_por_rut' %}`, {
+                                    method: 'POST',
+                                    headers:{'Content-Type':'application/json','X-CSRFToken': getCookie('csrftoken')},
+                                    body: JSON.stringify({rut: exampleRut, nombre: 'Cliente Ejemplo S.A.'})
+                                }).then(r2=>r2.json()).then(d2=>{
+                                    if(d2.success && d2.cliente) seleccionarCliente(d2.cliente);
+                                }).catch(()=>{});
                             }
-                            // Refrescar resumen superior
-                            const rc = document.getElementById('resCliente'); if (rc) rc.textContent = clienteInput ? clienteInput.value : '';
-                            const rr = document.getElementById('resClienteRut'); if (rr) rr.textContent = rutInput ? ` (${rutInput.value})` : '';
-                        }).catch(err=>{
-                            console.warn('Error buscando cliente ejemplo:', err);
-                            if (rutInput){ rutInput.disabled = false; rutInput.value = exampleRut; }
-                            clienteSeleccionado = null;
-                        });
-                }catch(fe){
-                    // Fallback si el fetch falla
-                    if (rutInput){ rutInput.disabled = false; rutInput.value = exampleRut; }
-                    clienteSeleccionado = null;
-                }
+                            const rc = document.getElementById('resCliente'); if (rc) rc.textContent = document.getElementById('clienteInput') ? document.getElementById('clienteInput').value : '';
+                            const rr = document.getElementById('resClienteRut'); if (rr && rutInput) rr.textContent = ` (${rutInput.value})`;
+                        }).catch(err=>{ console.warn('Error buscando cliente ejemplo:', err); });
+                }catch(fe){ console.warn('Fetch cliente ejemplo falló:', fe); }
             } catch(_e) { console.warn('No se pudo precargar datos de cliente ejemplo:', _e); }
 
             // 1) Asegurar 2 materiales

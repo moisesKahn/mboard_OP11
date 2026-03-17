@@ -72,6 +72,7 @@ urlpatterns = [
     path('clientes/editar/<int:cliente_id>/', core_views.edit_cliente, name='clientes_editar'),
     path('clientes/eliminar/<int:cliente_id>/', core_views.delete_cliente, name='clientes_eliminar'),
     path('api/clientes/buscar/', core_views.buscar_clientes_ajax, name='buscar_clientes_ajax'),
+    path('api/clientes/buscar-rut/', core_views.buscar_cliente_por_rut, name='buscar_cliente_por_rut'),
 
 # organizaciones routes
     path('organizaciones/', core_views.organizaciones_list, name='organizaciones_lista'),
