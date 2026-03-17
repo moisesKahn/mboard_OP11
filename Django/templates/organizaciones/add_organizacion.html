@@ -33,22 +33,25 @@
                 <form method="POST">
                     {% csrf_token %}
                     <div class="row gy-3">
-                        <!-- Código -->
-                        <div class="col-sm-6">
-                            <label for="codigo" class="form-label fw-semibold text-primary-light text-sm mb-8">
-                                Código <span class="text-danger-600">*</span>
-                            </label>
-                            <input type="text" class="form-control radius-8" id="codigo" name="codigo" 
-                                   placeholder="Ej: SOD001" required>
-                        </div>
-
                         <!-- Nombre -->
-                        <div class="col-sm-6">
+                        <div class="col-sm-8">
                             <label for="nombre" class="form-label fw-semibold text-primary-light text-sm mb-8">
                                 Nombre <span class="text-danger-600">*</span>
                             </label>
-                            <input type="text" class="form-control radius-8" id="nombre" name="nombre" 
+                            <input type="text" class="form-control radius-8" id="nombre" name="nombre"
                                    placeholder="Nombre de la organización" required>
+                        </div>
+
+                        <!-- Código (auto-generado) -->
+                        <div class="col-sm-4">
+                            <label for="codigo" class="form-label fw-semibold text-primary-light text-sm mb-8">
+                                Código
+                                <span class="badge bg-info-100 text-info-600 ms-1 text-xs">auto</span>
+                            </label>
+                            <input type="text" class="form-control radius-8 bg-neutral-100" id="codigo" name="codigo"
+                                   placeholder="—" maxlength="20" readonly
+                                   style="text-transform:uppercase; cursor:not-allowed; color:#6c757d;">
+                            <small class="text-secondary-light">Se genera al escribir el nombre.</small>
                         </div>
 
                         <!-- Email -->
@@ -146,4 +149,22 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const nombreInput = document.getElementById('nombre');
+    const codigoInput = document.getElementById('codigo');
+
+    function buildCodigo(nombre) {
+        const palabras = nombre.match(/[A-Za-zÁÉÍÓÚáéíóúÑñ]+/g) || [];
+        const prefijo = palabras.slice(0, 4).map(p => p[0].toUpperCase()).join('');
+        return prefijo || 'ORG';
+    }
+
+    nombreInput.addEventListener('input', function () {
+        const prefijo = buildCodigo(this.value.trim());
+        codigoInput.value = this.value.trim() ? prefijo + '001' : '';
+    });
+})();
+</script>
 {% endblock content %}

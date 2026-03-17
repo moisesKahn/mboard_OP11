@@ -236,7 +236,12 @@ class UsuarioForm(forms.ModelForm):
 
 class UsuarioPerfilForm(forms.ModelForm):
     """Formulario para el perfil extendido del usuario"""
-    
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from core.models import Organizacion
+        self.fields['organizacion'].queryset = Organizacion.objects.filter(activo=True).order_by('nombre')
+
     class Meta:
         model = UsuarioPerfilOptimizador
         fields = ['rol', 'telefono', 'organizacion', 'activo']

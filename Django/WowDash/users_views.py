@@ -164,10 +164,8 @@ def usersList(request):
     # Filtros de búsqueda y paginación
     search = request.GET.get('search', '')
     rol_filter = request.GET.get('rol', '')
-    try:
-        page_size = max(1, min(100, int(request.GET.get('page_size', '10'))))
-    except ValueError:
-        page_size = 10
+    org_filter = request.GET.get('org', '')
+    page_size = 20
     try:
         page = max(1, int(request.GET.get('page', '1')))
     except ValueError:
@@ -198,6 +196,9 @@ def usersList(request):
     if rol_filter:
         usuarios_qs = usuarios_qs.filter(usuarioperfiloptimizador__rol=rol_filter)
 
+    if org_filter:
+        usuarios_qs = usuarios_qs.filter(usuarioperfiloptimizador__organizacion_id=org_filter)
+
     # Orden por fecha de creación descendente como default
     usuarios_qs = usuarios_qs.order_by('-date_joined')
 
@@ -208,19 +209,22 @@ def usersList(request):
     usuarios = usuarios_qs[start:end]
     total_pages = (total + page_size - 1) // page_size
     
-    # Obtener roles únicos
+    # Obtener roles y organizaciones para los filtros
     roles = UsuarioPerfilOptimizador.ROLES
-    
+    from core.models import Organizacion
+    organizaciones = Organizacion.objects.filter(activo=True).order_by('nombre')
+
     context = {
         "title": "Lista de Usuarios",
         "subTitle": "Usuarios",
         "usuarios": usuarios,
         "roles": roles,
+        "organizaciones": organizaciones,
         "search": search,
         "rol_filter": rol_filter,
+        "org_filter": org_filter,
         "page": page,
         "page_size": page_size,
-        "page_sizes": [10, 20, 30, 50, 100],
         "total": total,
         "total_pages": total_pages,
     }

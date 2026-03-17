@@ -593,10 +593,14 @@ def organizaciones_list(request):
 def add_organizacion(request):
     """Vista para agregar nueva organización"""
     if request.method == 'POST':
-        # Crear datos del formulario manualmente
+        nombre = request.POST.get('nombre', '').strip()
+        codigo = request.POST.get('codigo', '').strip()
+        if not codigo and nombre:
+            codigo = Organizacion.generar_codigo(nombre)
+
         data = {
-            'codigo': request.POST.get('codigo'),
-            'nombre': request.POST.get('nombre'),
+            'codigo': codigo,
+            'nombre': nombre,
             'direccion': request.POST.get('direccion'),
             'telefono': request.POST.get('telefono'),
             'email': request.POST.get('email'),
@@ -605,7 +609,7 @@ def add_organizacion(request):
         
         try:
             organizacion = Organizacion.objects.create(**data)
-            messages.success(request, f'Organización {organizacion.nombre} creada exitosamente.')
+            messages.success(request, f'Organización {organizacion.nombre} creada exitosamente (código: {organizacion.codigo}).')
             return redirect('organizaciones_lista')
         except Exception as e:
             messages.error(request, f'Error al crear organización: {str(e)}')

@@ -22,6 +22,26 @@ class Organizacion(models.Model):
     def __str__(self):
         return f"{self.nombre} ({self.codigo})"
 
+    @staticmethod
+    def generar_codigo(nombre):
+        """
+        Genera un código único a partir del nombre de la organización.
+        Toma las iniciales de cada palabra (máx 4) en mayúsculas y añade
+        un sufijo numérico secuencial de 3 dígitos hasta encontrar uno libre.
+        Ejemplo: "Muebles del Sur S.A." → "MDS001", si existe → "MDS002"
+        """
+        import re
+        palabras = re.findall(r'[A-Za-zÁÉÍÓÚáéíóúÑñ]+', nombre)
+        prefijo = ''.join(p[0].upper() for p in palabras[:4])
+        if not prefijo:
+            prefijo = 'ORG'
+        n = 1
+        while True:
+            candidato = f"{prefijo}{n:03d}"
+            if not Organizacion.objects.filter(codigo=candidato).exists():
+                return candidato
+            n += 1
+
 class Cliente(models.Model):
     """Modelo para clientes del sistema"""
     # RUT único por organización (no global): se aplica constraint en Meta

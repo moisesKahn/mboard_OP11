@@ -6,16 +6,46 @@
 <div class="card h-100 p-0 radius-12">
     <div class="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center flex-wrap gap-3 justify-content-between">
         <div class="d-flex align-items-center flex-wrap gap-3">
-            <form class="d-flex align-items-center gap-2" method="get">
-                <label class="mb-0 text-sm text-secondary-light">Mostrar</label>
-                <select name="page_size" class="form-select form-select-sm w-auto ps-12 py-6 radius-12 h-40-px" onchange="this.form.submit()">
-                    {% for n in page_sizes %}
-                    <option value="{{ n }}" {% if page_size == n %}selected{% endif %}>{{ n }}</option>
+            <form class="d-flex align-items-center flex-wrap gap-2" method="get" id="filtros-form">
+                <input type="hidden" name="page" value="1" />
+
+                <!-- Buscar -->
+                <div class="input-group" style="width:230px; height:38px;">
+                    <span class="input-group-text bg-base px-10" style="height:38px;">
+                        <iconify-icon icon="ion:search-outline" style="font-size:16px; line-height:1;"></iconify-icon>
+                    </span>
+                    <input type="text" class="form-control border-start-0 ps-4" name="search"
+                           placeholder="Buscar usuario..." value="{{ search }}"
+                           style="height:38px; font-size:13px;">
+                </div>
+
+                <!-- Filtro Organización -->
+                <select name="org" class="form-select radius-8" style="width:200px; height:38px; font-size:13px;"
+                        onchange="this.form.submit()">
+                    <option value="">Todas las organizaciones</option>
+                    {% for org in organizaciones %}
+                    <option value="{{ org.id }}" {% if org_filter == org.id|stringformat:'s' %}selected{% endif %}>
+                        {{ org.nombre }}
+                    </option>
                     {% endfor %}
                 </select>
-                <input type="hidden" name="page" value="1" />
-                <input type="text" class="bg-base h-40-px w-auto" name="search" placeholder="Buscar" value="{{ search }}">
-                <iconify-icon icon="ion:search-outline" class="icon"></iconify-icon>
+
+                <!-- Filtro Rol -->
+                <select name="rol" class="form-select radius-8" style="width:190px; height:38px; font-size:13px;"
+                        onchange="this.form.submit()">
+                    <option value="">Todos los roles</option>
+                    {% for rol_val, rol_label in roles %}
+                    <option value="{{ rol_val }}" {% if rol_filter == rol_val %}selected{% endif %}>
+                        {{ rol_label }}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                <!-- Botón buscar -->
+                <button type="submit" class="btn btn-outline-primary px-16 radius-8" style="height:38px; font-size:13px;">Filtrar</button>
+                {% if search or rol_filter or org_filter %}
+                <a href="?" class="btn btn-outline-secondary px-16 radius-8" style="height:38px; font-size:13px; line-height:1.6;">Limpiar</a>
+                {% endif %}
             </form>
         </div>
         <a href="{% url 'addUser' %}" class="btn btn-primary text-sm btn-sm px-12 py-12 radius-8 d-flex align-items-center gap-2">
@@ -118,13 +148,13 @@
             <ul class="pagination d-flex flex-wrap align-items-center gap-2 justify-content-center">
                 {% with prev=page|add:-1 next=page|add:1 %}
                 <li class="page-item {% if page <= 1 %}disabled{% endif %}">
-                    <a class="page-link bg-neutral-200 text-secondary-light fw-semibold radius-8 border-0 d-flex align-items-center justify-content-center h-32-px w-32-px text-md" href="?page={{ prev|default:1 }}&page_size={{ page_size }}&search={{ search }}&rol={{ rol_filter }}" aria-label="Anterior">
+                    <a class="page-link bg-neutral-200 text-secondary-light fw-semibold radius-8 border-0 d-flex align-items-center justify-content-center h-32-px w-32-px text-md" href="?page={{ prev|default:1 }}&search={{ search }}&rol={{ rol_filter }}&org={{ org_filter }}" aria-label="Anterior">
                         <iconify-icon icon="ep:d-arrow-left"></iconify-icon>
                     </a>
                 </li>
                 <li class="page-item active"><a class="page-link bg-primary-600 text-white border-0" href="#" aria-current="page">{{ page }}</a></li>
                 <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
-                    <a class="page-link bg-neutral-200 text-secondary-light fw-semibold radius-8 border-0 d-flex align-items-center justify-content-center h-32-px w-32-px text-md" href="?page={{ next|default:total_pages }}&page_size={{ page_size }}&search={{ search }}&rol={{ rol_filter }}" aria-label="Siguiente">
+                    <a class="page-link bg-neutral-200 text-secondary-light fw-semibold radius-8 border-0 d-flex align-items-center justify-content-center h-32-px w-32-px text-md" href="?page={{ next|default:total_pages }}&search={{ search }}&rol={{ rol_filter }}&org={{ org_filter }}" aria-label="Siguiente">
                         <iconify-icon icon="ep:d-arrow-right"></iconify-icon>
                     </a>
                 </li>
