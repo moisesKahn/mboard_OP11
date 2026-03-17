@@ -1,0 +1,55 @@
+{% extends '../layout/layout2.html' %}
+
+{% block content %}
+<section class="auth bg-base d-flex flex-wrap">
+    <div class="auth-left d-lg-block d-none">
+        <div class="position-relative h-100 w-100">
+            <div id="particles-js"></div>
+            <div class="word-overlay">
+                <span class="big-word" id="big-word"></span>
+            </div>
+        </div>
+    </div>
+    <div class="auth-right py-32 px-24 d-flex flex-column justify-content-center">
+        <div class="max-w-464-px mx-auto w-100 text-center">
+
+            <!-- Ícono de bloqueo -->
+            <div class="mb-32">
+                <div class="d-flex justify-content-center mb-24">
+                    <div class="w-96-px h-96-px radius-circle bg-danger-100 d-flex justify-content-center align-items-center">
+                        <iconify-icon icon="solar:lock-keyhole-bold" class="text-danger-600" style="font-size: 3rem;"></iconify-icon>
+                    </div>
+                </div>
+                <h4 class="mb-12 text-danger-600">Cuenta Desactivada</h4>
+                <p class="mb-8 text-secondary-light text-lg fw-semibold">
+                    {{ org_nombre|default:"Tu organización" }}
+                </p>
+                <p class="mb-32 text-secondary-light">
+                    El acceso a esta cuenta ha sido <strong>desactivado temporalmente</strong>
+                    por el administrador del sistema.
+                </p>
+            </div>
+
+            <!-- Caja de contacto -->
+            <div class="card border border-warning-200 bg-warning-50 radius-12 p-24 mb-32 text-start">
+                <div class="d-flex align-items-start gap-12">
+                    <iconify-icon icon="solar:info-circle-bold" class="text-warning-600 flex-shrink-0" style="font-size:1.5rem; margin-top:2px;"></iconify-icon>
+                    <div>
+                        <h6 class="text-warning-700 mb-8">¿Qué puedes hacer?</h6>
+                        <ul class="text-secondary-light text-sm mb-0 ps-16">
+                            <li class="mb-4">Contacta al <strong>administrador del sistema</strong> para reactivar tu cuenta.</li>
+                            <li class="mb-4">Verifica que tu organización esté activa en el portal.</li>
+                            <li>Si crees que esto es un error, comunícate con soporte técnico.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <a href="{% url 'signin' %}" class="btn btn-outline-primary w-100 h-56-px radius-12 fw-medium">
+                <iconify-icon icon="solar:arrow-left-linear" class="me-2"></iconify-icon>
+                Volver al Inicio de Sesión
+            </a>
+        </div>
+    </div>
+</section>
+{% endblock %}

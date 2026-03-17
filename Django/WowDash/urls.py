@@ -79,6 +79,7 @@ urlpatterns = [
     path('organizaciones/<int:organizacion_id>/', core_views.organizacion_detalle, name='organizaciones_detalle'),
     path('organizaciones/editar/<int:organizacion_id>/', core_views.edit_organizacion, name='organizaciones_editar'),
     path('organizaciones/eliminar/<int:organizacion_id>/', core_views.delete_organizacion, name='organizaciones_eliminar'),
+    path('organizaciones/toggle/<int:organizacion_id>/', core_views.toggle_organizacion, name='organizaciones_toggle'),
 
 # materiales routes
     path('materiales/tableros/', material_views.tableros_list, name='tableros'),
@@ -224,6 +225,7 @@ urlpatterns = [
 
 # authentication routes
     path('authentication/signin/', authentication_views.signin, name='signin'),
+    path('authentication/cuenta-desactivada/', authentication_views.cuenta_desactivada, name='cuenta_desactivada'),
     path('authentication/password-change/', authentication_views.password_change_view, name='password_change'),
     path('authentication/signup/', authentication_views.signup, name='signup'),
     path('authentication/forgot-password/', authentication_views.forgotPassword, name='forgotPassword'),

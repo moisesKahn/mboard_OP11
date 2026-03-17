@@ -52,17 +52,18 @@
                         <th scope="col">Nombre</th>
                         <th scope="col">Teléfono</th>
                         <th scope="col">Email</th>
+                        <th scope="col" class="text-center">Estado</th>
                         <th scope="col" class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for organizacion in organizaciones %}
-                    <tr>
+                    <tr id="org-row-{{ organizacion.id }}" {% if not organizacion.activo %}class="table-secondary opacity-75"{% endif %}>
                         <td>
                             <span class="text-md mb-0 fw-normal text-secondary-light">{{ organizacion.codigo }}</span>
                         </td>
                         <td>
-                            <span class="text-md mb-0 fw-normal text-secondary-light">{{ organizacion.nombre }}</span>
+                            <span class="text-md mb-0 fw-normal {% if not organizacion.activo %}text-neutral-400{% else %}text-secondary-light{% endif %}">{{ organizacion.nombre }}</span>
                         </td>
                         <td>
                             <span class="text-md mb-0 fw-normal text-secondary-light">{{ organizacion.telefono|default:"-" }}</span>
@@ -71,17 +72,30 @@
                             <span class="text-md mb-0 fw-normal text-secondary-light">{{ organizacion.email|default:"-" }}</span>
                         </td>
                         <td class="text-center">
+                            <span id="org-badge-{{ organizacion.id }}" class="px-12 py-2 radius-4 fw-medium text-xs {% if organizacion.activo %}bg-success-focus text-success-600 border border-success-main{% else %}bg-warning-focus text-warning-600 border border-warning-main{% endif %}">
+                                {% if organizacion.activo %}Activa{% else %}Inactiva{% endif %}
+                            </span>
+                        </td>
+                        <td class="text-center">
                             <div class="d-flex align-items-center gap-10 justify-content-center">
                                 <a href="{% url 'organizaciones_detalle' organizacion.id %}" class="bg-primary-focus text-primary-600 bg-hover-primary-200 fw-medium w-40-px h-40-px d-flex justify-content-center align-items-center rounded-circle" title="Ver perfil">
                                     <iconify-icon icon="lucide:eye" class="menu-icon"></iconify-icon>
                                 </a>
                                 <a href="{% url 'organizaciones_editar' organizacion.id %}" 
-                                   class="bg-success-focus text-success-600 bg-hover-success-200 fw-medium w-40-px h-40-px d-flex justify-content-center align-items-center rounded-circle">
+                                   class="bg-neutral-200 text-neutral-600 bg-hover-neutral-300 fw-medium w-40-px h-40-px d-flex justify-content-center align-items-center rounded-circle" title="Editar">
                                     <iconify-icon icon="lucide:edit" class="menu-icon"></iconify-icon>
                                 </a>
-                <button type="button" class="bg-danger-focus text-danger-600 bg-hover-danger-200 fw-medium w-40-px h-40-px d-flex justify-content-center align-items-center rounded-circle"
-                    data-id="{{ organizacion.id }}" data-nombre="{{ organizacion.nombre|escape }}"
-                    onclick="eliminarOrganizacion(this.dataset.id, this.dataset.nombre)">
+                                <!-- Botón Toggle ON/OFF -->
+                                <button type="button"
+                                    id="toggle-btn-{{ organizacion.id }}"
+                                    class="fw-medium w-40-px h-40-px d-flex justify-content-center align-items-center rounded-circle border-0 {% if organizacion.activo %}bg-success-focus text-success-600{% else %}bg-warning-focus text-warning-600{% endif %}"
+                                    title="{% if organizacion.activo %}Desactivar organización{% else %}Activar organización{% endif %}"
+                                    onclick="toggleOrganizacion({{ organizacion.id }}, '{{ organizacion.nombre|escapejs }}')">
+                                    <iconify-icon icon="{% if organizacion.activo %}lucide:toggle-right{% else %}lucide:toggle-left{% endif %}" class="menu-icon" style="font-size:1.3rem;"></iconify-icon>
+                                </button>
+                                <button type="button" class="bg-danger-focus text-danger-600 bg-hover-danger-200 fw-medium w-40-px h-40-px d-flex justify-content-center align-items-center rounded-circle border-0"
+                                    data-id="{{ organizacion.id }}" data-nombre="{{ organizacion.nombre|escape }}"
+                                    onclick="eliminarOrganizacion(this.dataset.id, this.dataset.nombre)" title="Eliminar">
                                     <iconify-icon icon="lucide:trash-2" class="menu-icon"></iconify-icon>
                                 </button>
                             </div>
@@ -89,7 +103,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center py-5">
+                        <td colspan="6" class="text-center py-5">
                             <div class="d-flex flex-column align-items-center gap-3">
                                 <iconify-icon icon="heroicons:building-office-2" class="text-secondary-light" style="font-size: 48px;"></iconify-icon>
                                 <div>
@@ -165,6 +179,9 @@
     </div>
 {% endif %}
 
+<!-- Contenedor de toasts dinámicos -->
+<div id="toast-container" class="position-fixed top-0 end-0 p-3" style="z-index:1060;min-width:300px;"></div>
+
 {% endblock %}
 
 {% block script %}
@@ -180,41 +197,73 @@ function eliminarOrganizacion(id, nombre) {
 
 document.getElementById('confirmDelete').addEventListener('click', function() {
     if (organizacionIdToDelete) {
-        // Crear formulario para envío
-        const form = document.createElement('form');
-        form.method = 'post';
-        form.action = `/organizaciones/eliminar/${organizacionIdToDelete}/`;
-        
-        // Token CSRF
-        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
-        if (csrfToken) {
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrfmiddlewaretoken';
-            csrfInput.value = csrfToken.value;
-            form.appendChild(csrfInput);
-        }
-        
-        document.body.appendChild(form);
-        form.submit();
+        fetch(`/organizaciones/eliminar/${organizacionIdToDelete}/`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json'},
+        })
+        .then(r => r.json())
+        .then(data => {
+            bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+            if (data.success) {
+                document.getElementById(`org-row-${organizacionIdToDelete}`)?.remove();
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.message, 'danger');
+            }
+        })
+        .catch(() => showToast('Error al eliminar', 'danger'));
     }
 });
 
-// Select all functionality
-document.getElementById('selectAll').addEventListener('change', function() {
-    const checkboxes = document.querySelectorAll('input[name="organizacionIds"]');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = this.checked;
-    });
-});
+function toggleOrganizacion(id, nombre) {
+    fetch(`/organizaciones/toggle/${id}/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json'},
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const row   = document.getElementById(`org-row-${id}`);
+            const badge = document.getElementById(`org-badge-${id}`);
+            const btn   = document.getElementById(`toggle-btn-${id}`);
+            const icon  = btn.querySelector('iconify-icon');
 
-// Auto-hide alerts after 5 seconds
-setTimeout(function() {
-    const alerts = document.querySelectorAll('.alert');
-    alerts.forEach(function(alert) {
-        const bsAlert = new bootstrap.Alert(alert);
-        bsAlert.close();
-    });
-}, 5000);
+            if (data.activo) {
+                row.classList.remove('table-secondary', 'opacity-75');
+                badge.textContent = 'Activa';
+                badge.className = 'px-12 py-2 radius-4 fw-medium text-xs bg-success-focus text-success-600 border border-success-main';
+                btn.className = btn.className.replace('bg-warning-focus text-warning-600', 'bg-success-focus text-success-600');
+                btn.title = 'Desactivar organización';
+                icon.setAttribute('icon', 'lucide:toggle-right');
+            } else {
+                row.classList.add('table-secondary', 'opacity-75');
+                badge.textContent = 'Inactiva';
+                badge.className = 'px-12 py-2 radius-4 fw-medium text-xs bg-warning-focus text-warning-600 border border-warning-main';
+                btn.className = btn.className.replace('bg-success-focus text-success-600', 'bg-warning-focus text-warning-600');
+                btn.title = 'Activar organización';
+                icon.setAttribute('icon', 'lucide:toggle-left');
+            }
+            showToast(data.message, data.activo ? 'success' : 'warning');
+        } else {
+            showToast(data.message, 'danger');
+        }
+    })
+    .catch(() => showToast('Error al cambiar estado', 'danger'));
+}
+
+function getCsrfToken() {
+    return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+function showToast(msg, type) {
+    const container = document.getElementById('toast-container');
+    const id = 'toast-' + Date.now();
+    container.insertAdjacentHTML('beforeend', `
+        <div id="${id}" class="alert alert-${type} alert-dismissible fade show shadow" role="alert">
+            ${msg}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`);
+    setTimeout(() => document.getElementById(id)?.remove(), 4000);
+}
 </script>
 {% endblock %}

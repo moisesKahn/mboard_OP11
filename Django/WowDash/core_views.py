@@ -557,8 +557,8 @@ def organizaciones_list(request):
     except ValueError:
         page = 1
     
-    # Query base
-    organizaciones = Organizacion.objects.filter(activo=True)
+    # Query base — el super_admin ve todas (activas e inactivas)
+    organizaciones = Organizacion.objects.all()
     
     # Aplicar filtros
     if search:
@@ -665,3 +665,25 @@ def delete_organizacion(request, organizacion_id):
                 'message': f'Error al eliminar organización: {str(e)}'
             })
     return JsonResponse({'success': False, 'message': 'Método no permitido'})
+
+
+@login_required
+def toggle_organizacion(request, organizacion_id):
+    """Activa o desactiva una organización (solo super_admin)."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Método no permitido'})
+    try:
+        perfil = getattr(request.user, 'usuarioperfiloptimizador', None)
+        if not (request.user.is_superuser or (perfil and perfil.rol == 'super_admin')):
+            return JsonResponse({'success': False, 'message': 'Sin permiso'}, status=403)
+        org = get_object_or_404(Organizacion, id=organizacion_id)
+        org.activo = not org.activo
+        org.save(update_fields=['activo'])
+        estado = 'activada' if org.activo else 'desactivada'
+        return JsonResponse({
+            'success': True,
+            'activo': org.activo,
+            'message': f'Organización {org.nombre} {estado} correctamente.',
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)})

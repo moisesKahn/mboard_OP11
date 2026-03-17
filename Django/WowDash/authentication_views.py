@@ -28,6 +28,15 @@ def signin(request):
                 pass
         
         if user is not None:
+            # Verificar si la organización del usuario está activa
+            try:
+                _perfil_pre = getattr(user, 'usuarioperfiloptimizador', None)
+                _org = getattr(_perfil_pre, 'organizacion', None)
+                if _org is not None and not _org.activo:
+                    request.session['org_desactivada_nombre'] = _org.nombre
+                    return redirect('cuenta_desactivada')
+            except Exception:
+                pass
             login(request, user)
             # Emitir JWT para consumo por front si lo requiere
             try:
@@ -95,6 +104,12 @@ def signin(request):
 
 def signup(request):
     return render(request, "authentication/signup.html")
+
+
+def cuenta_desactivada(request):
+    """Pantalla que se muestra cuando la organización del usuario está desactivada."""
+    org_nombre = request.session.get('org_desactivada_nombre', '')
+    return render(request, 'authentication/cuenta_desactivada.html', {'org_nombre': org_nombre})
 
 
 @login_required
