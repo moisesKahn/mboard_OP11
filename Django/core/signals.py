@@ -1,3 +1,4 @@
+import datetime
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import models
@@ -26,9 +27,13 @@ def _get_actor_and_org():
 
 
 def _serialize_instance(instance: models.Model) -> dict:
+    # Campos a excluir del audit (demasiado grandes o con tipos no serializables)
+    EXCLUDE_FIELDS = {'resultado_optimizacion', 'configuracion_corte'}
     data = {}
     for field in instance._meta.fields:
         name = field.name
+        if name in EXCLUDE_FIELDS:
+            continue
         try:
             # Para claves foráneas, tomar el id
             if isinstance(field, models.ForeignKey):
@@ -36,10 +41,11 @@ def _serialize_instance(instance: models.Model) -> dict:
             else:
                 val = getattr(instance, name)
                 # Convertir objetos no JSON-serializables a str
-                try:
-                    # campos simples (int/str/float/bool/None) suelen serializar bien
+                if isinstance(val, (datetime.date, datetime.datetime, datetime.time)):
+                    data[name] = val.isoformat()
+                elif isinstance(val, (dict, list, str, int, float, bool, type(None))):
                     data[name] = val
-                except Exception:
+                else:
                     data[name] = str(val)
         except Exception:
             data[name] = None

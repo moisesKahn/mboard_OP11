@@ -1,27 +1,245 @@
-{% extends 'layout/layout.html' %}
 {% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Corte Guiado · {{ proyecto.codigo }}</title>
+  <link rel="stylesheet" href="/static/css/lib/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/remixicon.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#f5f5f5; font-family: system-ui, sans-serif; }
 
-{% block content %}
-<div class="container-fluid">
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <div class="d-flex align-items-center gap-2">
-      <a href="{% url 'operador_home' %}" class="btn btn-sm btn-outline-secondary">
-        <i class="ri-arrow-left-line"></i> Volver
-      </a>
-      <span class="fw-semibold">{{ proyecto.nombre }}</span>
-      <span class="text-muted small">| #{{ proyecto.public_id|default:proyecto.id }} | {{ proyecto.cliente.nombre }}</span>
-    </div>
+    /* ── Toolbar ── */
+    .cg-toolbar {
+      display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+      height: 46px; padding: 0 10px; background: #fff;
+      border-bottom: 1px solid #ddd; overflow: visible; flex-shrink:0;
+      position: relative; z-index: 1000;
+    }
+    .cg-btn {
+      padding: 4px 10px; border: 1px solid #bbb; border-radius: 5px;
+      background: #fff; cursor: pointer; font-size: 13px; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 5px; text-decoration: none; color: inherit;
+    }
+    .cg-btn:hover { background: #f0f0f0; }
+    .cg-btn:disabled { opacity:.5; cursor:default; }
+    .cg-sep { width:1px; height:26px; background:#ddd; flex-shrink:0; }
+    .cg-chip {
+      font-size:12px; padding:2px 8px; border-radius:4px;
+      background:#f0f0f0; border:1px solid #ddd; white-space:nowrap; font-weight:600;
+    }
+    .cg-title { font-size:13px; font-weight:700; white-space:nowrap; }
+    .cg-sub   { font-size:11px; color:#888; white-space:nowrap; }
+
+    .cg-dropdown { position:relative; display:inline-flex; }
+    .cg-dd-btn {
+      padding:3px 8px; border:1px solid #bbb; border-radius:5px;
+      background:#fff; cursor:pointer; font-size:12px; white-space:nowrap;
+      display:inline-flex; align-items:center; gap:5px; min-width:110px;
+    }
+    .cg-dd-btn:hover { background:#f0f0f0; }
+    .cg-dd-list {
+      display:none; position:fixed; z-index:99999;
+      background:#fff; border:1px solid #ccc; border-radius:6px;
+      box-shadow:0 4px 16px rgba(0,0,0,.13); min-width:180px; padding:4px 0;
+    }
+    .cg-dd-list.open { display:block; }
+    .cg-dd-item {
+      padding:7px 12px; font-size:13px; cursor:pointer;
+      display:flex; align-items:center; gap:8px; white-space:nowrap;
+    }
+    .cg-dd-item:hover { background:#f4f4f4; }
+    .cg-dd-item.selected { background:#e8f0fe; font-weight:600; }
+    .cg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; display:inline-block; }
+    .cg-dot-none    { background:#aaa; }
+    .cg-dot-partial { background:#fd7e14; }
+    .cg-dot-done    { background:#198754; }
+
+    /* ── Layout ── */
+    .cg-body {
+      height: calc(100vh - 46px);
+      overflow-y: auto;
+      padding: 12px 16px;
+    }
+
+    /* ── Completar btn golden ── */
+    #cgBtnCompletar.golden {
+      background:#fff; border-color:#cc8800; color:#5a3200;
+      font-weight:700; animation:cgGoldPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes cgGoldPulse {
+      0%,100%{ box-shadow:0 0 0 3px rgba(255,200,0,.5),0 2px 8px rgba(255,160,0,.35); }
+      50%     { box-shadow:0 0 0 7px rgba(255,200,0,.25),0 4px 18px rgba(255,160,0,.6); }
+    }
+
+    /* ── Spinner ── */
+    ._spin {
+      display:inline-block; width:12px; height:12px; border:2px solid currentColor;
+      border-top-color:transparent; border-radius:50%;
+      animation:_spinAnim .7s linear infinite; vertical-align:middle; margin-right:3px;
+    }
+    @keyframes _spinAnim { to { transform:rotate(360deg); } }
+
+    /* ── Toast ── */
+    .cg-toast {
+      position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(80px);
+      background:#323232; color:#fff; padding:10px 22px; border-radius:8px;
+      font-size:13px; z-index:9999; transition:transform .3s ease,opacity .3s ease;
+      opacity:0; pointer-events:none; white-space:nowrap;
+    }
+    .cg-toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+    .cg-toast.cg-toast-success { background:#198754; }
+    .cg-toast.cg-toast-info    { background:#0d6efd; }
+
+    /* ── Confirm ── */
+    .cg-confirm-backdrop {
+      position:fixed; inset:0; background:rgba(0,0,0,.45);
+      display:flex; align-items:center; justify-content:center; z-index:9990;
+    }
+    .cg-confirm-box {
+      background:#fff; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.22);
+      padding:24px 28px; min-width:300px; max-width:420px; text-align:center;
+    }
+    .cg-confirm-box h5 { margin:0 0 8px; font-size:17px; font-weight:700; }
+    .cg-confirm-box p  { margin:0 0 20px; color:#555; font-size:14px; }
+    .cg-confirm-btns   { display:flex; gap:10px; justify-content:center; }
+
+    #tableroCanvas { cursor: default; }
+    .progress { border-radius: 8px; overflow: hidden; }
+
+    /* ── Pausar ── */
+    #cgBtnPausar { border-color:#c0392b; color:#c0392b; }
+    #cgBtnPausar:hover { background:#c0392b; color:#fff; }
+    #cgBtnContinuar { border-color:#198754; color:#198754; font-weight:600; }
+    #cgBtnContinuar:hover { background:#198754; color:#fff; }
+    #cgPausadoOverlay {
+      position:fixed; inset:0 0 0 0; top:46px;
+      background:rgba(180,0,0,.06); z-index:800;
+      pointer-events:none; border: 2px dashed rgba(192,57,43,.3);
+    }
+
+    /* ── Loading ── */
+    #cgLoadingOverlay {
+      position:fixed; inset:0; top:46px; background:#f5f5f5;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:18px; z-index:900;
+    }
+    .cg-loader-sq {
+      width:22px; height:22px; background:#0d6efd; border-radius:3px;
+      animation: cgSqAnim 1.6s ease-in-out infinite;
+    }
+    @keyframes cgSqAnim {
+      0%   { width:22px; height:22px; border-radius:3px; transform:translateX(0); }
+      15%  { width:38px; height:14px; border-radius:3px; transform:translateX(0); }
+      30%  { width:38px; height:14px; border-radius:3px; transform:translateX(0); }
+      45%  { width:18px; height:14px; border-radius:3px; transform:translateX(-12px); }
+      55%  { width:18px; height:14px; border-radius:3px; transform:translateX(12px); }
+      65%  { width:18px; height:14px; border-radius:3px; transform:translateX(0); }
+      80%  { width:38px; height:14px; border-radius:3px; transform:translateX(0); }
+      90%  { width:22px; height:22px; border-radius:3px; transform:translateX(0); }
+      100% { width:22px; height:22px; border-radius:3px; transform:translateX(0); }
+    }
+
+    /* ── Banner sincronización ── */
+    #cgSyncBanner {
+      position:fixed; inset:0; top:46px;
+      background:rgba(0,0,0,.55); z-index:9500;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .cg-sync-box {
+      background:#fff; border-radius:14px; box-shadow:0 10px 40px rgba(0,0,0,.28);
+      padding:28px 32px; max-width:440px; width:92%; text-align:center;
+    }
+    .cg-sync-icon { font-size:44px; line-height:1; margin-bottom:10px; }
+    .cg-sync-box h5 { margin:0 0 8px; font-size:17px; font-weight:700; color:#1a1a1a; }
+    .cg-sync-box p  { margin:0 0 18px; color:#555; font-size:13.5px; line-height:1.5; }
+    .cg-sync-list {
+      text-align:left; background:#f8f9fa; border-radius:8px;
+      padding:10px 14px; margin:0 0 20px; font-size:12.5px;
+      max-height:120px; overflow-y:auto;
+    }
+    .cg-sync-list li { padding:2px 0; color:#333; }
+    #cgSyncBtnActualizar {
+      background:#198754; color:#fff; border:none; border-radius:8px;
+      padding:10px 28px; font-size:14px; font-weight:700; cursor:pointer;
+      transition:background .2s;
+    }
+    #cgSyncBtnActualizar:hover { background:#146c43; }
+    #cgSyncBtnActualizar:disabled { opacity:.6; cursor:default; }
+  </style>
+</head>
+<body>
+
+<!-- ── TOOLBAR ── -->
+<div class="cg-toolbar">
+  <a href="{% url 'operador_home' %}" class="cg-btn">← Volver</a>
+  <div class="cg-sep"></div>
+
+  <div style="display:flex;flex-direction:column;line-height:1.1;">
+    <span class="cg-title">{{ proyecto.codigo }} · {{ proyecto.nombre|truncatechars:28 }}</span>
+    <span class="cg-sub">{{ proyecto.cliente.nombre|default:"" }}</span>
   </div>
+  <div class="cg-sep"></div>
 
-  <!-- Panel de control superior compacto -->
+  <span style="font-size:11px;color:#888;flex-shrink:0;">Material</span>
+  <div class="cg-dropdown" id="cgDdMaterial" style="display:none;">
+    <button class="cg-dd-btn" id="cgDdMaterialBtn">
+      <span class="cg-dot cg-dot-none" id="cgDotMat"></span>
+      <span id="cgLabelMat">—</span>
+      <span style="margin-left:auto;color:#aaa;">▾</span>
+    </button>
+    <div class="cg-dd-list" id="cgDdMaterialList"></div>
+  </div>
+  <span class="cg-chip" id="cgChipMat" style="display:none;">—</span>
+
+  <span style="font-size:11px;color:#888;flex-shrink:0;">Tablero</span>
+  <div class="cg-dropdown" id="cgDdTableroWrap">
+    <button class="cg-dd-btn" id="cgDdTableroBtn">
+      <span class="cg-dot cg-dot-none" id="cgDotTab"></span>
+      <span id="cgLabelTab">Seleccionar…</span>
+      <span style="margin-left:auto;color:#aaa;">▾</span>
+    </button>
+    <div class="cg-dd-list" id="cgDdTableroList"></div>
+  </div>
+  <div class="cg-sep"></div>
+
+  <button class="cg-btn" id="cgBtnCortarTablero" disabled title="Marcar todas las piezas del tablero como cortadas">Cortar tablero</button>
+  <button class="cg-btn" id="cgBtnCortarTodos"   disabled title="Marcar todas las piezas de todos los tableros como cortadas">Cortar todos</button>
+  <button class="cg-btn" id="cgBtnCompletar" style="display:none;" title="Completar proyecto">Completar proyecto</button>
+  <div class="cg-sep"></div>
+
+  <button class="cg-btn" id="cgBtnEtiqueta">🏷 <span id="cgLabelEtq">Etiqueta: OFF</span></button>
+  <div class="cg-sep"></div>
+  <button class="cg-btn" id="cgBtnPausar" title="Pausar proyecto">⏸ Pausar</button>
+  <button class="cg-btn" id="cgBtnContinuar" style="display:none;" title="Continuar proyecto pausado">▶ Continuar</button>
+</div>
+
+<!-- ── OVERLAYS ── -->
+<div id="cgLoadingOverlay">
+  <div class="cg-loader-sq"></div>
+  <span style="font-size:14px;color:#888;">Cargando proyecto…</span>
+</div>
+<div id="cgPausadoOverlay" style="display:none;"></div>
+
+<!-- ── BANNER SINCRONIZACIÓN ── -->
+<div id="cgSyncBanner" style="display:none;">
+  <div class="cg-sync-box">
+    <div class="cg-sync-icon">⚠️</div>
+    <h5>Piezas pendientes de actualizar</h5>
+    <p>Debido a la entrada y salida del proyecto, algunas piezas ya cortadas<br>aparecen como pendientes. Presiona <strong>Actualizar</strong> para corregirlas.</p>
+    <ul class="cg-sync-list" id="cgSyncListaPiezas"></ul>
+    <button id="cgSyncBtnActualizar">✅ Actualizar piezas</button>
+  </div>
+</div>
+
+<!-- ── CONTENIDO ORIGINAL ── -->
+<div class="cg-body">
+  <!-- Panel de control compacto -->
   <div class="card mb-2">
     <div class="card-body py-2 px-3">
       <div class="d-flex align-items-center gap-3 flex-wrap">
-        <div style="min-width:220px">
-          <select id="tableroSelect" class="form-select form-select-sm">
-            <option value="">-- Selecciona un tablero --</option>
-          </select>
-        </div>
         <div class="d-flex align-items-center gap-1">
           <span class="text-muted small">Corte:</span>
           <span class="fw-bold" id="corteActual">-</span>
@@ -34,7 +252,7 @@
         </div>
         <div class="d-flex gap-2 ms-auto">
           <button id="btnReiniciar" class="btn btn-sm btn-outline-secondary" disabled>
-            <i class="ri-refresh-line"></i> Reiniciar
+            <i class="ri-arrow-go-back-line"></i> Anular corte
           </button>
           <button id="btnSiguiente" class="btn btn-sm btn-primary" disabled>
             <i class="ri-arrow-right-line"></i> Siguiente Corte
@@ -44,7 +262,7 @@
     </div>
   </div>
 
-  <!-- Panel de visualización del tablero -->
+  <!-- Canvas -->
   <div class="row">
     <div class="col-12">
       <div class="card">
@@ -53,70 +271,62 @@
             <canvas id="tableroCanvas" style="border: 2px solid #dee2e6; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none;"></canvas>
             <div id="mensajeInicial" class="text-center text-muted">
               <i class="ri-information-line" style="font-size: 48px;"></i>
-              <p class="mt-3 fs-5">Selecciona un tablero para comenzar</p>
+              <p class="mt-3 fs-5">Selecciona un tablero desde la barra superior</p>
             </div>
           </div>
 
-          <div id="leyenda" class="mt-3 d-flex justify-content-center gap-4">
+          <div id="leyenda" class="mt-3 d-flex justify-content-center gap-4 flex-wrap">
             <div class="d-flex align-items-center">
-              <div style="width: 20px; height: 20px; background: #e3f2fd; border: 2px solid #2196f3;" class="me-2"></div>
-              <span>Pieza a obtener</span>
+              <div style="width:20px;height:20px;background:#e3f2fd;border:2px solid #2196f3;" class="me-2"></div>
+              <span>Pieza pendiente</span>
             </div>
             <div class="d-flex align-items-center">
-              <div style="width: 20px; height: 20px; background: #fff3e0; border: 2px solid #ff9800;" class="me-2"></div>
+              <div style="width:20px;height:20px;background:#fff3e0;border:2px solid #ff9800;" class="me-2"></div>
               <span>Sección activa</span>
             </div>
             <div class="d-flex align-items-center">
-              <div style="width: 20px; height: 20px; background: #f5f5f5; border: 2px solid #9e9e9e;" class="me-2"></div>
-              <span>En espera</span>
+              <div style="width:20px;height:20px;background:#c8e6c9;border:2px solid #388e3c;display:flex;align-items:center;justify-content:center;" class="me-2"><span style="color:#388e3c;font-weight:700;font-size:12px;">✓</span></div>
+              <span>Cortada</span>
             </div>
             <div class="d-flex align-items-center">
-              <div style="width: 3px; height: 20px; background: #f44336;" class="me-2"></div>
+              <div style="width:20px;height:20px;background:#f5f5f5;border:2px solid #9e9e9e;" class="me-2"></div>
+              <span>Sobrante</span>
+            </div>
+            <div class="d-flex align-items-center">
+              <div style="width:3px;height:20px;background:#f44336;" class="me-2"></div>
               <span>Línea de corte</span>
             </div>
-            <div class="d-flex align-items-center">
-              <div style="width: 3px; height: 20px; background: #9e9e9e;" class="me-2"></div>
-              <span>Corte completado</span>
-            </div>
           </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal de completado -->
-  <div class="modal fade" id="modalCompletado" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header bg-success text-white">
-          <h5 class="modal-title"><i class="ri-checkbox-circle-line"></i> Tablero Completado</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body text-center py-4" id="modalCompletadoBody">
-          <i class="ri-checkbox-circle-fill text-success" style="font-size: 64px;"></i>
-          <h4 class="mt-3">¡Todos los cortes completados!</h4>
-          <p class="text-muted">El avance ha sido guardado.</p>
-        </div>
-        <div class="modal-footer" id="modalCompletadoFooter">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-          <button type="button" class="btn btn-primary" onclick="seleccionarOtroTablero()">
-            <i class="ri-scissors-cut-line"></i> Siguiente Tablero
-          </button>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<style>
-#tableroCanvas {
-  cursor: default;
-}
-.progress {
-  border-radius: 8px;
-  overflow: hidden;
-}
-</style>
+<!-- Modal de completado -->
+<div class="modal fade" id="modalCompletado" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="ri-checkbox-circle-line"></i> Tablero Completado</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center py-4" id="modalCompletadoBody">
+        <i class="ri-checkbox-circle-fill text-success" style="font-size: 64px;"></i>
+        <h4 class="mt-3">¡Todos los cortes completados!</h4>
+        <p class="text-muted">El avance ha sido guardado.</p>
+      </div>
+      <div class="modal-footer d-flex align-items-center justify-content-between" id="modalCompletadoFooter">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-primary" onclick="seleccionarOtroTablero()">
+          <i class="ri-scissors-cut-line"></i> Siguiente Tablero
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cg-toast" id="cgToast"></div>
 
 <script>
 // ===== DATOS DEL PROYECTO =====
@@ -125,6 +335,18 @@ try {
   const rawData = '{{ proyecto.resultado_optimizacion|escapejs }}';
   if (rawData && rawData !== 'None' && rawData !== 'null') {
     proyectoData = JSON.parse(rawData);
+    // Inyectar pieza_id en CADA pieza de proyectoData desde el inicio,
+    // usando el mismo formato que la API: m{mi+1}t{ti+1}p{pi+1}
+    // Esto garantiza que patchPieza siempre tenga un pid válido.
+    (proyectoData.materiales || []).forEach((mat, mi) => {
+      (mat.tableros || []).forEach((tab, ti) => {
+        (tab.piezas || []).forEach((p, pi) => {
+          if (!p.pieza_id) {
+            p.pieza_id = `m${mi + 1}t${ti + 1}p${pi + 1}`;
+          }
+        });
+      });
+    });
   }
 } catch(e) {
   console.error('Error parseando datos del proyecto:', e);
@@ -134,344 +356,723 @@ const proyectoId = {{ proyecto.id }};
 
 // ===== ESTADO GLOBAL =====
 let tableroActual = null;
-let tableroActualMatIdx = null;  // índice de material del tablero actual
-let tableroActualTabIdx = null;  // índice de tablero dentro del material
+let tableroActualMatIdx = null;
+let tableroActualTabIdx = null;
 let cortes = [];
 let corteIndex = 0;
 let canvas, ctx;
-const SCALE = 0.3; // Escala para visualización (reducida para ver completo)
-const PADDING = 30; // Padding del canvas
+const SCALE   = 0.3;
+const PADDING = 30;
 
 function getCsrf() {
   return document.cookie.split(';').map(c => c.trim())
     .find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
 }
 
-// ===== INICIALIZACIÓN =====
-document.addEventListener('DOMContentLoaded', function() {
-  canvas = document.getElementById('tableroCanvas');
-  ctx = canvas.getContext('2d');
-  
-  console.log('Datos del proyecto:', proyectoData);
-  
-  cargarTableros();
-  
-  document.getElementById('tableroSelect').addEventListener('change', function() {
-    const value = this.value;
-    if (value) {
-      cargarTablero(value);
-    }
-  });
-  
-  document.getElementById('btnSiguiente').addEventListener('click', siguienteCorte);
-  document.getElementById('btnReiniciar').addEventListener('click', reiniciarTablero);
-});
+// ===== TOAST =====
+let _toastTimer = null;
+function showToast(msg, type='success', ms=3000) {
+  const el = document.getElementById('cgToast'); if (!el) return;
+  el.textContent = msg; el.className = 'cg-toast cg-toast-'+type+' show';
+  clearTimeout(_toastTimer); _toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
 
-function cargarTableros() {
-  const select = document.getElementById('tableroSelect');
-  select.innerHTML = '<option value="">-- Selecciona un tablero --</option>';
-  
-  if (!proyectoData) {
-    console.warn('No hay datos de optimización en el proyecto');
-    const msg = document.createElement('div');
-    msg.className = 'alert alert-warning mt-3';
-    msg.innerHTML = '<i class="ri-alert-line"></i> Este proyecto no tiene resultados de optimización. Por favor, optimiza el proyecto primero desde la vista clásica.';
-    document.getElementById('canvasContainer').innerHTML = '';
-    document.getElementById('canvasContainer').appendChild(msg);
-    return;
+// ===== CONFIRM =====
+function cgConfirm(title, body) {
+  return new Promise(resolve => {
+    const bd = document.createElement('div'); bd.className = 'cg-confirm-backdrop';
+    bd.innerHTML = `<div class="cg-confirm-box"><h5>${title}</h5><p>${body}</p>
+      <div class="cg-confirm-btns">
+        <button class="cg-btn" id="_cgNo">Cancelar</button>
+        <button class="cg-btn" id="_cgYes" style="background:#0d6efd;color:#fff;border-color:#0d6efd;">Confirmar</button>
+      </div></div>`;
+    document.body.appendChild(bd);
+    const close = (v) => { bd.remove(); resolve(v); };
+    bd.querySelector('#_cgYes').addEventListener('click', () => close(true));
+    bd.querySelector('#_cgNo').addEventListener('click',  () => close(false));
+    bd.addEventListener('click', e => { if (e.target === bd) close(false); });
+  });
+}
+
+// ===== DROPDOWNS TOOLBAR =====
+// Datos de materiales/tableros cargados desde API
+let _apiMateriales = [];
+let _apiMatIdx = 0;
+// Bandera: true cuando el sync inicial desde la API (DB) ya se completó.
+// Mientras sea false, _sincronizarEstados() no propagará datos stale de proyectoData.
+let _syncDesdeApiCompleto = false;
+
+function _dotClass(prog) {
+  return prog==='done' ? 'cg-dot-done' : prog==='partial' ? 'cg-dot-partial' : 'cg-dot-none';
+}
+
+// _sincronizarEstados ya no es necesaria: _apiMateriales es la única fuente de verdad.
+// tableroActual apunta directamente a un tablero de _apiMateriales, por lo que los
+// estados siempre son los que vienen de la BD vía fetch de la API.
+function _sincronizarEstados() {
+  // No-op: mantenida por compatibilidad con llamadas existentes en _refreshDots,
+  // _refreshTableroDD y _refreshMaterialDD. Los estados en _apiMateriales ya son frescos.
+}
+function _boardProg(piezas) {
+  const a = (piezas||[]).filter(p => p.estado !== 'descartada');
+  if (!a.length) return 'done';
+  const c = a.filter(p => p.estado === 'cortada').length;
+  if (c === 0) return 'none'; if (c === a.length) return 'done'; return 'partial';
+}
+function _matProg(mi) {
+  const a = (_apiMateriales[mi]?.tableros||[]).flatMap(t => (t.piezas||[]).filter(p => p.estado !== 'descartada'));
+  if (!a.length) return 'done';
+  const c = a.filter(p => p.estado === 'cortada').length;
+  if (c === 0) return 'none'; if (c === a.length) return 'done'; return 'partial';
+}
+
+function _refreshDots() {
+  _sincronizarEstados();
+  // Actualizar solo los dots/label del boton tablero sin reconstruir la lista
+  if (!tableroActualTabIdx !== null && _apiMateriales.length) {
+    const tableros = _apiMateriales[_apiMatIdx]?.tableros || [];
+    const items = tableros.map((t, i) => ({
+      label: 'Tablero ' + (t.num || t.numero || i+1),
+      prog: _boardProg(t.piezas || [])
+    }));
+    // Reconstruir lista abierta si existe, y actualizar el botón
+    _buildDD('cgDdTableroBtn', 'cgDdTableroList', items, tableroActualTabIdx, (i) => {
+      _seleccionarTableroDesdeDD(_apiMateriales, _apiMatIdx, i);
+    });
+    if (_apiMateriales.length > 1) {
+      const matItems = _apiMateriales.map((m, i) => ({
+        label: m.nombre || 'Material ' + (i+1), prog: _matProg(i)
+      }));
+      _buildDD('cgDdMaterialBtn', 'cgDdMaterialList', matItems, _apiMatIdx, (i) => {
+        if (i === _apiMatIdx) return;
+        _apiMatIdx = i;
+        _refreshTableroDD(_apiMateriales, i);
+        _refreshMaterialDD(_apiMateriales);
+      });
+    }
   }
-  
-  console.log('Estructura de datos:', proyectoData);
-  
-  // Iterar por materiales y sus tableros
-  if (proyectoData.materiales && Array.isArray(proyectoData.materiales)) {
-    proyectoData.materiales.forEach((material, matIdx) => {
-      if (material.tableros && material.tableros.length > 0) {
-        material.tableros.forEach((tablero, tabIdx) => {
-          const piezas = tablero.piezas || [];
-          const yaCompletado = piezas.length > 0 && piezas.every(p => p.estado === 'cortada');
-          const option = document.createElement('option');
-          option.value = JSON.stringify({matIdx, tabIdx});
-          option.textContent = `${yaCompletado ? '✓ ' : ''}Material ${matIdx + 1} - Tablero ${tablero.numero || (tabIdx + 1)} (${piezas.length} piezas)`;
-          if (yaCompletado) {
-            option.style.color = '#198754';
-            option.dataset.completado = '1';
-          }
-          select.appendChild(option);
-        });
-      }
+}
+
+document.addEventListener('click', () =>
+  document.querySelectorAll('.cg-dd-list.open').forEach(l => l.classList.remove('open'))
+);
+
+function _buildDD(btnId, listId, items, curIdx, onSelect) {
+  const btn = document.getElementById(btnId), listEl = document.getElementById(listId);
+  if (!btn || !listEl) return;
+  listEl.innerHTML = items.map((it, i) => `
+    <div class="cg-dd-item${i===curIdx?' selected':''}" data-i="${i}">
+      <span class="cg-dot ${_dotClass(it.prog)}"></span>${it.label}
+    </div>`).join('');
+  const cur = items[curIdx] || items[0];
+  if (cur) {
+    const dots = btn.querySelectorAll('.cg-dot'); const lbs = btn.querySelectorAll('span');
+    if (dots[0]) dots[0].className = 'cg-dot ' + _dotClass(cur.prog);
+    if (lbs[1])  lbs[1].textContent = cur.label;
+  }
+  listEl.querySelectorAll('.cg-dd-item').forEach(it => {
+    it.addEventListener('click', () => { listEl.classList.remove('open'); onSelect(parseInt(it.dataset.i, 10)); });
+  });
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.cg-dd-list.open').forEach(l => { if (l !== listEl) l.classList.remove('open'); });
+    if (!listEl.classList.contains('open')) {
+      const rect = btn.getBoundingClientRect();
+      listEl.style.top  = (rect.bottom + 4) + 'px';
+      listEl.style.left = rect.left + 'px';
+    }
+    listEl.classList.toggle('open');
+  };
+  // Actualizar label/dot del botón al item seleccionado
+  const cur2 = items[curIdx] || items[0];
+  if (cur2) {
+    const dots2 = btn.querySelectorAll('.cg-dot');
+    const lbs2  = btn.querySelectorAll('span');
+    if (dots2[0]) dots2[0].className = 'cg-dot ' + _dotClass(cur2.prog);
+    if (lbs2[1])  lbs2[1].textContent = cur2.label;
+  }
+}
+
+function _refreshTableroDD(materiales, matIdx) {
+  _sincronizarEstados();
+  const tableros = materiales[matIdx]?.tableros || [];
+  const curTabIdx = tableroActualTabIdx !== null && tableroActualMatIdx === matIdx ? tableroActualTabIdx : -1;
+  const items = tableros.map((t, i) => ({
+    label: 'Tablero ' + (t.num || t.numero || i+1),
+    prog: _boardProg(t.piezas || [])
+  }));
+  _buildDD('cgDdTableroBtn', 'cgDdTableroList', items, curTabIdx, (i) => {
+    _seleccionarTableroDesdeDD(materiales, matIdx, i);
+  });
+}
+
+function _refreshMaterialDD(materiales) {
+  _sincronizarEstados();
+  const dd = document.getElementById('cgDdMaterial');
+  const chip = document.getElementById('cgChipMat');
+  if (materiales.length > 1) {
+    dd.style.display = 'inline-flex'; chip.style.display = 'none';
+    const items = materiales.map((m, i) => ({
+      label: m.nombre || 'Material ' + (i+1), prog: _matProg(i)
+    }));
+    _buildDD('cgDdMaterialBtn', 'cgDdMaterialList', items, _apiMatIdx, (i) => {
+      if (i === _apiMatIdx) return;
+      _apiMatIdx = i;
+      _refreshTableroDD(materiales, i);
+      _refreshMaterialDD(materiales);
     });
   } else {
-    console.warn('No se encontraron materiales en los datos');
+    dd.style.display = 'none'; chip.style.display = 'inline-block';
+    chip.textContent = materiales[0]?.nombre || '—';
   }
 }
 
-function cargarTablero(value) {
+function _seleccionarTableroDesdeDD(materiales, mi, ti) {
+  // Usar _apiMateriales como única fuente de verdad (estados siempre frescos desde la BD)
+  const matApi = (materiales || _apiMateriales)[mi];
+  if (!matApi || !matApi.tableros[ti]) return;
+  tableroActual = matApi.tableros[ti];
+  tableroActualMatIdx = mi;
+  tableroActualTabIdx = ti;
+
+  const mensajeInicial = document.getElementById('mensajeInicial');
+  if (mensajeInicial) mensajeInicial.style.display = 'none';
+  canvas.style.display = 'block';
+
+  cortes = generarSecuenciaCortes(tableroActual);
+
+  // Si el tablero está completo (todas las piezas activas cortadas), mostrar con todos los cortes
+  const _piezasActivas = (tableroActual.piezas || []).filter(p => p.estado !== 'descartada');
+  const _tableroCompleto = _piezasActivas.length > 0 && _piezasActivas.every(p => p.estado === 'cortada');
+
+  if (_tableroCompleto) {
+    corteIndex = cortes.length; // mostrar resultado final con todos los cortes aplicados
+    // Limpiar localStorage incorrecto para este tablero
+    localStorage.setItem(`cg_pos_${proyectoId}_${mi}_${ti}`, cortes.length);
+  } else {
+    // Restaurar corteIndex desde localStorage
+    const savedKey = `cg_pos_${proyectoId}_${mi}_${ti}`;
+    const savedIdx = parseInt(localStorage.getItem(savedKey) || '0', 10);
+    corteIndex = (savedIdx >= 0 && savedIdx <= cortes.length) ? savedIdx : 0;
+  }
+
+  document.getElementById('corteActual').textContent = corteIndex;
+  document.getElementById('totalCortes').textContent = cortes.length;
+  document.getElementById('btnReiniciar').disabled = false;
+  dibujarTablero();
+
+  // Guardar tablero activo para restaurar al recargar
+  _guardarPosicion();
+
+  // Refrescar dropdown con el tabIdx correcto para que el label se actualice
+  _refreshTableroDD(_apiMateriales, mi);
+  _refreshMaterialDD(_apiMateriales);
+  _updateAcciones();
+
+  // Ocultar/resetear el banner de sincronización al cambiar de tablero
+  const _bannerReset = document.getElementById('cgSyncBanner');
+  const _btnReset = document.getElementById('cgSyncBtnActualizar');
+  if (_bannerReset) _bannerReset.style.display = 'none';
+  if (_btnReset) { _btnReset.disabled = false; _btnReset.innerHTML = '✅ Actualizar piezas'; }
+
+  // Detectar piezas que deberían estar cortadas pero siguen pendientes en la DB
+  // Solo si el tablero no está ya completado (para no molestar innecesariamente)
+  if (!_tableroCompleto) {
+    _mostrarBannerSiHayFantasmas();
+  }
+}
+
+// ===== COLA DE GUARDADO NO-BLOQUEANTE CON MICRO-BATCHING =====
+// Estrategia: en lugar de 1 request por pieza, acumulamos los cambios durante
+// un micro-delay (1 frame ≈ 16ms) y los enviamos TODOS en un solo request PATCH.
+// Resultado: N piezas cortadas de golpe → 1 round-trip a la BD en vez de N.
+// El endpoint individual sigue disponible como fallback.
+const _saveQueue = new Map(); // pieza_id → estado (último estado deseado)
+let _saveInFlight = 0;        // peticiones activas
+let _batchTimer = null;       // ID del setTimeout del micro-batch
+
+async function patchPieza(pid, estado) {
+  if (!pid) { console.warn('patchPieza: pieza_id indefinido, omitiendo PATCH'); return; }
+  // Sobreescribir: si llegan dos estados para el mismo pid, gana el último
+  _saveQueue.set(pid, estado);
+  _updateSaveBadge();
+  // Armar/retrasar el batch: si ya hay un timer corriendo, lo dejamos correr
+  // (se acumularán más piezas en _saveQueue antes de que dispare)
+  if (!_batchTimer) {
+    _batchTimer = setTimeout(_dispatchBatch, 16); // 1 frame
+  }
+}
+
+async function _dispatchBatch() {
+  _batchTimer = null;
+  if (!_saveQueue.size) return;
+
+  // Tomar todos los cambios pendientes de una vez
+  const snapshot = Array.from(_saveQueue.entries()).map(([pieza_id, estado]) => ({ pieza_id, estado }));
+  _saveQueue.clear();
+  _saveInFlight++;
+  _updateSaveBadge();
+
   try {
-    const {matIdx, tabIdx} = JSON.parse(value);
-    const material = proyectoData.materiales[matIdx];
-    tableroActual = material.tableros[tabIdx];
-    tableroActualMatIdx = matIdx;
-    tableroActualTabIdx = tabIdx;
-
-    console.log('Tablero cargado:', tableroActual);
-
-    // Marcar proyecto como en_proceso automáticamente al iniciar corte
-    fetch(`/api/operador/proyectos/${proyectoId}/estado`, {
+    const r = await fetch(`/api/operador/proyectos/${proyectoId}/piezas-batch`, {
       method: 'PATCH', credentials: 'same-origin',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
-      body: JSON.stringify({estado: 'en_proceso'})
-    }).catch(() => {});
-
-    // Ocultar mensaje inicial y mostrar canvas
-    const mensajeInicial = document.getElementById('mensajeInicial');
-    if (mensajeInicial) mensajeInicial.style.display = 'none';
-    canvas.style.display = 'block';
-
-    // Verificar si ya fue completado
-    const piezas = tableroActual.piezas || [];
-    const yaCompletado = piezas.length > 0 && piezas.every(p => p.estado === 'cortada');
-
-    if (yaCompletado) {
-      // Mostrar tablero en modo solo-lectura (todas las piezas verdes)
-      cortes = generarSecuenciaCortes(tableroActual);
-      corteIndex = cortes.length; // saltar al final
-      document.getElementById('corteActual').textContent = cortes.length;
-      document.getElementById('totalCortes').textContent = cortes.length;
-      document.getElementById('btnSiguiente').disabled = true;
-      document.getElementById('btnReiniciar').disabled = false;
-      dibujarTablero();
-      // Mostrar banner informativo encima del canvas
-      let banner = document.getElementById('bannerCompletado');
-      if (!banner) {
-        banner = document.createElement('div');
-        banner.id = 'bannerCompletado';
-        banner.className = 'alert alert-success d-flex align-items-center gap-2 py-2 mb-2';
-        banner.innerHTML = '<i class="ri-checkbox-circle-fill fs-5"></i> <strong>Tablero ya completado.</strong> Usa "Reiniciar" si necesitas volver a recorrerlo.';
-        document.getElementById('canvasContainer').prepend(banner);
-      } else {
-        banner.style.display = '';
-      }
-      return;
-    }
-
-    // Ocultar banner si existía de una selección anterior
-    const banner = document.getElementById('bannerCompletado');
-    if (banner) banner.style.display = 'none';
-
-    // Generar secuencia de cortes
-    cortes = generarSecuenciaCortes(tableroActual);
-    corteIndex = 0;
-
-    console.log('Cortes generados:', cortes.length);
-
-    // Actualizar UI
-    document.getElementById('corteActual').textContent = '0';
-    document.getElementById('totalCortes').textContent = cortes.length;
-    document.getElementById('btnSiguiente').disabled = false;
-    document.getElementById('btnReiniciar').disabled = false;
-
-    // Dibujar estado inicial
-    dibujarTablero();
+      body: JSON.stringify({ piezas: snapshot })
+    });
+    if (!r.ok) throw new Error(await r.text());
   } catch(e) {
-    console.error('Error cargando tablero:', e);
-    alert('Error al cargar el tablero: ' + e.message);
+    console.error('patchPieza batch error:', e);
+    // Fallback: reintentar las piezas fallidas individualmente
+    for (const { pieza_id, estado } of snapshot) {
+      try {
+        await fetch(`/api/operador/proyectos/${proyectoId}/piezas/${encodeURIComponent(pieza_id)}`, {
+          method: 'PATCH', credentials: 'same-origin',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+          body: JSON.stringify({ estado })
+        });
+      } catch(_) { /* ignorar fallos del fallback */ }
+    }
+    showToast('⚠️ Error al guardar, reintentando', 'info', 3000);
+  } finally {
+    _saveInFlight--;
+    _updateSaveBadge();
+    // Si mientras procesábamos llegaron más cambios, lanzar otro batch
+    if (_saveQueue.size && !_batchTimer) {
+      _batchTimer = setTimeout(_dispatchBatch, 16);
+    }
   }
 }
 
-// ===== GENERACIÓN DE SECUENCIA DE CORTES =====
+// Espera a que todas las peticiones en vuelo y en cola terminen
+async function _flushSaveQueue() {
+  // Si hay cambios pendientes en cola, despachar ahora sin esperar el timer
+  if (_saveQueue.size) {
+    if (_batchTimer) { clearTimeout(_batchTimer); _batchTimer = null; }
+    await _dispatchBatch();
+  }
+  // Esperar a que los requests en vuelo terminen
+  if (_saveInFlight > 0) {
+    await new Promise(resolve => {
+      const check = () => _saveInFlight <= 0 ? resolve() : setTimeout(check, 60);
+      setTimeout(check, 60);
+    });
+  }
+}
+
+// Indicador visual de guardado (pequeño badge en toolbar)
+function _updateSaveBadge() {
+  let badge = document.getElementById('_cgSaveBadge');
+  const pending = _saveInFlight + _saveQueue.size;
+  if (pending > 0) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.id = '_cgSaveBadge';
+      badge.style.cssText = 'font-size:11px;color:#888;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;';
+      const toolbar = document.querySelector('.cg-toolbar');
+      if (toolbar) toolbar.appendChild(badge);
+    }
+    badge.innerHTML = `<span class="_spin" style="border-color:#aaa;border-top-color:transparent;"></span> Guardando…`;
+  } else if (badge) {
+    badge.innerHTML = '✓ Guardado';
+    badge.style.color = '#198754';
+    setTimeout(() => { if (badge) badge.innerHTML = ''; }, 2000);
+  }
+}
+
+// ===== ACCIONES TOOLBAR =====
+function _getAllPiezas() {
+  if (!_apiMateriales.length) return [];
+  return _apiMateriales.flatMap(m => (m.tableros||[]).flatMap(t => t.piezas||[]));
+}
+function _allDone() {
+  return _getAllPiezas().filter(p => p.estado !== 'descartada').every(p => p.estado === 'cortada');
+}
+function _tabDone() {
+  if (!tableroActual) return false;
+  const ps = (tableroActual.piezas||[]).filter(p => p.estado !== 'descartada');
+  return ps.length > 0 && ps.every(p => p.estado === 'cortada');
+}
+function _updateAcciones() {
+  const pausado = (typeof _pausado !== 'undefined') ? _pausado : false;
+  const ps = tableroActual ? tableroActual.piezas||[] : [];
+  document.getElementById('cgBtnCortarTablero').disabled = pausado || !ps.length || _tabDone();
+  document.getElementById('cgBtnCortarTodos').disabled = pausado || !_getAllPiezas().filter(p => p.estado !== 'descartada' && p.estado !== 'cortada').length;
+  const btnC = document.getElementById('cgBtnCompletar');
+  if (_allDone()) { btnC.style.display = 'inline-flex'; btnC.classList.add('golden'); }
+  else { btnC.style.display = 'none'; btnC.classList.remove('golden'); }
+
+  // Actualizar btnSiguiente: label y modo según estado del tablero
+  const btnSig = document.getElementById('btnSiguiente');
+  const btnRei = document.getElementById('btnReiniciar');
+  if (btnSig) {
+    const tabCompleto = _tabDone();
+    if (tabCompleto) {
+      // Todas las piezas cortadas → modo tablero
+      btnSig.dataset.modo = 'tablero';
+      btnSig.innerHTML = '<i class="ri-arrow-right-line"></i> Siguiente Tablero';
+      btnSig.disabled  = false;
+      btnSig.classList.remove('btn-outline-primary');
+      btnSig.classList.add('btn-primary');
+    } else {
+      // Tablero con piezas pendientes → modo corte
+      btnSig.dataset.modo = 'corte';
+      btnSig.innerHTML = '<i class="ri-arrow-right-line"></i> Siguiente Corte';
+      // Habilitado solo si quedan cortes por dar
+      const maxCortes = cortes ? cortes.length : 0;
+      btnSig.disabled = pausado || (corteIndex >= maxCortes);
+      btnSig.classList.remove('btn-outline-primary');
+      btnSig.classList.add('btn-primary');
+    }
+  }
+  if (btnRei) btnRei.disabled = pausado || (corteIndex <= 0);
+}
+
+document.getElementById('cgBtnCortarTablero').addEventListener('click', async () => {
+  const ok = await cgConfirm('¿Cortar tablero?', 'Se marcarán todas las piezas del tablero actual como <b>cortadas</b>.');
+  if (!ok) return;
+  const btn = document.getElementById('cgBtnCortarTablero');
+  btn.disabled = true; btn.innerHTML = '<span class="_spin"></span> Cortando…';
+  try {
+    const piezas = (tableroActual?.piezas||[]).filter(p => p.estado !== 'descartada' && p.estado !== 'cortada');
+    // Actualizar memoria y lanzar guardados en paralelo (no-bloqueante)
+    piezas.forEach(p => { p.estado = 'cortada'; maybeImprimir(p); patchPieza(p.pieza_id, 'cortada'); });
+    dibujarTablero();
+    _refreshTableroDD(_apiMateriales, _apiMatIdx); _refreshMaterialDD(_apiMateriales); _updateAcciones();
+    // Esperar que todo se guarde antes de confirmar
+    await _flushSaveQueue();
+    showToast('✅ Tablero marcado como cortado');
+  } finally { btn.disabled = _tabDone(); btn.textContent = 'Cortar tablero'; }
+});
+
+document.getElementById('cgBtnCortarTodos').addEventListener('click', async () => {
+  const ok = await cgConfirm('¿Cortar todos los tableros?', 'Se marcarán <b>todas las piezas de todos los tableros</b> como cortadas.');
+  if (!ok) return;
+  const btn = document.getElementById('cgBtnCortarTodos');
+  btn.disabled = true; btn.innerHTML = '<span class="_spin"></span> Cortando…';
+  try {
+    const todas = _getAllPiezas().filter(p => p.estado !== 'descartada' && p.estado !== 'cortada');
+    // Actualizar memoria y lanzar guardados en paralelo (no-bloqueante)
+    todas.forEach(p => { p.estado = 'cortada'; maybeImprimir(p); patchPieza(p.pieza_id, 'cortada'); });
+    dibujarTablero();
+    _refreshTableroDD(_apiMateriales, _apiMatIdx); _refreshMaterialDD(_apiMateriales); _updateAcciones();
+    // Esperar que todo se guarde
+    await _flushSaveQueue();
+    showToast('✅ Todos los tableros cortados');
+  } finally { btn.disabled = _allDone(); btn.textContent = 'Cortar todos'; }
+});
+
+document.getElementById('cgBtnCompletar').addEventListener('click', async () => {
+  const ok = await cgConfirm('¿Completar proyecto?', 'El proyecto se marcará como <b>Completado</b>.');
+  if (!ok) return;
+  const btn = document.getElementById('cgBtnCompletar');
+  btn.disabled = true; btn.innerHTML = '<span class="_spin"></span> Completando…';
+  try {
+    const r = await fetch(`/api/operador/proyectos/${proyectoId}/completar`, {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()}
+    });
+    if (r.ok) window.location.href = '{% url "operador_home" %}';
+    else { const jr = await r.json().catch(()=>({})); alert(jr.message || 'No se pudo completar.'); }
+  } catch(e) { alert('Error de red.'); }
+  finally { btn.disabled = false; btn.textContent = 'Completar proyecto'; }
+});
+
+// ===== ZBP / ETIQUETA =====
+const LABEL_KEY = `cg_autoLabel_${proyectoId}`;
+let autoLabel = localStorage.getItem(LABEL_KEY) === '1';
+let _zbpP = null;
+function getZbpDevice() {
+  if (!_zbpP) _zbpP = fetch('http://localhost:9100/available').then(r => r.json())
+    .then(d => { const pr = d.printer||[]; return pr.find(p=>p.connection==='usb')||pr.find(p=>p.connection==='driver')||pr[0]||null; })
+    .catch(() => null);
+  return _zbpP;
+}
+function updateEtqBtn() {
+  const btn = document.getElementById('cgBtnEtiqueta'), txt = document.getElementById('cgLabelEtq');
+  if (autoLabel) { btn.style.background='#198754'; btn.style.color='#fff'; btn.style.borderColor='#198754'; txt.textContent='Etiqueta: ON'; }
+  else { btn.style.background=''; btn.style.color=''; btn.style.borderColor=''; txt.textContent='Etiqueta: OFF'; }
+}
+updateEtqBtn(); getZbpDevice();
+document.getElementById('cgBtnEtiqueta').addEventListener('click', () => {
+  autoLabel = !autoLabel; localStorage.setItem(LABEL_KEY, autoLabel?'1':'0'); updateEtqBtn();
+});
+function generarZPL(p) {
+  const DPI=300,mm2d=v=>Math.round(v*DPI/25.4),_z=(s,mx)=>String(s||'').slice(0,mx).replace(/\^/g,'').replace(/~/g,'');
+  const LW=mm2d(100),LH=mm2d(150),M=mm2d(5);
+  const pw_mm=parseInt(p.ancho)||0,ph_mm=parseInt(p.largo||p.alto)||0;
+  const nombre=p.nombre||p.pieza_id||'';
+  const tc=p.tapacantos||{};
+  const matNombre=_z((_apiMateriales[_apiMatIdx]||{}).nombre||'—',22);
+  const DA_W=LW-2*M,DA_H=mm2d(70),DA_TOP=mm2d(16);
+  const scale=Math.min(DA_W/Math.max(pw_mm,1),DA_H/Math.max(ph_mm,1))*0.85;
+  const rw=Math.round(pw_mm*scale),rh=Math.round(ph_mm*scale);
+  const rx=Math.round((LW-rw)/2),ry=DA_TOP;
+  const tcParts=[];
+  if(tc.arriba)tcParts.push('Arr');if(tc.derecha)tcParts.push('Der');
+  if(tc.abajo)tcParts.push('Aba');if(tc.izquierda)tcParts.push('Izq');
+  const tc_str=tcParts.length?tcParts.join(' | '):'Sin tapacanto';
+  const lines=['^XA','^LH0,0',`^PW${LW}`,`^LL${LH}`,
+    `^FO${M},${M}^CF0,45^FD${_z(nombre,22)}^FS`,
+    `^FO${M},${mm2d(14)}^GB${LW-2*M},2,2^FS`,
+    `^FO${rx},${ry}^GB${rw},${rh},3,W^FS`,`^FO${rx},${ry}^GB${rw},${rh},3^FS`];
+  const TC_OFF=Math.max(4,Math.round(Math.min(rw,rh)*0.06));
+  if(tc.arriba)lines.push(`^FO${rx},${ry+TC_OFF}^GB${rw},4,4^FS`);
+  if(tc.abajo)lines.push(`^FO${rx},${ry+rh-TC_OFF-4}^GB${rw},4,4^FS`);
+  if(tc.izquierda)lines.push(`^FO${rx+TC_OFF},${ry}^GB4,${rh},4^FS`);
+  if(tc.derecha)lines.push(`^FO${rx+rw-TC_OFF-4},${ry}^GB4,${rh},4^FS`);
+  const fn_size=Math.max(25,Math.round(Math.min(rw,rh)/3));
+  lines.push(`^FO${rx+Math.round((rw-_z(nombre,12).length*fn_size/2)/2)},${ry+Math.round(rh/2-fn_size/2)}^CF0,${fn_size}^FD${_z(nombre,12)}^FS`);
+  lines.push(`^FO${rx},${ry-mm2d(7)}^CF0,28^FD${pw_mm} mm^FS`);
+  lines.push(`^FO${rx+rw+mm2d(2)},${ry+Math.round(rh/2)-14}^CF0,28^FD${ph_mm} mm^FS`);
+  const INFO_Y=ry+rh+mm2d(12),ROW_H=mm2d(7);
+  lines.push(`^FO${M},${INFO_Y}^CF0,30^FDAncho: ${pw_mm} mm^FS`,
+    `^FO${M},${INFO_Y+ROW_H}^CF0,30^FDLargo: ${ph_mm} mm^FS`,
+    `^FO${M},${INFO_Y+2*ROW_H}^CF0,28^FDTapacanto: ${_z(tc_str,26)}^FS`);
+  const box_y=LH-mm2d(16);
+  lines.push(`^FO${M},${box_y}^GB${LW-2*M},${mm2d(13)},2,W^FS`,
+    `^FO${M+6},${box_y+mm2d(2)}^CF0,32^FDMaterial: ${matNombre}^FS`,'^PQ1','^XZ');
+  return lines.join('\n');
+}
+async function imprimirEtiqueta(p) {
+  if (!p) return;
+  try {
+    const device = await getZbpDevice(); if (!device) return;
+    await fetch('http://localhost:9100/write', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({device, data: generarZPL(p)})});
+  } catch(e) { console.warn('ZBP:', e.message); }
+}
+function maybeImprimir(p) { if (autoLabel) imprimirEtiqueta(p); }
+
+// ===== INICIALIZACIÓN =====
+document.addEventListener('DOMContentLoaded', async function() {
+  canvas = document.getElementById('tableroCanvas');
+  ctx = canvas.getContext('2d');
+
+  // Cargar datos desde API para los dropdowns de toolbar
+  try {
+    const r = await fetch(`/api/operador/proyectos/${proyectoId}`, {credentials:'same-origin'});
+    if (r.ok) {
+      const data = await r.json();
+      _apiMateriales = Array.isArray(data.materiales) && data.materiales.length
+        ? data.materiales
+        : [{nombre:(data.meta||{}).material||'—', tableros:data.tableros||[]}];
+    }
+  } catch(_) {}
+
+  // _apiMateriales es la única fuente de verdad (estados directamente desde la BD vía API)
+  // No se necesita sincronizar con proyectoData: tableroActual siempre apunta a _apiMateriales
+
+  // Marcar sync completo
+  _syncDesdeApiCompleto = true;
+
+  _refreshMaterialDD(_apiMateriales);
+  _refreshTableroDD(_apiMateriales, 0);
+  _updateAcciones();
+
+  // Auto-seleccionar tablero para redibujar con estados sincronizados desde la DB
+  if (_apiMateriales.length) {
+    const _lastMi = parseInt(localStorage.getItem(`cg_lastMat_${proyectoId}`) || '0', 10);
+    const _lastTi = parseInt(localStorage.getItem(`cg_lastTab_${proyectoId}`) || '0', 10);
+    const _mi = (_lastMi >= 0 && _lastMi < _apiMateriales.length) ? _lastMi : 0;
+    const _ti_max = (_apiMateriales[_mi]?.tableros||[]).length - 1;
+    const _ti = (_lastTi >= 0 && _lastTi <= _ti_max) ? _lastTi : 0;
+    _apiMatIdx = _mi;
+    _refreshTableroDD(_apiMateriales, _mi);
+    _refreshMaterialDD(_apiMateriales);
+    _seleccionarTableroDesdeDD(_apiMateriales, _mi, _ti);
+  }
+
+  // Auto marcar en_proceso
+  try {
+    const EP = ['completado','en_proceso','pausado','cancelado'];
+    const r2 = await fetch(`/api/operador/proyectos/${proyectoId}`, {credentials:'same-origin'});
+    if (r2.ok) {
+      const d2 = await r2.json();
+      const estado = (d2.proyecto||{}).estado;
+      if (!EP.includes(estado)) {
+        await fetch(`/api/operador/proyectos/${proyectoId}/estado`, {
+          method:'PATCH', credentials:'same-origin',
+          headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+          body: JSON.stringify({estado:'en_proceso'})
+        });
+      }
+    }
+  } catch(_) {}
+
+  document.getElementById('btnSiguiente').addEventListener('click', () => {
+    const btnSig = document.getElementById('btnSiguiente');
+    if (btnSig && btnSig.dataset.modo === 'tablero') mostrarModalCompletado();
+    else siguienteCorte();
+  });
+  document.getElementById('btnReiniciar').addEventListener('click', anularCorte);
+
+  // Ocultar overlay de carga al terminar inicialización
+  const _lo = document.getElementById('cgLoadingOverlay');
+  if (_lo) _lo.style.display = 'none';
+
+  // Aplicar estado inicial si el proyecto está pausado
+  if (typeof _applyPausadoUI === 'function') _applyPausadoUI();
+});
+
+// ===== PAUSAR / CONTINUAR =====
+let _pausado = ('{{ proyecto.estado }}' === 'pausado');
+
+function _applyPausadoUI() {
+  const ov    = document.getElementById('cgPausadoOverlay');
+  const btnP  = document.getElementById('cgBtnPausar');
+  const btnC  = document.getElementById('cgBtnContinuar');
+  const btnCT = document.getElementById('cgBtnCortarTablero');
+  const btnCA = document.getElementById('cgBtnCortarTodos');
+  const btnRe = document.getElementById('btnReiniciar');
+  const btnSi = document.getElementById('btnSiguiente');
+  if (ov)   ov.style.display   = _pausado ? 'block' : 'none';
+  if (btnP) btnP.style.display = _pausado ? 'none'  : 'inline-flex';
+  if (btnC) btnC.style.display = _pausado ? 'inline-flex' : 'none';
+  if (btnCT) btnCT.disabled = _pausado || _tabDone();
+  if (btnCA) btnCA.disabled = _pausado || _allDone();
+  if (btnRe) btnRe.disabled = _pausado || corteIndex <= 0;
+  if (btnSi) btnSi.disabled = _pausado || (!_tabDone() && corteIndex >= (cortes ? cortes.length : 0));
+  document.querySelectorAll('#cgListaPiezas select[data-pieza]').forEach(s => { s.disabled = _pausado; });
+  const cvsEl = document.getElementById('tableroCanvas');
+  if (cvsEl) cvsEl.style.pointerEvents = _pausado ? 'none' : '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btnPausar   = document.getElementById('cgBtnPausar');
+  const btnContinuar = document.getElementById('cgBtnContinuar');
+
+  if (btnPausar) {
+    btnPausar.addEventListener('click', async () => {
+      const ok = await cgConfirm('¿Pausar proyecto?', 'El proyecto quedará en estado <b>Pausado</b>. Las piezas no se podrán editar hasta que lo continúes.');
+      if (!ok) return;
+      btnPausar.disabled = true; btnPausar.innerHTML = '⏳ Pausando…';
+      try {
+        const r = await fetch(`/api/operador/proyectos/${proyectoId}/estado`, {
+          method:'PATCH', credentials:'same-origin',
+          headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+          body: JSON.stringify({estado:'pausado'})
+        });
+        if (!r.ok) throw new Error((await r.json().catch(()=>({}))).message || 'Error al pausar');
+        _pausado = true; _applyPausadoUI(); showToast('⏸ Proyecto pausado.', 'info');
+      } catch(e) { showToast('No se pudo pausar: ' + e.message, 'info'); }
+      finally { btnPausar.disabled = false; btnPausar.innerHTML = '⏸ Pausar'; }
+    });
+  }
+
+  if (btnContinuar) {
+    btnContinuar.addEventListener('click', async () => {
+      btnContinuar.disabled = true; btnContinuar.innerHTML = '⏳ Continuando…';
+      try {
+        const r = await fetch(`/api/operador/proyectos/${proyectoId}/estado`, {
+          method:'PATCH', credentials:'same-origin',
+          headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+          body: JSON.stringify({estado:'en_proceso'})
+        });
+        if (!r.ok) throw new Error((await r.json().catch(()=>({}))).message || 'Error al continuar');
+        _pausado = false; _applyPausadoUI(); showToast('▶ Proyecto continuado.', 'success');
+      } catch(e) { showToast('No se pudo continuar: ' + e.message, 'info'); }
+      finally { btnContinuar.disabled = false; btnContinuar.innerHTML = '▶ Continuar'; }
+    });
+  }
+});
+
+// ===== GENERACIÓN DE SECUENCIA DE CORTES (ORIGINAL) =====
 function generarSecuenciaCortes(tablero) {
   const piezas = tablero.piezas || [];
-  const anchoTablero = tablero.ancho;
-  const altoTablero = tablero.alto || tablero.largo;
-  
-  // Algoritmo guillotina: cortes rectos que dividen completamente una sección
+  const anchoTablero = tablero.ancho_mm || tablero.ancho || 2440;
+  const altoTablero  = tablero.largo_mm || tablero.alto || tablero.largo || 1830;
   const secuencia = [];
-  
-  // Detectar si hay márgenes que cortar (piezas que no empiezan en 0,0)
+
   if (piezas.length > 0) {
     const minX = Math.min(...piezas.map(p => p.x || 0));
     const minY = Math.min(...piezas.map(p => p.y || 0));
     const maxX = Math.max(...piezas.map(p => (p.x || 0) + (p.ancho || 0)));
     const maxY = Math.max(...piezas.map(p => (p.y || 0) + ((p.alto || p.largo) || 0)));
-    
-    // Si hay margen superior o izquierdo
     if (minX > 0 || minY > 0 || maxX < anchoTablero || maxY < altoTablero) {
       const margenes = [];
       if (minX > 0) margenes.push(`izquierdo: ${Math.round(minX)}mm`);
       if (minY > 0) margenes.push(`superior: ${Math.round(minY)}mm`);
       if (maxX < anchoTablero) margenes.push(`derecho: ${Math.round(anchoTablero - maxX)}mm`);
       if (maxY < altoTablero) margenes.push(`inferior: ${Math.round(altoTablero - maxY)}mm`);
-      
-      secuencia.push({
-        tipo: 'margen',
-        descripcion: `⚠️ CORTAR MÁRGENES: ${margenes.join(', ')}`,
-        esMargen: true
-      });
+      secuencia.push({ tipo: 'margen', descripcion: `⚠️ CORTAR MÁRGENES: ${margenes.join(', ')}`, esMargen: true });
     }
   }
-  
-  // Crear árbol de cortes usando algoritmo de guillotina recursivo
-  // Estrategia optimizada para maximizar sobrantes:
-  // 1. Primero separar sobrante derecho completo (si existe)
-  // 2. Luego separar sobrante inferior completo (si existe)
-  // 3. Luego dividir por filas horizontales
-  // 4. Finalmente dividir cada fila en columnas verticales
-  // seccionOrigen: {x,y,ancho,alto} de la sección donde se generó el corte.
-  // calcularSecciones lo usa para aplicar el corte solo a la sección correcta.
-  function pushCorte(obj) {
-    secuencia.push(obj);
-  }
+
+  function pushCorte(obj) { secuencia.push(obj); }
 
   function procesarSeccion(x, y, ancho, alto, piezasEnSeccion, nivel = 0) {
     if (piezasEnSeccion.length === 0) return;
-    // Sección de origen de todos los cortes generados aquí
-    const origen = {x, y, ancho, alto};
-
-    // === PASO 1: Separar sobrante derecho completo ===
     const maxXPiezas = Math.max(...piezasEnSeccion.map(p => p.x + (p.ancho || 0)));
     if (maxXPiezas < x + ancho - 1) {
-      pushCorte({
-        tipo: 'vertical', x: maxXPiezas, y1: y, y2: y + alto,
-        origen: {x, y, ancho, alto},
-        descripcion: `Corte vertical en X=${Math.round(maxXPiezas)}mm (separar sobrante derecho)`
-      });
+      pushCorte({ tipo:'vertical', x:maxXPiezas, y1:y, y2:y+alto, origen:{x,y,ancho,alto},
+        descripcion:`Corte vertical en X=${Math.round(maxXPiezas)}mm (separar sobrante derecho)` });
       ancho = maxXPiezas - x;
     }
-
-    // === PASO 2: Separar sobrante inferior completo ===
     const maxYPiezas = Math.max(...piezasEnSeccion.map(p => p.y + (p.alto || p.largo || 0)));
     if (maxYPiezas < y + alto - 1) {
-      pushCorte({
-        tipo: 'horizontal', x1: x, y: maxYPiezas, x2: x + ancho,
-        origen: {x, y, ancho, alto},  // ancho ya ajustado por PASO 1 si aplica
-        descripcion: `Corte horizontal en Y=${Math.round(maxYPiezas)}mm (separar sobrante inferior)`
-      });
+      pushCorte({ tipo:'horizontal', x1:x, y:maxYPiezas, x2:x+ancho, origen:{x,y,ancho,alto},
+        descripcion:`Corte horizontal en Y=${Math.round(maxYPiezas)}mm (separar sobrante inferior)` });
       alto = maxYPiezas - y;
     }
-
-    if (piezasEnSeccion.length === 1) {
-      // Pieza individual: los sobrantes ya fueron separados arriba, no hay más cortes.
-      return;
-    }
-
-    // === PASO 3: Buscar corte horizontal que divida filas ===
+    if (piezasEnSeccion.length === 1) return;
     const corteH = encontrarCorteHorizontal(piezasEnSeccion, y, alto);
     if (corteH) {
-      pushCorte({
-        tipo: 'horizontal', x1: x, y: corteH.y, x2: x + ancho,
-        origen: {x, y, ancho, alto},
-        descripcion: `Corte horizontal en Y=${Math.round(corteH.y)}mm`
-      });
+      pushCorte({ tipo:'horizontal', x1:x, y:corteH.y, x2:x+ancho, origen:{x,y,ancho,alto},
+        descripcion:`Corte horizontal en Y=${Math.round(corteH.y)}mm` });
       const superior = piezasEnSeccion.filter(p => p.y + (p.alto || p.largo) <= corteH.y);
       const inferior = piezasEnSeccion.filter(p => p.y >= corteH.y);
       if (superior.length > 0) procesarSeccion(x, y,       ancho, corteH.y - y,          superior, nivel + 1);
       if (inferior.length > 0) procesarSeccion(x, corteH.y, ancho, (y + alto) - corteH.y, inferior, nivel + 1);
       return;
     }
-
-    // === PASO 4: Buscar corte vertical que divida columnas ===
     const corteV = encontrarCorteVertical(piezasEnSeccion, x, ancho);
     if (corteV) {
-      pushCorte({
-        tipo: 'vertical', x: corteV.x, y1: y, y2: y + alto,
-        origen: {x, y, ancho, alto},
-        descripcion: `Corte vertical en X=${Math.round(corteV.x)}mm`
-      });
+      pushCorte({ tipo:'vertical', x:corteV.x, y1:y, y2:y+alto, origen:{x,y,ancho,alto},
+        descripcion:`Corte vertical en X=${Math.round(corteV.x)}mm` });
       const izquierda = piezasEnSeccion.filter(p => p.x + p.ancho <= corteV.x);
       const derecha   = piezasEnSeccion.filter(p => p.x >= corteV.x);
       if (izquierda.length > 0) procesarSeccion(x,       y, corteV.x - x,          alto, izquierda, nivel + 1);
       if (derecha.length > 0)   procesarSeccion(corteV.x, y, (x + ancho) - corteV.x, alto, derecha,   nivel + 1);
-      return;
     }
   }
-
-  // Iniciar procesamiento
   procesarSeccion(0, 0, anchoTablero, altoTablero, piezas, 0);
-
-  console.log('Secuencia de cortes generada:', secuencia.map((c,i) =>
-    `${i+1}. ${c.tipo} ${c.tipo==='horizontal' ? 'y='+c.y : 'x='+c.x} — ${c.descripcion}`
-  ));
-
   return secuencia;
 }
 
 function encontrarCorteHorizontal(piezas, yBase, alto) {
-  // Solo cortar en Y donde NINGUNA pieza cruce el plano (corte guillotina válido)
   const EPS = 0.5;
-  // Usar solo los bordes inferiores de las piezas como candidatos
-  const bordesY = [...new Set(piezas.map(p => p.y + ((p.alto || p.largo) || 0)))];
-  const bordesOrdenados = bordesY.sort((a, b) => a - b);
-
-  for (const y of bordesOrdenados) {
+  const bordesY = [...new Set(piezas.map(p => p.y + ((p.alto || p.largo) || 0)))].sort((a, b) => a - b);
+  for (const y of bordesY) {
     if (y <= yBase + EPS || y >= yBase + alto - EPS) continue;
-
-    // Rechazar si cualquier pieza cruza esta línea
-    const cruzada = piezas.some(p => {
-      const py1 = p.y || 0;
-      const py2 = py1 + ((p.alto || p.largo) || 0);
-      return py1 < y - EPS && py2 > y + EPS;
-    });
-    if (cruzada) continue;
-
+    if (piezas.some(p => { const py1=p.y||0,py2=py1+((p.alto||p.largo)||0); return py1<y-EPS&&py2>y+EPS; })) continue;
     const superior = piezas.filter(p => (p.y + ((p.alto || p.largo) || 0)) <= y + EPS);
     const inferior = piezas.filter(p => (p.y || 0) >= y - EPS);
-
-    if (superior.length > 0 && inferior.length > 0) {
-      return {y, superior, inferior};
-    }
+    if (superior.length > 0 && inferior.length > 0) return {y, superior, inferior};
   }
-
   return null;
 }
 
 function encontrarCorteVertical(piezas, xBase, ancho) {
-  // Solo cortar en X donde NINGUNA pieza cruce el plano (corte guillotina válido)
   const EPS = 0.5;
-  // Usar solo los bordes derechos de las piezas como candidatos
-  const bordesX = [...new Set(piezas.map(p => (p.x || 0) + (p.ancho || 0)))];
-  const bordesOrdenados = bordesX.sort((a, b) => a - b);
-
-  for (const x of bordesOrdenados) {
+  const bordesX = [...new Set(piezas.map(p => (p.x || 0) + (p.ancho || 0)))].sort((a, b) => a - b);
+  for (const x of bordesX) {
     if (x <= xBase + EPS || x >= xBase + ancho - EPS) continue;
-
-    // Rechazar si cualquier pieza cruza esta línea
-    const cruzada = piezas.some(p => {
-      const px1 = p.x || 0;
-      const px2 = px1 + (p.ancho || 0);
-      return px1 < x - EPS && px2 > x + EPS;
-    });
-    if (cruzada) continue;
-
+    if (piezas.some(p => { const px1=p.x||0,px2=px1+(p.ancho||0); return px1<x-EPS&&px2>x+EPS; })) continue;
     const izquierda = piezas.filter(p => ((p.x || 0) + (p.ancho || 0)) <= x + EPS);
     const derecha   = piezas.filter(p => (p.x || 0)  >= x - EPS);
-
-    if (izquierda.length > 0 && derecha.length > 0) {
-      return {x, izquierda, derecha};
-    }
+    if (izquierda.length > 0 && derecha.length > 0) return {x, izquierda, derecha};
   }
-
   return null;
 }
 
-// ===== LAYOUT ENGINE =====
-// Calcula posiciones de render (renderX, renderY) para cada sección a partir de sus
-// coordenadas lógicas. Las secciones se organizan en filas y columnas únicas, y se
-// inserta un GAP visual entre ellas.
+// ===== LAYOUT ENGINE (ORIGINAL) =====
 function calcularLayout(secciones) {
   const GAP = 15;
-  // Obtener los valores únicos de minY (filas) y minX (columnas), ordenados
   const filasUnicas = [...new Set(secciones.map(s => s.y))].sort((a, b) => a - b);
   const colsUnicas  = [...new Set(secciones.map(s => s.x))].sort((a, b) => a - b);
-
-  // Para cada fila/columna calculamos el offset acumulado de gaps
-  // La sección en la fila i se desplaza i * GAP en Y (respecto a la posición lógica)
-  // La sección en la columna j se desplaza j * GAP en X
-  const gapPorFila = {};
-  filasUnicas.forEach((y, i) => { gapPorFila[y] = i * GAP; });
-  const gapPorCol  = {};
-  colsUnicas.forEach((x, j) => { gapPorCol[x]  = j * GAP; });
-
+  const gapPorFila = {}; filasUnicas.forEach((y, i) => { gapPorFila[y] = i * GAP; });
+  const gapPorCol  = {}; colsUnicas.forEach( (x, j) => { gapPorCol[x]  = j * GAP; });
   return secciones.map(sec => ({
     ...sec,
     renderX: PADDING + sec.x * SCALE + (gapPorCol[sec.x]  || 0),
@@ -479,22 +1080,14 @@ function calcularLayout(secciones) {
   }));
 }
 
-// ===== VISUALIZACIÓN =====
+// ===== VISUALIZACIÓN (ORIGINAL) =====
 function dibujarTablero() {
-  if (!tableroActual) {
-    console.warn('No hay tablero actual para dibujar');
-    return;
-  }
-  
-  const anchoTablero = tableroActual.ancho;
-  const altoTablero = tableroActual.alto || tableroActual.largo;
+  if (!tableroActual) return;
+  const anchoTablero = tableroActual.ancho_mm || tableroActual.ancho || 2440;
+  const altoTablero  = tableroActual.largo_mm || tableroActual.alto || tableroActual.largo || 1830;
   const piezas = tableroActual.piezas || [];
-  
-  // Calcular secciones separadas según cortes realizados
   const seccionesBase = calcularSecciones(piezas, cortes.slice(0, corteIndex));
   const secciones = calcularLayout(seccionesBase);
-  
-  // Calcular tamaño del canvas en función del layout real
   let maxRX = 0, maxRY = 0;
   secciones.forEach(sec => {
     maxRX = Math.max(maxRX, sec.renderX + sec.ancho * SCALE);
@@ -504,473 +1097,540 @@ function dibujarTablero() {
   const canvasHeight = maxRY + PADDING;
   canvas.width  = canvasWidth;
   canvas.height = canvasHeight;
-  
-  // Limpiar
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  
-  // Dibujar cada sección con su posición de render
-  secciones.forEach((seccion) => {
-    const secX = seccion.renderX;
-    const secY = seccion.renderY;
-    const secW = seccion.ancho * SCALE;
-    const secH = seccion.alto  * SCALE;
-    
-    if (seccion.piezas.length === 0) {
-      // Sobrante / desperdicio
-      ctx.fillStyle = 'rgba(158, 158, 158, 0.2)';
-      ctx.fillRect(secX, secY, secW, secH);
-      ctx.strokeStyle = '#9e9e9e';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([5, 5]);
-      ctx.strokeRect(secX, secY, secW, secH);
-      ctx.setLineDash([]);
-      
-      // Líneas en X dentro del sobrante
-      ctx.strokeStyle = '#d32f2f';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([10, 5]);
-      ctx.beginPath();
-      ctx.moveTo(secX, secY);
-      ctx.lineTo(secX + secW, secY + secH);
-      ctx.moveTo(secX + secW, secY);
-      ctx.lineTo(secX, secY + secH);
-      ctx.stroke();
-      ctx.setLineDash([]);
 
-      // Etiqueta de medidas debajo del rectángulo
-      ctx.fillStyle = '#555';
-      ctx.font = 'italic 11px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText(`${Math.round(seccion.ancho)}×${Math.round(seccion.alto)}mm`, secX + secW/2, secY + secH + 4);
+  secciones.forEach((seccion) => {
+    const secX = seccion.renderX, secY = seccion.renderY;
+    const secW = seccion.ancho * SCALE, secH = seccion.alto * SCALE;
+    if (seccion.piezas.length === 0) {
+      ctx.fillStyle = 'rgba(158,158,158,.2)'; ctx.fillRect(secX, secY, secW, secH);
+      ctx.strokeStyle = '#9e9e9e'; ctx.lineWidth = 1; ctx.setLineDash([5,5]);
+      ctx.strokeRect(secX, secY, secW, secH); ctx.setLineDash([]);
+      ctx.strokeStyle = '#d32f2f'; ctx.lineWidth = 2; ctx.setLineDash([10,5]);
+      ctx.beginPath(); ctx.moveTo(secX,secY); ctx.lineTo(secX+secW,secY+secH);
+      ctx.moveTo(secX+secW,secY); ctx.lineTo(secX,secY+secH); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#555'; ctx.font = 'italic 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(`${Math.round(seccion.ancho)}×${Math.round(seccion.alto)}mm`, secX+secW/2, secY+secH+4);
       return;
     }
-    
-    // Fondo según estado
-    if (seccion.activa) {
-      ctx.fillStyle = 'rgba(255, 243, 224, 0.2)';
-      ctx.fillRect(secX, secY, secW, secH);
-    } else if (seccion.cortada) {
-      ctx.fillStyle = 'rgba(227, 242, 253, 0.2)';
-      ctx.fillRect(secX, secY, secW, secH);
-    }
-    
-    // Borde de la sección
+    if (seccion.activa) { ctx.fillStyle = 'rgba(255,243,224,.2)'; ctx.fillRect(secX,secY,secW,secH); }
+    else if (seccion.cortada) { ctx.fillStyle = 'rgba(227,242,253,.2)'; ctx.fillRect(secX,secY,secW,secH); }
     ctx.strokeStyle = seccion.activa ? '#ff9800' : '#757575';
     ctx.lineWidth   = seccion.activa ? 3 : 1.5;
     ctx.strokeRect(secX, secY, secW, secH);
-    
-    // Piezas — clip al borde de la sección para evitar que una pieza
-    // que abarca varias filas/columnas se dibuje fuera de su sección actual
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(secX, secY, secW, secH);
-    ctx.clip();
-
+    ctx.save(); ctx.beginPath(); ctx.rect(secX, secY, secW, secH); ctx.clip();
     seccion.piezas.forEach((pieza, idx) => {
-      // Posición render de la pieza relativa al origen lógico de la sección
       const px = seccion.renderX + (pieza.x - seccion.x) * SCALE;
       const py = seccion.renderY + ((pieza.y !== undefined ? pieza.y : 0) - seccion.y) * SCALE;
-      // Dimensiones recortadas al área visible dentro de la sección
       const pw = Math.min((pieza.ancho || 0) * SCALE, secX + secW - px);
       const ph = Math.min(((pieza.alto || pieza.largo) || 0) * SCALE, secY + secH - py);
-      
       if (pw <= 0 || ph <= 0) return;
-      
-      ctx.fillStyle   = seccion.activa ? '#fff3e0' : '#e3f2fd';
+      const est = pieza.estado || 'pendiente';
+      // Color por estado
+      let fillColor, strokeColor, textColor;
+      if (est === 'cortada') {
+        fillColor = '#c8e6c9'; strokeColor = '#388e3c'; textColor = '#1b5e20';
+      } else if (est === 'en_corte') {
+        fillColor = '#fff3e0'; strokeColor = '#f57c00'; textColor = '#e65100';
+      } else if (est === 'descartada') {
+        fillColor = '#eeeeee'; strokeColor = '#9e9e9e'; textColor = '#757575';
+      } else if (seccion.activa) {
+        fillColor = '#fff3e0'; strokeColor = '#ff9800'; textColor = '#e65100';
+      } else {
+        fillColor = '#e3f2fd'; strokeColor = '#2196f3'; textColor = '#1565c0';
+      }
+      ctx.fillStyle = fillColor;
       ctx.fillRect(px, py, pw, ph);
-      
-      ctx.strokeStyle = seccion.activa ? '#ff9800' : '#2196f3';
-      ctx.lineWidth   = 2;
-      ctx.strokeRect(px, py, pw, ph);
-      
-      // Texto centrado en la parte visible de la pieza
-      const textX = px + pw / 2;
-      const textY = py + ph / 2;
-      ctx.fillStyle     = seccion.activa ? '#e65100' : '#1565c0';
-      ctx.font          = '12px Arial';
-      ctx.textAlign     = 'center';
-      ctx.textBaseline  = 'middle';
-      const nombre = pieza.nombre || `Pieza ${pieza.numero || idx + 1}`;
-      ctx.fillText(nombre, textX, textY);
-      
-      ctx.font      = '10px Arial';
-      ctx.fillStyle = '#666';
-      const dim = `${Math.round(pieza.ancho || 0)}×${Math.round((pieza.alto || pieza.largo) || 0)}`;
-      ctx.fillText(dim, textX, textY + 15);
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth   = 2; ctx.strokeRect(px, py, pw, ph);
+      // Tachado si descartada
+      if (est === 'descartada') {
+        ctx.strokeStyle = '#bdbdbd'; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
+        ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px+pw,py+ph); ctx.stroke(); ctx.setLineDash([]);
+      }
+      // Check verde si cortada
+      if (est === 'cortada' && pw > 20 && ph > 14) {
+        ctx.fillStyle = '#388e3c'; ctx.font = 'bold ' + Math.min(16, Math.round(ph*0.4)) + 'px Arial';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('✓', px + pw/2, py + ph/2 - (pw > 50 && ph > 28 ? 7 : 0));
+      }
+      const textX = px + pw/2, textY = py + ph/2;
+      ctx.fillStyle = textColor;
+      ctx.font = '12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if (est !== 'cortada') {
+        ctx.fillText(pieza.nombre || `Pieza ${pieza.numero || idx+1}`, textX, textY);
+        ctx.font = '10px Arial'; ctx.fillStyle = '#666';
+        ctx.fillText(`${Math.round(pieza.ancho||0)}×${Math.round((pieza.alto||pieza.largo)||0)}`, textX, textY+15);
+      } else if (pw > 50 && ph > 28) {
+        ctx.font = '10px Arial';
+        ctx.fillText(pieza.nombre || `Pieza ${pieza.numero || idx+1}`, textX, textY + 9);
+      }
     });
-
     ctx.restore();
   });
-  
-  // Dibujar corte actual (en rojo) en la sección correspondiente al origen del corte
+
   if (corteIndex < cortes.length && !cortes[corteIndex].esMargen) {
     const corteActual = cortes[corteIndex];
     const EPS = 0.5;
-    // Buscar la sección cuyas coordenadas coincidan con el origen del corte
     let seccionParaCorte = null;
     if (corteActual.origen) {
       const o = corteActual.origen;
       seccionParaCorte = secciones.find(s =>
-        Math.abs(s.x - o.x) < EPS &&
-        Math.abs(s.y - o.y) < EPS &&
-        Math.abs(s.ancho - o.ancho) < EPS &&
-        Math.abs(s.alto  - o.alto)  < EPS
-      );
+        Math.abs(s.x-o.x)<EPS && Math.abs(s.y-o.y)<EPS &&
+        Math.abs(s.ancho-o.ancho)<EPS && Math.abs(s.alto-o.alto)<EPS);
     }
-    // Fallback: usar la sección activa si no se encontró por origen
-    if (!seccionParaCorte) {
-      seccionParaCorte = secciones.find(s => s.activa);
-    }
-    if (seccionParaCorte) {
-      dibujarCorteActual(corteActual, '#f44336', 4, seccionParaCorte);
-    }
+    if (!seccionParaCorte) seccionParaCorte = secciones.find(s => s.activa);
+    if (seccionParaCorte) dibujarCorteActual(corteActual, '#f44336', 4, seccionParaCorte);
   }
-  
-  // Actualizar contador y barra de progreso
+
   document.getElementById('corteActual').textContent = corteIndex;
   const progreso = cortes.length > 0 ? Math.round((corteIndex / cortes.length) * 100) : 0;
   document.getElementById('progressBar').style.width   = progreso + '%';
   document.getElementById('progressBar').textContent   = progreso + '%';
-  
-  // Notificación de margen en el centro del canvas
+
   if (corteIndex < cortes.length && cortes[corteIndex].esMargen) {
-    const centerX = canvasWidth  / 2;
-    const centerY = canvasHeight / 2;
-    
-    ctx.fillStyle = 'rgba(255, 152, 0, 0.95)';
-    const drawRRect = (x, y, w, h, r) => {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.arcTo(x + w, y, x + w, y + r, r);
-      ctx.lineTo(x + w, y + h - r);
-      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-      ctx.lineTo(x + r, y + h);
-      ctx.arcTo(x, y + h, x, y + h - r, r);
-      ctx.lineTo(x, y + r);
-      ctx.arcTo(x, y, x + r, y, r);
-      ctx.closePath();
+    const centerX = canvasWidth/2, centerY = canvasHeight/2;
+    ctx.fillStyle = 'rgba(255,152,0,.95)';
+    const drawRR = (x,y,w,h,r) => {
+      ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+      ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
+      ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
     };
-    drawRRect(centerX - 150, centerY - 40, 300, 80, 10);
-    ctx.fill();
-    ctx.strokeStyle = '#f57c00';
-    ctx.lineWidth   = 2;
-    drawRRect(centerX - 150, centerY - 40, 300, 80, 10);
-    ctx.stroke();
-    
-    ctx.fillStyle    = '#fff';
-    ctx.font         = 'bold 14px Arial';
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('⚠️ PASO PREVIO', centerX, centerY - 15);
-    ctx.font = '12px Arial';
-    ctx.fillText('Cortar márgenes antes de continuar', centerX, centerY + 10);
+    drawRR(centerX-150,centerY-40,300,80,10); ctx.fill();
+    ctx.strokeStyle='#f57c00'; ctx.lineWidth=2; drawRR(centerX-150,centerY-40,300,80,10); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='bold 14px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('⚠️ PASO PREVIO', centerX, centerY-15);
+    ctx.font='12px Arial'; ctx.fillText('Cortar márgenes antes de continuar', centerX, centerY+10);
   }
 }
 
-// Calcular secciones del tablero según cortes realizados
+// ===== CALCULAR SECCIONES (ORIGINAL) =====
 function calcularSecciones(piezas, cortesRealizados) {
-  const GAP = 15; // Separación visual entre secciones
-  
+  const _tabW = tableroActual.ancho_mm || tableroActual.ancho || 2440;
+  const _tabH = tableroActual.largo_mm || tableroActual.alto || tableroActual.largo || 1830;
   if (cortesRealizados.length === 0) {
-    return [{
-      x: 0,
-      y: 0,
-      ancho: tableroActual.ancho,
-      alto:  tableroActual.alto || tableroActual.largo,
-      piezas: piezas,
-      activa:    true,
-      cortada:   false,
-      sobrante:  false,
-      terminada: false
-    }];
+    return [{x:0,y:0,ancho:_tabW,alto:_tabH,
+             piezas,activa:true,cortada:false,sobrante:false,terminada:false}];
   }
-  
-  // Aplicar cortes de forma secuencial, manteniendo el historial de qué secciones están terminadas
-  let secciones = [{
-    minX: 0,
-    minY: 0,
-    maxX: tableroActual.ancho,
-    maxY: tableroActual.alto || tableroActual.largo,
-    piezas: piezas,
-    terminada: false
-  }];
-  
-  cortesRealizados.forEach((corte, corteIdx) => {
-    // Saltar cortes de margen (no modifican la geometría, solo son instrucciones)
-    if (corte.esMargen) {
-      return;
-    }
-    
-    const nuevasSecciones = [];
-    const EPS = 0.5; // Tolerancia para comparaciones de coordenadas flotantes
-    
+  let secciones = [{minX:0,minY:0,maxX:_tabW,maxY:_tabH,piezas,terminada:false}];
+  cortesRealizados.forEach((corte) => {
+    if (corte.esMargen) return;
+    const nuevasSecciones = []; const EPS = 0.5;
     secciones.forEach((seccion) => {
-      if (seccion.terminada) {
-        nuevasSecciones.push(seccion);
-        return;
-      }
-      
-      let corteDividio = false;
-
-      // Verificar que este corte fue generado para esta sección concreta.
-      // Si el corte tiene origen definido, la sección debe coincidir
-      // (con tolerancia) para evitar aplicar cortes de sub-secciones hermanas.
+      if (seccion.terminada) { nuevasSecciones.push(seccion); return; }
       if (corte.origen) {
         const o = corte.origen;
-        const seccionCoincide =
-          Math.abs(seccion.minX - o.x)     < EPS &&
-          Math.abs(seccion.minY - o.y)     < EPS &&
-          Math.abs((seccion.maxX - seccion.minX) - o.ancho) < EPS &&
-          Math.abs((seccion.maxY - seccion.minY) - o.alto)  < EPS;
-        if (!seccionCoincide) {
-          nuevasSecciones.push(seccion);
-          return; // saltar, este corte no aplica aquí
+        const ok = Math.abs(seccion.minX-o.x)<EPS && Math.abs(seccion.minY-o.y)<EPS &&
+                   Math.abs((seccion.maxX-seccion.minX)-o.ancho)<EPS && Math.abs((seccion.maxY-seccion.minY)-o.alto)<EPS;
+        if (!ok) { nuevasSecciones.push(seccion); return; }
+      }
+      let corteDividio = false;
+      if (corte.tipo === 'horizontal' && corte.y > seccion.minY && corte.y < seccion.maxY) {
+        const pSup = seccion.piezas.filter(p => { const py=p.y||0,ph=(p.alto||p.largo)||0; return (py+ph)<=corte.y+EPS; });
+        const pInf = seccion.piezas.filter(p => { const py=p.y||0; return py>=corte.y-EPS; });
+        if (pSup.length > 0) {
+          corteDividio = true;
+          nuevasSecciones.push({minX:seccion.minX,minY:seccion.minY,maxX:seccion.maxX,maxY:corte.y,piezas:pSup,terminada:false});
+          nuevasSecciones.push({minX:seccion.minX,minY:corte.y,maxX:seccion.maxX,maxY:seccion.maxY,piezas:pInf,terminada:false});
+        }
+      } else if (corte.tipo === 'vertical' && corte.x > seccion.minX && corte.x < seccion.maxX) {
+        const pIzq = seccion.piezas.filter(p => { const px=p.x||0,pw=p.ancho||0; return (px+pw)<=corte.x+EPS; });
+        const pDer = seccion.piezas.filter(p => { const px=p.x||0; return px>=corte.x-EPS; });
+        if (pIzq.length > 0) {
+          corteDividio = true;
+          nuevasSecciones.push({minX:seccion.minX,minY:seccion.minY,maxX:corte.x,maxY:seccion.maxY,piezas:pIzq,terminada:false});
+          nuevasSecciones.push({minX:corte.x,minY:seccion.minY,maxX:seccion.maxX,maxY:seccion.maxY,piezas:pDer,terminada:false});
         }
       }
-
-      if (corte.tipo === 'horizontal') {
-        if (corte.y > seccion.minY && corte.y < seccion.maxY) {
-          const piezasSup = seccion.piezas.filter(p => {
-            const py = p.y || 0;
-            const pAlto = (p.alto || p.largo) || 0;
-            return (py + pAlto) <= corte.y + EPS;
-          });
-          const piezasInf = seccion.piezas.filter(p => {
-            const py = p.y || 0;
-            return py >= corte.y - EPS;
-          });
-          
-          if (piezasSup.length > 0) {
-            corteDividio = true;
-            nuevasSecciones.push({
-              minX: seccion.minX, minY: seccion.minY,
-              maxX: seccion.maxX, maxY: corte.y,
-              piezas: piezasSup,
-              terminada: false
-            });
-            nuevasSecciones.push({
-              minX: seccion.minX, minY: corte.y,
-              maxX: seccion.maxX, maxY: seccion.maxY,
-              piezas: piezasInf,
-              terminada: false
-            });
-          }
-        }
-      } else {
-        if (corte.x > seccion.minX && corte.x < seccion.maxX) {
-          const piezasIzq = seccion.piezas.filter(p => {
-            const px = p.x || 0;
-            const pAncho = p.ancho || 0;
-            return (px + pAncho) <= corte.x + EPS;
-          });
-          const piezasDer = seccion.piezas.filter(p => {
-            const px = p.x || 0;
-            return px >= corte.x - EPS;
-          });
-          
-          if (piezasIzq.length > 0) {
-            corteDividio = true;
-            nuevasSecciones.push({
-              minX: seccion.minX, minY: seccion.minY,
-              maxX: corte.x,      maxY: seccion.maxY,
-              piezas: piezasIzq,
-              terminada: false
-            });
-            nuevasSecciones.push({
-              minX: corte.x,      minY: seccion.minY,
-              maxX: seccion.maxX, maxY: seccion.maxY,
-              piezas: piezasDer,
-              terminada: false
-            });
-          }
-        }
-      }
-      
-      if (!corteDividio) {
-        nuevasSecciones.push(seccion);
-      }
+      if (!corteDividio) nuevasSecciones.push(seccion);
     });
-    
     secciones = nuevasSecciones;
   });
-  
-  // Convertir a formato de salida y marcar la primera sección no terminada como activa
   let activaMarcada = false;
   return secciones.map((sec) => {
     const esSobrante = sec.piezas.length === 0;
-    // Una sección está terminada si: fue explícitamente marcada, o tiene 0 ó 1 piezas
-    // (1 pieza = ya no hay más cortes de guillotina necesarios para separar piezas)
     const esTerminada = sec.terminada || sec.piezas.length <= 1;
     const esActiva = !activaMarcada && !esTerminada && !esSobrante;
     if (esActiva) activaMarcada = true;
-
-    return {
-      x: sec.minX,
-      y: sec.minY,
-      ancho: sec.maxX - sec.minX,
-      alto:  sec.maxY - sec.minY,
-      piezas: sec.piezas,
-      activa:    esActiva && corteIndex < cortes.length,
-      cortada:   esTerminada && !esSobrante,
-      sobrante:  esSobrante,
-      terminada: esTerminada
-    };
+    return {x:sec.minX,y:sec.minY,ancho:sec.maxX-sec.minX,alto:sec.maxY-sec.minY,piezas:sec.piezas,
+      activa:esActiva&&corteIndex<cortes.length,cortada:esTerminada&&!esSobrante,sobrante:esSobrante,terminada:esTerminada};
   });
 }
 
+// ===== DIBUJAR CORTE (ORIGINAL) =====
 function dibujarCorteActual(corte, color, lineWidth, seccionActiva) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.setLineDash([5, 5]);
-  
-  // Base de render de la sección activa
+  ctx.strokeStyle = color; ctx.lineWidth = lineWidth; ctx.setLineDash([5,5]);
   const baseX = seccionActiva ? seccionActiva.renderX : PADDING;
   const baseY = seccionActiva ? seccionActiva.renderY : PADDING;
   const secAncho = seccionActiva ? seccionActiva.ancho * SCALE : 0;
   const secAlto  = seccionActiva ? seccionActiva.alto  * SCALE : 0;
-  // Origen lógico de la sección
   const logX = seccionActiva ? seccionActiva.x : 0;
   const logY = seccionActiva ? seccionActiva.y : 0;
-  
   if (corte.tipo === 'horizontal') {
-    // Línea horizontal dentro de los límites horizontales de la sección
-    const x1 = baseX;
-    const x2 = baseX + secAncho;
-    const y  = baseY + (corte.y - logY) * SCALE;
-    
-    ctx.beginPath();
-    ctx.moveTo(x1, y);
-    ctx.lineTo(x2, y);
-    ctx.stroke();
-    
-    ctx.setLineDash([]);
+    const x1=baseX, x2=baseX+secAncho, y=baseY+(corte.y-logY)*SCALE;
+    ctx.beginPath(); ctx.moveTo(x1,y); ctx.lineTo(x2,y); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = color;
-    dibujarFlecha(ctx, x1 + 10, y, -10, 0);
-    dibujarFlecha(ctx, x2 - 10, y, 10, 0);
+    dibujarFlecha(ctx, x1+10, y, -10, 0); dibujarFlecha(ctx, x2-10, y, 10, 0);
   } else {
-    // Línea vertical dentro de los límites verticales de la sección
-    const x  = baseX + (corte.x - logX) * SCALE;
-    const y1 = baseY;
-    const y2 = baseY + secAlto;
-    
-    ctx.beginPath();
-    ctx.moveTo(x, y1);
-    ctx.lineTo(x, y2);
-    ctx.stroke();
-    
-    ctx.setLineDash([]);
+    const x=baseX+(corte.x-logX)*SCALE, y1=baseY, y2=baseY+secAlto;
+    ctx.beginPath(); ctx.moveTo(x,y1); ctx.lineTo(x,y2); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = color;
-    dibujarFlecha(ctx, x, y1 + 10, 0, -10);
-    dibujarFlecha(ctx, x, y2 - 10, 0,  10);
+    dibujarFlecha(ctx, x, y1+10, 0, -10); dibujarFlecha(ctx, x, y2-10, 0, 10);
   }
-  
   ctx.setLineDash([]);
 }
 
 function dibujarFlecha(ctx, x, y, dx, dy) {
   const tam = 8;
-  ctx.save();
-  ctx.translate(x + dx, y + dy);
-  
+  ctx.save(); ctx.translate(x+dx, y+dy);
   if (dx !== 0) {
     const dir = dx > 0 ? 1 : -1;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-dir * tam, -tam/2);
-    ctx.lineTo(-dir * tam, tam/2);
-    ctx.closePath();
-    ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-dir*tam,-tam/2); ctx.lineTo(-dir*tam,tam/2); ctx.closePath(); ctx.fill();
   } else {
     const dir = dy > 0 ? 1 : -1;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-tam/2, -dir * tam);
-    ctx.lineTo(tam/2, -dir * tam);
-    ctx.closePath();
-    ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-tam/2,-dir*tam); ctx.lineTo(tam/2,-dir*tam); ctx.closePath(); ctx.fill();
   }
-  
   ctx.restore();
 }
 
-// ===== NAVEGACIÓN =====
-function siguienteCorte() {
-  if (corteIndex < cortes.length) {
-    corteIndex++;
+// ===== DETECCIÓN Y CORRECCIÓN DE PIEZAS FANTASMA =====
+// Detecta piezas que deberían estar cortadas (están solas en su sección con corteIndex actual)
+// pero en la DB siguen como 'pendiente' por haber salido del proyecto sin guardar.
+function _detectarPiezasFantasma() {
+  if (!tableroActual) return [];
+  const secciones = calcularSecciones(tableroActual.piezas || [], cortes.slice(0, corteIndex));
+  const fantasmas = [];
+  secciones.forEach(sec => {
+    if (sec.piezas.length === 1) {
+      const p = sec.piezas[0];
+      // Es fantasma si la sección la tiene sola (ya está aislada por cortes)
+      // pero su estado sigue siendo pendiente o en_corte
+      if (p.estado !== 'cortada' && p.estado !== 'descartada') {
+        fantasmas.push(p);
+      }
+    }
+  });
+  return fantasmas;
+}
+
+// Muestra el banner de sincronización si hay piezas fantasma en el tablero actual
+function _mostrarBannerSiHayFantasmas() {
+  const fantasmas = _detectarPiezasFantasma();
+  if (!fantasmas.length) return;
+  const lista = document.getElementById('cgSyncListaPiezas');
+  if (lista) {
+    lista.innerHTML = fantasmas.map(p =>
+      `<li>📌 ${p.nombre || p.pieza_id} — ${p.ancho}×${p.largo||p.alto} mm</li>`
+    ).join('');
+  }
+  const banner = document.getElementById('cgSyncBanner');
+  if (banner) banner.style.display = 'flex';
+}
+
+// Handler del botón Actualizar del banner
+document.addEventListener('DOMContentLoaded', () => {
+  const btnSync = document.getElementById('cgSyncBtnActualizar');
+  if (!btnSync) return;
+  btnSync.addEventListener('click', () => {
+    const fantasmas = _detectarPiezasFantasma();
+    if (!fantasmas.length) {
+      const banner = document.getElementById('cgSyncBanner');
+      if (banner) banner.style.display = 'none';
+      return;
+    }
+    // Marcar en memoria y lanzar guardados en background (fire-and-forget)
+    fantasmas.forEach(p => { p.estado = 'cortada'; patchPieza(p.pieza_id, 'cortada'); });
+    // Actualizar UI inmediatamente sin esperar red
     dibujarTablero();
-    
-    if (corteIndex >= cortes.length) {
-      // Completado
-      document.getElementById('btnSiguiente').disabled = true;
-      mostrarModalCompletado();
-    }
-  }
+    _sincronizarEstados();
+    _refreshTableroDD(_apiMateriales, _apiMatIdx);
+    _refreshMaterialDD(_apiMateriales);
+    _updateAcciones();
+    // Ocultar banner
+    const banner = document.getElementById('cgSyncBanner');
+    if (banner) banner.style.display = 'none';
+    showToast(`✅ ${fantasmas.length} pieza${fantasmas.length>1?'s':''} actualizada${fantasmas.length>1?'s':''}`, 'success');
+  });
+});
+
+// ===== GUARDAR POSICIÓN =====
+function _guardarPosicion() {
+  if (tableroActualMatIdx === null || tableroActualTabIdx === null) return;
+  const key = `cg_pos_${proyectoId}_${tableroActualMatIdx}_${tableroActualTabIdx}`;
+  localStorage.setItem(key, corteIndex);
+  // Guardar también qué tablero está activo para restaurar al recargar
+  localStorage.setItem(`cg_lastMat_${proyectoId}`, tableroActualMatIdx);
+  localStorage.setItem(`cg_lastTab_${proyectoId}`, tableroActualTabIdx);
 }
 
-function reiniciarTablero() {
-  corteIndex = 0;
-  document.getElementById('btnSiguiente').disabled = false;
+// ===== MARCAR PIEZAS SUELTAS COMO CORTADAS =====
+// Parte síncrona: actualiza p.estado en memoria, retorna piezas marcadas
+function _marcarPiezasSueltasSync() {
+  if (!tableroActual) return [];
+  const seccionesActuales = calcularSecciones(tableroActual.piezas || [], cortes.slice(0, corteIndex));
+  const marcadas = [];
+  seccionesActuales.forEach(sec => {
+    if (sec.piezas.length === 1) {
+      const p = sec.piezas[0];
+      if (p.estado !== 'cortada' && p.estado !== 'descartada') {
+        p.estado = 'cortada';
+        marcadas.push(p);
+      }
+    }
+  });
+  return marcadas;
+}
+// Parte asíncrona: guarda en API y actualiza UI
+async function _marcarPiezasSueltas() {
+  const marcadas = _marcarPiezasSueltasSync();
+  if (!marcadas.length) return;
+  marcadas.forEach(p => maybeImprimir(p));
+  _sincronizarEstados();
+  _refreshTableroDD(_apiMateriales, _apiMatIdx);
+  _refreshMaterialDD(_apiMateriales);
+  _updateAcciones();
+  // Fire-and-forget: no bloquear, la cola gestiona el guardado
+  for (const p of marcadas) patchPieza(p.pieza_id, 'cortada');
+}
+
+// ===== NAVEGACIÓN (ORIGINAL) =====
+let _siguienteCorteEnProceso = false;
+async function siguienteCorte() {
+  if (_siguienteCorteEnProceso) return;
+  if (corteIndex >= cortes.length) return;
+
+  _siguienteCorteEnProceso = true;
+  corteIndex++;
+  _guardarPosicion();
+
+  // 1. Marcar piezas sueltas en memoria y dibujar AL INSTANTE (no hay await aquí)
+  const marcadas = _marcarPiezasSueltasSync();
   dibujarTablero();
-}
 
-async function mostrarModalCompletado() {
-  // Guardar progreso: marcar todas las piezas del tablero actual como cortadas
-  let todosCompletos = false;
-  let tablerosCompletos = 0;
-  let totalTableros = 0;
-  try {
-    const r = await fetch(`/api/operador/proyectos/${proyectoId}/tablero-completado`, {
-      method: 'POST', credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
-      body: JSON.stringify({mat_idx: tableroActualMatIdx, tab_idx: tableroActualTabIdx})
-    });
-    const jr = await r.json().catch(() => ({}));
-    if (jr.success) {
-      todosCompletos = jr.todos_tableros_completos;
-      tablerosCompletos = jr.tableros_completos;
-      totalTableros = jr.total_tableros;
-    }
-  } catch(e) {
-    console.error('Error guardando progreso del tablero:', e);
+  if (marcadas.length) {
+    marcadas.forEach(p => maybeImprimir(p));
+    _sincronizarEstados();
+    _refreshTableroDD(_apiMateriales, _apiMatIdx);
+    _refreshMaterialDD(_apiMateriales);
+    _updateAcciones();
+    // Lanzar en BACKGROUND — no bloquea el botón
+    for (const p of marcadas) patchPieza(p.pieza_id, 'cortada');
   }
 
-  // Actualizar contenido del modal según si hay más tableros o no
-  const bodyEl = document.getElementById('modalCompletadoBody');
+  _updateAcciones();
+  _siguienteCorteEnProceso = false;
+
+  if (corteIndex >= cortes.length) {
+    // Mostrar modal INMEDIATAMENTE — los patchPieza en vuelo
+    // terminan en background mientras el usuario lee el modal.
+    mostrarModalCompletado();
+  }
+}
+
+// ===== ANULAR CORTE (reemplaza reiniciarTablero) =====
+function anularCorte() {
+  if (!tableroActual || corteIndex <= 0) return;
+
+  // Calcular qué piezas quedaron solas al aplicar el corte actual (el que vamos a deshacer)
+  const seccionesAntes   = calcularSecciones(tableroActual.piezas || [], cortes.slice(0, corteIndex - 1));
+  const seccionesDespues = calcularSecciones(tableroActual.piezas || [], cortes.slice(0, corteIndex));
+
+  // Piezas que estaban acompañadas antes y quedaron solas después → fueron marcadas cortadas por este corte
+  const piezasARevertir = [];
+  seccionesDespues.forEach(secD => {
+    if (secD.piezas.length === 1) {
+      const p = secD.piezas[0];
+      if (p.estado === 'cortada') {
+        // Verificar que antes NO estaba sola
+        const secA = seccionesAntes.find(s => s.piezas.some(x => x.pieza_id === p.pieza_id));
+        if (!secA || secA.piezas.length > 1) piezasARevertir.push(p);
+      }
+    }
+  });
+
+  corteIndex--;
+  _guardarPosicion();
+
+  // Revertir piezas a pendiente en memoria y guardar en BD (fire-and-forget)
+  piezasARevertir.forEach(p => {
+    p.estado = 'pendiente';
+    patchPieza(p.pieza_id, 'pendiente');
+  });
+
+  dibujarTablero();
+  _sincronizarEstados();
+  _refreshTableroDD(_apiMateriales, _apiMatIdx);
+  _refreshMaterialDD(_apiMateriales);
+  _updateAcciones();
+}
+
+// ===== HELPER: info del siguiente tablero =====
+function _getNextTableroInfo() {
+  let globalIdx = 0;
+  let totalPiezasProyecto = 0;
+  let yaCorladasProyecto = 0;
+  let nextTab = null, nextMi = null, nextTi = null;
+  let nextPiezasDesde = 0, nextPiezasHasta = 0;
+  let nextMatNombre = '';
+  let nextTabNumTotal = 0;   // número ordinal del siguiente tablero entre TODOS los tableros activos
+  let tabOrdinalGlobal = 0;  // contador global de tableros activos
+
+  // Info tablero actual
+  let currPiezasCortadas = 0, currPiezasTotal = 0;
+  let currPiezasDesde = 0, currPiezasHasta = 0;
+
+  for (let mi = 0; mi < _apiMateriales.length; mi++) {
+    const tableros = _apiMateriales[mi].tableros || [];
+    for (let ti = 0; ti < tableros.length; ti++) {
+      const piezas = (tableros[ti].piezas || []).filter(p => p.estado !== 'descartada');
+      if (!piezas.length) continue;
+      tabOrdinalGlobal++;
+      const desde = globalIdx + 1;
+      const hasta = globalIdx + piezas.length;
+      totalPiezasProyecto += piezas.length;
+      const cortadas = piezas.filter(p => p.estado === 'cortada').length;
+      yaCorladasProyecto += cortadas;
+      globalIdx += piezas.length;
+
+      const esCurrent = (mi === tableroActualMatIdx && ti === tableroActualTabIdx);
+      if (esCurrent) {
+        currPiezasCortadas = cortadas;
+        currPiezasTotal    = piezas.length;
+        currPiezasDesde    = desde;
+        currPiezasHasta    = hasta;
+      }
+
+      // Primer tablero sin completar que NO sea el actual
+      if (nextTab === null && !esCurrent && cortadas < piezas.length) {
+        nextTab         = tableros[ti];
+        nextMi          = mi;
+        nextTi          = ti;
+        nextPiezasDesde = desde;
+        nextPiezasHasta = hasta;
+        nextMatNombre   = _apiMateriales[mi].nombre || '';
+        nextTabNumTotal = tabOrdinalGlobal;
+      }
+    }
+  }
+
+  // Etiqueta legible del siguiente tablero: "Melamina Blanca (12/30)"
+  let nextLabel = null;
+  if (nextTab) {
+    const tabName = nextTab.nombre || nextTab.codigo || `Tablero ${nextTi + 1}`;
+    const matPart = nextMatNombre ? `${nextMatNombre} — ` : '';
+    nextLabel = `${matPart}${tabName} (${nextTabNumTotal}/${tabOrdinalGlobal})`;
+  }
+
+  return {
+    nextTab, nextMi, nextTi, nextLabel,
+    nextPiezasDesde, nextPiezasHasta,
+    totalPiezasProyecto, yaCorladasProyecto,
+    currPiezasCortadas, currPiezasTotal,
+    currPiezasDesde, currPiezasHasta
+  };
+}
+
+// ===== MODAL COMPLETADO — muestra INMEDIATO, guarda en background =====
+function mostrarModalCompletado() {
+  const bodyEl   = document.getElementById('modalCompletadoBody');
   const footerEl = document.getElementById('modalCompletadoFooter');
 
-  if (todosCompletos) {
-    bodyEl.innerHTML = `
-      <i class="ri-award-fill text-success" style="font-size:64px"></i>
-      <h4 class="mt-3">¡Proyecto listo para completar!</h4>
-      <p class="text-muted">Todos los tableros han sido cortados (${tablerosCompletos}/${totalTableros}).<br>Puedes marcar el proyecto como <strong>Completado</strong>.</p>`;
-    footerEl.innerHTML = `
-      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-      <button type="button" class="btn btn-success fw-bold" id="btnCompletarProyecto">
-        <i class="ri-checkbox-circle-line"></i> Completar Proyecto
-      </button>`;
-    // Handler completar proyecto
-    setTimeout(() => {
-      const btn = document.getElementById('btnCompletarProyecto');
-      if (btn) btn.addEventListener('click', completarProyecto);
-    }, 100);
-  } else {
-    bodyEl.innerHTML = `
-      <i class="ri-checkbox-circle-fill text-success" style="font-size:64px"></i>
-      <h4 class="mt-3">¡Tablero completado!</h4>
-      <p class="text-muted">El avance ha sido guardado.<br>
-        ${totalTableros > 1 ? `Tableros completados: <strong>${tablerosCompletos} de ${totalTableros}</strong>.` : ''}
-      </p>`;
-    footerEl.innerHTML = `
-      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-      <button type="button" class="btn btn-primary" onclick="seleccionarOtroTablero()">
-        <i class="ri-scissors-cut-line"></i> Siguiente Tablero
-      </button>`;
-  }
+  // 1) Calcular info AHORA (sin esperar red)
+  const info = _getNextTableroInfo();
 
-  const modal = new bootstrap.Modal(document.getElementById('modalCompletado'));
+  // 2) Construir cuerpo del modal
+  const nextCant = info.nextTab ? (info.nextPiezasHasta - info.nextPiezasDesde + 1) : 0;
+
+  bodyEl.innerHTML = `
+    <i class="ri-checkbox-circle-fill text-success" style="font-size:56px"></i>
+    <h4 class="mt-2 mb-1">¡Tablero completado!</h4>
+
+    ${ info.nextLabel ? `
+    <p class="text-muted mb-1" style="font-size:13px;">Instale el siguiente tablero:</p>
+    <h5 class="fw-bold mb-3">"${info.nextLabel}"</h5>
+    ` : `<p class="text-muted mb-3" style="font-size:13px;">No hay más tableros pendientes.</p>` }
+
+    <div class="alert alert-info py-2 px-3 mb-3 text-start" style="font-size:13px;">
+      <div class="d-flex justify-content-between mb-1">
+        <span>✅ Piezas cortadas en este tablero</span>
+        <strong>${info.currPiezasTotal} (${info.currPiezasDesde} al ${info.currPiezasHasta})</strong>
+      </div>
+      ${ info.nextTab ? `
+      <div class="d-flex justify-content-between mb-1">
+        <span>📋 Piezas del siguiente tablero</span>
+        <strong>${nextCant} (${info.nextPiezasDesde} al ${info.nextPiezasHasta})</strong>
+      </div>` : '' }
+      <hr class="my-1">
+      <div class="d-flex justify-content-between">
+        <span>🔢 Total global completadas</span>
+        <strong>${info.yaCorladasProyecto} de ${info.totalPiezasProyecto}</strong>
+      </div>
+    </div>
+
+    <div id="modalSaveBadgeWrap" class="mb-1">
+      <span id="modalSaveSpinner"
+            style="display:inline-flex;align-items:center;gap:6px;font-size:15px;font-weight:600;color:#856404;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:8px 18px;">
+        <span class="spinner-border spinner-border-sm" style="width:.9rem;height:.9rem;"></span>
+        Guardando datos…
+      </span>
+    </div>`;
+
+  footerEl.innerHTML = `
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+    <button type="button" class="btn btn-primary" id="btnModalSiguienteTablero" disabled onclick="seleccionarOtroTablero()">
+      <i class="ri-arrow-right-line"></i> Siguiente Tablero
+    </button>`;
+
+  const modal = new bootstrap.Modal(document.getElementById('modalCompletado'), { backdrop: 'static', keyboard: false });
   modal.show();
+
+  // Habilitar el botón en cuanto la cola de guardado quede vacía
+  function _pollSaveDone() {
+    if (_saveInFlight === 0 && _saveQueue.size === 0) {
+      const badge = document.getElementById('modalSaveSpinner');
+      if (badge) badge.outerHTML = `<span
+        style="display:inline-flex;align-items:center;gap:6px;font-size:15px;font-weight:600;color:#155724;background:#d4edda;border:1px solid #28a745;border-radius:8px;padding:8px 18px;">
+        <i class="ri-check-double-line" style="font-size:18px;"></i> Datos guardados
+      </span>`;
+      const btnNext = document.getElementById('btnModalSiguienteTablero');
+      if (btnNext) btnNext.disabled = false;
+    } else {
+      setTimeout(_pollSaveDone, 150);
+    }
+  }
+  _pollSaveDone();
+
+  // 3) Llamada API en BACKGROUND (detecta proyecto completo)
+  fetch(`/api/operador/proyectos/${proyectoId}/tablero-completado`, {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
+    body: JSON.stringify({mat_idx:tableroActualMatIdx, tab_idx:tableroActualTabIdx})
+  }).then(r => r.json().catch(()=>({}))).then(jr => {
+    if (tableroActual) {
+      (tableroActual.piezas||[]).forEach(p => { if (p.estado !== 'descartada') p.estado = 'cortada'; });
+    }
+    _refreshTableroDD(_apiMateriales, _apiMatIdx);
+    _refreshMaterialDD(_apiMateriales);
+    _updateAcciones();
+
+    if (jr.success && jr.todos_tableros_completos) {
+      const tc = jr.tableros_completos || 0, tt = jr.total_tableros || 0;
+      bodyEl.innerHTML = `
+        <i class="ri-award-fill text-success" style="font-size:64px"></i>
+        <h4 class="mt-3">¡Proyecto listo para completar!</h4>
+        <p class="text-muted">Todos los tableros han sido cortados (${tc}/${tt}).<br>
+          Puedes marcar el proyecto como <strong>Completado</strong>.</p>`;
+      footerEl.innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-success fw-bold" id="btnCompletarProyecto">
+          <i class="ri-checkbox-circle-line"></i> Completar Proyecto
+        </button>`;
+      setTimeout(() => {
+        const btn = document.getElementById('btnCompletarProyecto');
+        if (btn) btn.addEventListener('click', completarProyecto);
+      }, 50);
+    }
+  }).catch(e => console.error('Error guardando tablero-completado:', e));
 }
 
 async function completarProyecto() {
@@ -978,23 +1638,20 @@ async function completarProyecto() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando…'; }
   try {
     const r = await fetch(`/api/operador/proyectos/${proyectoId}/completar`, {
-      method: 'POST', credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()}
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()}
     });
-    const jr = await r.json().catch(() => ({}));
+    const jr = await r.json().catch(()=>({}));
     if (r.ok && jr.success) {
       const modalEl = bootstrap.Modal.getInstance(document.getElementById('modalCompletado'));
       if (modalEl) modalEl.hide();
-      // Si hay enchapado pendiente, informar al operador antes de redirigir
       if (jr.enchapado_pendiente) {
-        const bodyEl = document.getElementById('modalCompletadoBody');
-        const footerEl = document.getElementById('modalCompletadoFooter');
-        bodyEl.innerHTML = `
+        document.getElementById('modalCompletadoBody').innerHTML = `
           <i class="ri-scissors-2-line text-warning" style="font-size:64px"></i>
           <h4 class="mt-3">¡Corte completado!</h4>
           <p class="text-muted">El proyecto pasa ahora a <strong>Enchapado Pendiente</strong>.<br>
           Será gestionado por el equipo de enchapado.</p>`;
-        footerEl.innerHTML = `
+        document.getElementById('modalCompletadoFooter').innerHTML = `
           <button type="button" class="btn btn-primary" onclick="window.location.href='{% url 'operador_home' %}'">
             <i class="ri-home-line"></i> Volver al inicio
           </button>`;
@@ -1016,29 +1673,24 @@ async function completarProyecto() {
 function seleccionarOtroTablero() {
   const modal = bootstrap.Modal.getInstance(document.getElementById('modalCompletado'));
   if (modal) modal.hide();
-
-  // Recargar el select para reflejar el checkmark del tablero recién completado
-  cargarTableros();
-
-  // Buscar el siguiente tablero que NO esté completado
-  const select = document.getElementById('tableroSelect');
-  let siguienteOption = null;
-  for (const opt of select.options) {
-    if (!opt.value) continue; // saltar el placeholder
-    if (opt.dataset.completado !== '1') {
-      siguienteOption = opt;
-      break;
+  // Buscar siguiente tablero no completado en _apiMateriales (fuente de verdad)
+  for (let mi = 0; mi < _apiMateriales.length; mi++) {
+    const tableros = _apiMateriales[mi].tableros || [];
+    for (let ti = 0; ti < tableros.length; ti++) {
+      const piezas = tableros[ti].piezas || [];
+      if (!piezas.length) continue;
+      if (!piezas.filter(p => p.estado !== 'descartada').every(p => p.estado === 'cortada')) {
+        _apiMatIdx = mi;
+        _refreshMaterialDD(_apiMateriales);
+        _refreshTableroDD(_apiMateriales, mi);
+        _seleccionarTableroDesdeDD(_apiMateriales, mi, ti);
+        return;
+      }
     }
-  }
-
-  if (siguienteOption) {
-    select.value = siguienteOption.value;
-    cargarTablero(siguienteOption.value);
-  } else {
-    // Todos completados, enfocar el select
-    select.value = '';
-    select.focus();
   }
 }
 </script>
-{% endblock %}
+
+{% include "partials/scripts.html" %}
+</body>
+</html>

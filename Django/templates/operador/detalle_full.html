@@ -8,12 +8,12 @@
     html, body { height: 100%; }
     body { overflow: hidden; }
     .op-wrapper { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 360px; grid-template-rows: auto 1fr; grid-template-areas: 'toolbar toolbar' 'canvas sidebar'; }
-    .op-toolbar { grid-area: toolbar; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff; border-bottom: 1px solid #eee; }
-    .op-canvas { grid-area: canvas; position: relative; background: #fafafa; }
+    .op-toolbar { grid-area: toolbar; display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #fff; border-bottom: 1px solid #eee; flex-wrap: nowrap; min-width: 0; }
+    .op-canvas { grid-area: canvas; position: relative; background: #fafafa; overflow: hidden; min-width: 0; }
   .op-sidebar { grid-area: sidebar; display: flex; flex-direction: column; border-left: 1px solid #eee; background: #fff; min-height: 0; overflow: hidden; }
   .op-stats { padding: 10px 12px; border-bottom: 1px solid #eee; }
   .op-list { padding: 0 12px 12px 12px; overflow: auto; flex: 1 1 auto; min-height: 0; }
-    .op-btn { border: 1px solid #ddd; background: #fff; border-radius: 6px; padding: 6px 10px; }
+    .op-btn { border: 1px solid #ddd; background: #fff; border-radius: 6px; padding: 3px 8px; font-size: 13px; }
     .op-btn:active { transform: translateY(1px); }
     .chip { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; margin-right:6px; background:#f1f3f5; }
     .piece-highlight rect { filter: drop-shadow(0 0 0.5px rgba(0,0,0,.4)); stroke-width: 2; }
@@ -37,41 +37,136 @@
   .op-canvas-nav .op-toast { position:absolute; left:50%; top:12px; transform:translateX(-50%); background: rgba(0,0,0,.72); color:#fff; padding:6px 10px; border-radius:8px; font-weight:600; opacity:0; transition: opacity .2s ease; pointer-events:none; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
   .piece-modal .ftr { display:flex; justify-content:flex-end; gap:8px; padding: 10px 14px; border-top:1px solid #eee; background:#fff; }
     /* Ocultar/mostrar sidebar */
-    .op-wrapper.sidebar-hidden { grid-template-columns: 1fr 0; }
+    .op-wrapper.sidebar-hidden { grid-template-columns: 1fr; grid-template-areas: 'toolbar' 'canvas'; }
     .op-wrapper.sidebar-hidden .op-sidebar { display: none; }
     /* Transición suave de color en piezas para sensación de fluidez */
     g[data-pieza] rect { transition: fill .15s ease, fill-opacity .15s ease; }
+    /* Toast de notificación superior */
+    #opToast { position:fixed; top:52px; left:50%; transform:translateX(-50%) translateY(-16px); background:#323232; color:#fff; padding:9px 18px; border-radius:8px; font-size:14px; font-weight:500; box-shadow:0 4px 14px rgba(0,0,0,.28); z-index:9999; opacity:0; transition: opacity .22s ease, transform .22s ease; pointer-events:none; white-space:nowrap; }
+    #opToast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    #opToast.success { background:#198754; }
+    #opToast.info { background:#0d6efd; }
+    /* Modal de confirmación personalizado */
+    .op-confirm-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:9990; }
+    .op-confirm-box { background:#fff; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.22); padding:24px 28px; min-width:300px; max-width:420px; text-align:center; }
+    .op-confirm-box h5 { margin:0 0 8px; font-size:17px; font-weight:700; }
+    .op-confirm-box p { margin:0 0 20px; color:#555; font-size:14px; }
+    .op-confirm-box .op-confirm-btns { display:flex; gap:10px; justify-content:center; }
+    /* Modal de siguiente tablero */
+    .op-next-board-modal { background:#fff; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.22); padding:22px 28px; min-width:300px; max-width:440px; text-align:center; }
+    .op-next-board-modal h5 { margin:0 0 6px; font-size:16px; font-weight:700; color:#198754; }
+    .op-next-board-modal .board-info { background:#f8f9fa; border-radius:8px; padding:10px 14px; margin:12px 0; font-size:14px; }
+    .op-next-board-modal .board-info strong { display:block; font-size:15px; margin-bottom:4px; }
+    /* Botón Completar dorado: solo aura externa, sin fondo */
+    #btnCompletar.golden { background:#fff; border-color:#cc8800; color:#5a3200; font-weight:700; animation:goldPulse 1.4s ease-in-out infinite; }
+    @keyframes goldPulse { 0%,100%{ box-shadow:0 0 0 3px rgba(255,200,0,.5),0 2px 8px rgba(255,160,0,.35); } 50%{ box-shadow:0 0 0 7px rgba(255,200,0,.25),0 4px 18px rgba(255,160,0,.6); } }
+    /* Botón Pausar proyecto */
+    #btnPausar { border-color:#c0392b; color:#c0392b; }
+    #btnPausar:hover { background:#c0392b; color:#fff; }
+    #btnPausar ._spin, #btnContinuar ._spin {
+      display:inline-block; width:12px; height:12px; border:2px solid currentColor;
+      border-top-color:transparent; border-radius:50%; animation:_spinAnim .7s linear infinite;
+      vertical-align:middle; margin-right:4px;
+    }
+    @keyframes _spinAnim { to { transform: rotate(360deg); } }
+    /* Botón Continuar proyecto (cuando está pausado) */
+    #btnContinuar { border-color:#198754; color:#198754; font-weight:600; }
+    #btnContinuar:hover { background:#198754; color:#fff; }
+    /* Overlay de proyecto pausado */
+    #pausadoOverlay { position:absolute; inset:0; background:rgba(180,0,0,.08); z-index:500; pointer-events:none; border: 2px dashed rgba(192,57,43,.35); }
+    /* Animación de carga */
+    #loadingPlaceholder { flex-direction:column; gap:18px; }
+    .op-loader { display:flex; align-items:center; justify-content:center; }
+    .op-loader-sq { width:22px; height:22px; background:#0d6efd; border-radius:3px; animation: sqAnim 1.6s ease-in-out infinite; }
+    @keyframes sqAnim {
+      0%   { width:22px; height:22px; border-radius:3px; transform:translateX(0); }
+      15%  { width:38px; height:14px; border-radius:3px; transform:translateX(0); }
+      30%  { width:38px; height:14px; border-radius:3px; transform:translateX(0); }
+      45%  { width:18px; height:14px; border-radius:3px; transform:translateX(-12px); }
+      55%  { width:18px; height:14px; border-radius:3px; transform:translateX(12px); }
+      65%  { width:18px; height:14px; border-radius:3px; transform:translateX(0); }
+      80%  { width:38px; height:14px; border-radius:3px; transform:translateX(0); }
+      90%  { width:22px; height:22px; border-radius:3px; transform:translateX(0); }
+      100% { width:22px; height:22px; border-radius:3px; transform:translateX(0); }
+    }
+    /* Colores estado en opciones de select */
+    option.st-none { background:#e9ecef; color:#555; }
+    option.st-partial { background:#fff3cd; color:#664d03; }
+    option.st-done { background:#d1e7dd; color:#0a3622; }
+    /* Dropdown personalizado con colores (reemplaza select nativo) */
+    .op-dropdown { position:relative; display:inline-flex; align-items:center; }
+    .op-dropdown-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid #ddd; background:#fff; border-radius:6px; padding:2px 8px 2px 6px; font-size:13px; cursor:pointer; white-space:nowrap; min-width:80px; user-select:none; }
+    .op-dropdown-btn:hover { border-color:#999; }
+    .op-dropdown-btn .op-dd-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+    .op-dropdown-btn .op-dd-arrow { font-size:10px; margin-left:auto; padding-left:4px; color:#777; }
+    .op-dropdown-list { position:absolute; top:calc(100% + 3px); left:0; background:#fff; border:1px solid #ccc; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.15); z-index:8000; min-width:160px; max-height:280px; overflow-y:auto; padding:4px 0; display:none; }
+    .op-dropdown-list.open { display:block; }
+    .op-dropdown-item { display:flex; align-items:center; gap:7px; padding:5px 12px; font-size:13px; cursor:pointer; white-space:nowrap; }
+    .op-dropdown-item:hover { background:#f0f0f0; }
+    .op-dropdown-item.selected { font-weight:700; background:#f8f8f8; }
+    .op-dropdown-item .op-dd-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+    .op-dd-color-none { background:#adb5bd; }
+    .op-dd-color-partial { background:#ffc107; }
+    .op-dd-color-done { background:#198754; }
   </style>
   <body>
+    <div id="opToast"></div>
     <div class="op-wrapper">
       <div class="op-toolbar">
         <a href="{% url 'operador_home' %}" class="op-btn">← Volver</a>
-        <div class="vr mx-2"></div>
-  <strong>{{ proyecto.public_id|default:proyecto.id }}</strong>
-  <span>· {{ proyecto.nombre }}</span>
-        <div class="vr mx-2"></div>
-    <label class="me-1 small text-muted">Tablero</label>
-  <select id="selTablero" class="form-select form-select-sm" style="width:auto;"></select>
-  <div class="vr mx-2"></div>
-  <label class="me-1 small text-muted">Material</label>
+        <div class="vr mx-1"></div>
+  <strong class="text-nowrap">{{ proyecto.public_id|default:proyecto.id }}</strong>
+  <span class="text-nowrap text-truncate" style="max-width:160px;">· {{ proyecto.nombre }}</span>
+        <div class="vr mx-1"></div>
+  <label class="me-1 small text-muted text-nowrap">Material</label>
   <span id="matBadge" class="chip" title="Material del tablero actual">—</span>
+  <div id="ddMaterial" class="op-dropdown" style="display:none;">
+    <div id="ddMaterialBtn" class="op-dropdown-btn" title="Seleccionar material">
+      <span class="op-dd-dot op-dd-color-none" id="ddMaterialDot"></span>
+      <span id="ddMaterialLabel">Material 1</span>
+      <span class="op-dd-arrow">▾</span>
+    </div>
+    <div id="ddMaterialList" class="op-dropdown-list"></div>
+  </div>
+  <div class="vr mx-1"></div>
+    <label class="me-1 small text-muted text-nowrap">Tablero</label>
+  <div id="ddTablero" class="op-dropdown">
+    <div id="ddTableroBtn" class="op-dropdown-btn" title="Seleccionar tablero">
+      <span class="op-dd-dot op-dd-color-none" id="ddTableroDot"></span>
+      <span id="ddTableroLabel">Tablero 1</span>
+      <span class="op-dd-arrow">▾</span>
+    </div>
+    <div id="ddTableroList" class="op-dropdown-list"></div>
+  </div>
+  <select id="selTablero" class="form-select form-select-sm" style="width:auto; display:none;"></select>
   <select id="selMaterial" class="form-select form-select-sm" style="width:auto; display:none;"></select>
-    <div class="vr mx-2"></div>
+    <div class="vr mx-1"></div>
     <!-- Controles de zoom: [-] [porcentaje] [+] -->
     <button id="btnZoomOut" class="op-btn" type="button" title="Alejar">-</button>
     <span id="zoomPct" class="chip" title="Nivel de zoom">100%</span>
     <button id="btnZoomIn" class="op-btn" type="button" title="Acercar">+</button>
-    <!-- Botón cuadrar: restablecer vista al inicio, centrado y tablero completo -->
-  <button id="btnZoomReset" class="op-btn" type="button" title="Ajustar vista (centrar y refrescar visualizador)">Ajustar vista</button>
-    <div class="vr mx-2"></div>
+    <button id="btnZoomReset" class="op-btn" type="button" title="Ajustar vista (centrar y refrescar visualizador)">Ajustar vista</button>
+    <div class="vr mx-1"></div>
     <!-- Acciones del operador -->
-    <button id="btnMarcarTodas" class="op-btn" type="button" title="Marcar todas las piezas como cortadas">Marcar todas cortadas</button>
-    <button id="btnCompletar" class="op-btn" type="button" title="Completar proyecto y volver a la lista" style="display:none;">Completar proyecto</button>
-    <button id="btnToggleSidebar" class="op-btn ms-auto" type="button" title="Ocultar/mostrar panel">Panel ▸</button>
-  <div class="small text-muted ms-2">Atajos: + / - / 0 · ← → cambia tablero</div>
+    <button id="btnMarcarTodas" class="op-btn text-nowrap" type="button" title="Marcar todas las piezas como cortadas">Marcar todas cortadas</button>
+    <button id="btnCompletar" class="op-btn text-nowrap" type="button" title="Completar proyecto y volver a la lista" style="display:none;">Completar proyecto</button>
+    <div class="vr mx-1"></div>
+    <button id="btnAutoLabel" class="op-btn" type="button" title="Activar/desactivar impresión automática de etiqueta al marcar pieza como cortada"
+      style="display:flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap;">
+      <span id="autoLabelIcon">🏷️</span>
+      <span id="autoLabelTxt">Etiqueta: OFF</span>
+    </button>
+    <div class="vr mx-1"></div>
+    <button id="btnPausar" class="op-btn text-nowrap" type="button" title="Pausar proyecto">⏸ Pausar</button>
+    <button id="btnContinuar" class="op-btn text-nowrap" type="button" title="Continuar proyecto pausado" style="display:none;">▶ Continuar</button>
+    <button id="btnToggleSidebar" class="op-btn ms-auto" type="button" title="Ocultar/mostrar panel · Atajos: + / - / 0 · ← → cambia tablero">Panel ▸</button>
       </div>
       <div class="op-canvas" id="canvasHost">
-        <div id="loadingPlaceholder" class="w-100 h-100 d-flex align-items-center justify-content-center text-muted">Cargando diseño…</div>
+        <div id="loadingPlaceholder" class="w-100 h-100 d-flex align-items-center justify-content-center text-muted">
+          <div class="op-loader"><div class="op-loader-sq"></div></div>
+          <span style="font-size:14px;color:#888;">Cargando diseño…</span>
+        </div>
+        <div id="pausadoOverlay" style="display:none;"></div>
         <div id="canvasNav" class="op-canvas-nav">
           <button id="btnPrevCanvas" class="op-btn op-nav-circle" type="button" title="Tablero anterior">◂</button>
           <button id="btnNextCanvas" class="op-btn op-nav-circle" type="button" title="Siguiente tablero">▸</button>
@@ -137,6 +232,105 @@
         return getCookie('csrftoken') || (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '');
       }
 
+      // ── Dropdowns personalizados con colores ──────────────────────────────────────
+      function ddProgressColor(prog){
+        if(prog==='done') return 'op-dd-color-done';
+        if(prog==='partial') return 'op-dd-color-partial';
+        return 'op-dd-color-none';
+      }
+      function buildDropdown(btnId, listId, items, currentIdx, onSelect){
+        // items: [{label, prog}]
+        const btn = document.getElementById(btnId);
+        const listEl = document.getElementById(listId);
+        if(!btn || !listEl) return;
+        // Construir lista
+        listEl.innerHTML = items.map((item,i)=>`
+          <div class="op-dropdown-item${i===currentIdx?' selected':''}" data-idx="${i}">
+            <span class="op-dd-dot ${ddProgressColor(item.prog)}"></span>
+            ${item.label}
+          </div>`).join('');
+        // Actualizar botón con el ítem seleccionado
+        const cur = items[currentIdx] || items[0];
+        if(cur){
+          const dotEl = btn.querySelector('.op-dd-dot');
+          const labelEl = btn.querySelector('span[id$="Label"],span[id$="label"]') || btn.querySelectorAll('span')[1];
+          if(dotEl){ dotEl.className = 'op-dd-dot ' + ddProgressColor(cur.prog); }
+          if(labelEl){ labelEl.textContent = cur.label; }
+        }
+        // Eventos de items
+        listEl.querySelectorAll('.op-dropdown-item').forEach(item=>{
+          item.addEventListener('click',()=>{
+            const i = parseInt(item.getAttribute('data-idx'),10);
+            listEl.classList.remove('open');
+            onSelect(i);
+          });
+        });
+        // Toggle apertura
+        btn.onclick = (e)=>{
+          e.stopPropagation();
+          // Cerrar otros dropdowns abiertos
+          document.querySelectorAll('.op-dropdown-list.open').forEach(l=>{ if(l!==listEl) l.classList.remove('open'); });
+          listEl.classList.toggle('open');
+        };
+      }
+      // Cerrar dropdowns al hacer clic fuera
+      document.addEventListener('click',()=>{
+        document.querySelectorAll('.op-dropdown-list.open').forEach(l=>l.classList.remove('open'));
+      });
+      // Actualizar solo el botón (dot + label) sin reconstruir la lista completa
+      function updateDropdownBtn(btnId, items, currentIdx){
+        const btn = document.getElementById(btnId); if(!btn) return;
+        const cur = items[currentIdx]; if(!cur) return;
+        const dotEl = btn.querySelector('.op-dd-dot');
+        const labelEl = btn.querySelector('span[id$="Label"],span[id$="label"]') || btn.querySelectorAll('span')[1];
+        if(dotEl) dotEl.className = 'op-dd-dot ' + ddProgressColor(cur.prog);
+        if(labelEl) labelEl.textContent = cur.label;
+        // Actualizar 'selected' en la lista
+        const listEl = btn.closest('.op-dropdown')?.querySelector('.op-dropdown-list');
+        if(listEl){
+          listEl.querySelectorAll('.op-dropdown-item').forEach((el,i)=>{
+            el.classList.toggle('selected', i===currentIdx);
+          });
+        }
+      }
+      // Helpers para construir los items de cada dropdown
+      function buildTableroItems(tabs){
+        return tabs.map((t,i)=>({ label:'Tablero '+t.num, prog: boardProgress(t) }));
+      }
+      function buildMaterialItems(){
+        return materiales.map((m,mi)=>{
+          const allP = (m.tableros||[]).flatMap(t=>(t.piezas||[]).filter(p=>p.estado!=='descartada'));
+          const cortadas = allP.filter(p=>p.estado==='cortada').length;
+          let prog = 'none';
+          if(allP.length===0) prog='done';
+          else if(cortadas===allP.length) prog='done';
+          else if(cortadas>0) prog='partial';
+          return { label: m.nombre || 'Material '+(mi+1), prog };
+        });
+      }
+      // Refrescar todo el dropdown de tablero (reconstruye items)
+      function refreshTableroDropdown(){
+        const items = buildTableroItems(tableros);
+        buildDropdown('ddTableroBtn','ddTableroList', items, idx, (i)=>{
+          idx = i; selTab.value = String(i); selTab.dispatchEvent(new Event('change'));
+        });
+      }
+      // Refrescar todo el dropdown de material
+      function refreshMaterialDropdown(){
+        const ddMat = document.getElementById('ddMaterial'); if(!ddMat) return;
+        if(materiales.length > 1){
+          ddMat.style.display = 'inline-flex';
+          const items = buildMaterialItems();
+          buildDropdown('ddMaterialBtn','ddMaterialList', items, matIdx, (i)=>{
+            if(i===matIdx) return;
+            idx = 0; selMaterial.value = String(i);
+            switchToMaterial(i, {toast:true});
+          });
+        } else {
+          ddMat.style.display = 'none';
+        }
+      }
+
   const resp = await fetch(`/api/operador/proyectos/${proyectoId}`, {credentials:'same-origin'});
       if(!resp.ok){ host.innerHTML = '<div class="w-100 h-100 d-flex align-items-center justify-content-center text-danger">No hay resultado.</div>'; return; }
       const data = await resp.json();
@@ -154,7 +348,7 @@
       if (materiales.length > 1) {
         selMaterial.innerHTML = materiales.map((m,i)=>`<option value="${i}">${m.nombre || 'Material '+(i+1)}</option>`).join('');
         selMaterial.value = String(matIdx);
-        selMaterial.style.display = 'inline-block';
+        selMaterial.style.display = 'none'; // oculto: usamos el dropdown personalizado
       } else {
         selMaterial.style.display = 'none';
       }
@@ -187,8 +381,10 @@
       }
       function updateMaterialControlsVisibility(){
         const multi = Array.isArray(materiales) && materiales.length > 1;
-        if(selMaterial){ selMaterial.style.display = multi ? 'inline-block' : 'none'; }
+        if(selMaterial){ selMaterial.style.display = 'none'; } // siempre oculto: usamos dropdown
         if(matBadge){ matBadge.style.display = multi ? 'none' : 'inline-block'; }
+        const ddMat = document.getElementById('ddMaterial');
+        if(ddMat){ ddMat.style.display = multi ? 'inline-flex' : 'none'; }
       }
       function updateNextButtonVisibility(){
         const isLastBoard = (idx >= Math.max(0, tableros.length - 1));
@@ -240,6 +436,8 @@
         if (typeof updatePrevButtonVisibility === 'function') updatePrevButtonVisibility();
         updateMaterialControlsVisibility();
         updateBoardCounter();
+        updateSelectColors();
+        updateCompletarGolden();
         if(opts && opts.toast){ showMaterialToast(materiales[matIdx]?.nombre || meta.material || '—'); }
       }
       btnNextCanvas?.addEventListener('click', ()=>{
@@ -506,6 +704,153 @@
         return parts.length? parts.join(',') : '—';
       }
 
+      // ── Auto-etiqueta (Zebra Browser Print) ───────────────────────────────────────
+      // Requiere Zebra Browser Print instalado en el PC del usuario.
+      // Descarga: https://www.zebra.com/us/en/support-downloads/printer-software/by-request-software.html
+      const LABEL_STORAGE_KEY = `op_autoLabel_${proyectoId}`;
+      let autoLabelActive = localStorage.getItem(LABEL_STORAGE_KEY) === '1';
+      const ZBP_URL = 'http://localhost:9100'; // Zebra Browser Print escucha aquí
+
+      // Cache del device ZBP: se resuelve una sola vez y se reutiliza en impresiones posteriores
+      let _zbpDevicePromise = null;
+      function _getZbpDevice(){
+        if(!_zbpDevicePromise){
+          _zbpDevicePromise = fetch(`${ZBP_URL}/available`)
+            .then(r => r.json())
+            .then(d => {
+              const printers = d.printer || [];
+              return printers.find(p => p.connection === 'usb')
+                  || printers.find(p => p.connection === 'driver')
+                  || printers[0] || null;
+            })
+            .catch(() => null);
+        }
+        return _zbpDevicePromise;
+      }
+
+      function _updateAutoLabelBtn(){
+        const btn = document.getElementById('btnAutoLabel');
+        const txt = document.getElementById('autoLabelTxt');
+        if(!btn || !txt) return;
+        if(autoLabelActive){
+          btn.style.background = '#198754'; btn.style.color = '#fff'; btn.style.borderColor = '#198754';
+          txt.textContent = 'Etiqueta: ON';
+        } else {
+          btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = '';
+          txt.textContent = 'Etiqueta: OFF';
+        }
+      }
+      _updateAutoLabelBtn();
+      // Precalentar: resolver el device ZBP en background al cargar la página
+      // para que la primera impresión no tenga latencia adicional
+      _getZbpDevice();
+      document.getElementById('btnAutoLabel')?.addEventListener('click', ()=>{
+        autoLabelActive = !autoLabelActive;
+        localStorage.setItem(LABEL_STORAGE_KEY, autoLabelActive ? '1' : '0');
+        _updateAutoLabelBtn();
+      });
+
+      /**
+       * Genera ZPL localmente (sin fetch al servidor) con los datos que ya están en memoria.
+       * Replica exactamente la lógica de imprimir_etiqueta_pieza_api en Python.
+       */
+      function _generarZPL(p){
+        const DPI = 300;
+        const mm2d = v => Math.round(v * DPI / 25.4);
+        const _z = (s, mx) => String(s||'').slice(0, mx).replace(/\^/g,'').replace(/~/g,'');
+
+        const LW = mm2d(100), LH = mm2d(150), M = mm2d(5);
+        const pw_mm = parseInt(p.ancho)||0, ph_mm = parseInt(p.largo)||0;
+        const nombre = p.nombre || p.pieza_id || '';
+        const tc = p.tapacantos || {};
+        const veta = p.veta || '';
+
+        // Material del tablero actual
+        const matNombre = _z((materiales[matIdx]||{}).nombre || meta.material || '—', 22);
+
+        // Rectángulo proporcional
+        const DA_W = LW - 2*M, DA_H = mm2d(70), DA_TOP = mm2d(16);
+        const scale = Math.min(DA_W / Math.max(pw_mm,1), DA_H / Math.max(ph_mm,1)) * 0.85;
+        const rw = Math.round(pw_mm * scale), rh = Math.round(ph_mm * scale);
+        const rx = Math.round((LW - rw) / 2), ry = DA_TOP;
+
+        const tcParts = [];
+        if(tc.arriba)    tcParts.push('Arr');
+        if(tc.derecha)   tcParts.push('Der');
+        if(tc.abajo)     tcParts.push('Aba');
+        if(tc.izquierda) tcParts.push('Izq');
+        const tc_str = tcParts.length ? tcParts.join(' | ') : 'Sin tapacanto';
+        const veta_str = veta === 'horizontal' ? 'Horizontal' : veta === 'vertical' ? 'Vertical' : veta;
+
+        const lines = [
+          '^XA', '^LH0,0', `^PW${LW}`, `^LL${LH}`,
+          `^FO${M},${M}^CF0,45^FD${_z(nombre,22)}^FS`,
+          `^FO${M},${mm2d(14)}^GB${LW-2*M},2,2^FS`,
+          `^FO${rx},${ry}^GB${rw},${rh},3,W^FS`,
+          `^FO${rx},${ry}^GB${rw},${rh},3^FS`,
+        ];
+
+        const TC_OFF = Math.max(4, Math.round(Math.min(rw,rh)*0.06));
+        if(tc.arriba)    lines.push(`^FO${rx},${ry+TC_OFF}^GB${rw},4,4^FS`);
+        if(tc.abajo)     lines.push(`^FO${rx},${ry+rh-TC_OFF-4}^GB${rw},4,4^FS`);
+        if(tc.izquierda) lines.push(`^FO${rx+TC_OFF},${ry}^GB4,${rh},4^FS`);
+        if(tc.derecha)   lines.push(`^FO${rx+rw-TC_OFF-4},${ry}^GB4,${rh},4^FS`);
+
+        const fn_size = Math.max(25, Math.round(Math.min(rw,rh)/3));
+        const nx = rx + Math.round((rw - _z(nombre,12).length * fn_size/2)/2);
+        const ny = ry + Math.round(rh/2 - fn_size/2);
+        lines.push(`^FO${nx},${ny}^CF0,${fn_size}^FD${_z(nombre,12)}^FS`);
+
+        const cota_y = ry - mm2d(7);
+        lines.push(`^FO${rx},${cota_y}^CF0,28^FD${pw_mm} mm^FS`);
+        const cota_x = rx + rw + mm2d(2);
+        lines.push(`^FO${cota_x},${ry+Math.round(rh/2)-14}^CF0,28^FD${ph_mm} mm^FS`);
+
+        const INFO_Y = ry + rh + mm2d(12), ROW_H = mm2d(7);
+        lines.push(
+          `^FO${M},${INFO_Y}^CF0,30^FDAncho: ${pw_mm} mm^FS`,
+          `^FO${M},${INFO_Y+ROW_H}^CF0,30^FDLargo: ${ph_mm} mm^FS`,
+          `^FO${M},${INFO_Y+2*ROW_H}^CF0,28^FDTapacanto: ${_z(tc_str,26)}^FS`,
+        );
+        if(veta_str) lines.push(`^FO${M},${INFO_Y+3*ROW_H}^CF0,28^FDVeta: ${_z(veta_str,18)}^FS`);
+
+        const box_y = LH - mm2d(16);
+        lines.push(
+          `^FO${M},${box_y}^GB${LW-2*M},${mm2d(13)},2,W^FS`,
+          `^FO${M+6},${box_y+mm2d(2)}^CF0,32^FDMaterial: ${matNombre}^FS`,
+          '^PQ1', '^XZ',
+        );
+        return lines.join('\n');
+      }
+
+      /**
+       * Genera ZPL localmente y lo envía a ZBP — sin ningún fetch al servidor Django.
+       * La impresión ocurre en el mismo tick que el click del operador.
+       */
+      async function imprimirEtiquetaPieza(p){
+        if(!p) return;
+        try{
+          const device = await _getZbpDevice();
+          if(!device){ console.warn('No se encontró impresora Zebra en ZBP'); return; }
+          const zpl = _generarZPL(p);
+          const zbpResp = await fetch(`${ZBP_URL}/write`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device, data: zpl })
+          });
+          if(!zbpResp.ok) console.warn('ZBP /write error:', zbpResp.status);
+        }catch(err){
+          console.warn('Zebra Browser Print no disponible:', err.message);
+        }
+      }
+
+      /** Dispara impresión si el toggle está activo */
+      function maybeImprimirEtiqueta(p){
+        if(!autoLabelActive) return;
+        imprimirEtiquetaPieza(p);
+      }
+      // ── Fin auto-etiqueta ────────────────────────────────────────────────────────────────────
+
       // Dibuja líneas de tapacanto en los bordes indicados
       function drawTapacantosLines(parent, x, y, w, h, tc, opts){
         if(!tc) return;
@@ -625,6 +970,9 @@
       function renderList(board){
         const piezas = board.piezas||[];
         if(!piezas.length){ list.innerHTML = '<div class="text-muted">Sin piezas.</div>'; return; }
+        // Leer estado pausado tanto del script independiente como del flag global
+        const _esPausado = (typeof window._isPausado === 'function' && window._isPausado())
+                        || ('{{ proyecto.estado }}' === 'pausado');
         list.innerHTML = piezas.map(p=>{
           const st=p.estado||'pendiente';
           return `<div class="d-flex justify-content-between align-items-center py-1 border-bottom small" data-row="${p.pieza_id}">
@@ -634,7 +982,7 @@
             </div>
             <div class="d-flex align-items-center gap-2">
               <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:${stateColor(st)}"></span>
-              <select class="form-select form-select-sm" style="min-width:130px" data-pieza="${p.pieza_id}">
+              <select class="form-select form-select-sm" style="min-width:130px" data-pieza="${p.pieza_id}" data-prev-val="${st}"${_esPausado?' disabled':''}>
                 <option value="pendiente" ${st==='pendiente'?'selected':''}>Pendiente</option>
                 <option value="en_corte" ${st==='en_corte'?'selected':''}>En corte</option>
                 <option value="cortada" ${st==='cortada'?'selected':''}>Cortada</option>
@@ -655,18 +1003,37 @@
             row.classList.remove('list-highlight');
           });
         });
-        list.querySelectorAll('select[data-pieza]').forEach(sel=>{
-          sel.addEventListener('change', async (e)=>{
-            const pid=e.target.getAttribute('data-pieza'); const estado=e.target.value;
-            try{
-              const r = await fetch(`/api/operador/proyectos/${proyectoId}/piezas/${encodeURIComponent(pid)}`,{method:'PATCH', credentials:'same-origin', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()}, body: JSON.stringify({estado})});
-              if(!r.ok) throw new Error('err');
-              const dot = list.querySelector(`[data-row="${pid}"] span.rounded-circle`); if(dot) dot.style.background = stateColor(estado);
-              const rect = document.getElementById(`piece-${pid}`); if(rect) rect.setAttribute('fill', stateColor(estado));
-            }catch(err){ alert('No se pudo guardar el estado.'); }
-          });
-        });
+        // Aplicar estado pausado a los selects recién renderizados
+        if(typeof window._applyPausadoUI === 'function') window._applyPausadoUI();
       }
+      // Flag para ignorar cambios de <select> hechos programáticamente (updatePieceUI)
+      let _programmaticChange = false;
+      // Delegación de eventos para los <select> de estado — registrada UNA SOLA VEZ
+      // para evitar listeners duplicados cuando renderList se llama varias veces
+      list.addEventListener('change', async (e)=>{
+        if(_programmaticChange) return; // cambio desde código, no del usuario
+        // Bloquear si proyecto está pausado — revertir el select al valor anterior
+        if(typeof window._isPausado === 'function' && window._isPausado()){
+          const sel = e.target.closest('select[data-pieza]'); if(sel) e.target.value = e.target.getAttribute('data-prev-val')||e.target.value;
+          return;
+        }
+        const sel = e.target.closest('select[data-pieza]'); if(!sel) return;
+        const pid = sel.getAttribute('data-pieza'); const estado = sel.value;
+        // Lanzar impresión INMEDIATAMENTE en paralelo con el PATCH
+        if(estado === 'cortada'){
+          const pObj = getPieceById(pid); if(pObj) maybeImprimirEtiqueta(pObj);
+        }
+        try{
+          const r = await fetch(`/api/operador/proyectos/${proyectoId}/piezas/${encodeURIComponent(pid)}`,{method:'PATCH', credentials:'same-origin', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()}, body: JSON.stringify({estado})});
+          if(!r.ok) throw new Error('err');
+          const dot = list.querySelector(`[data-row="${pid}"] span.rounded-circle`); if(dot) dot.style.background = stateColor(estado);
+          const rect = document.getElementById(`piece-${pid}`); if(rect) rect.setAttribute('fill', stateColor(estado));
+          const pObj = getPieceById(pid); if(pObj) pObj.estado = estado;
+          sel.setAttribute('data-prev-val', estado); // guardar nuevo valor como previo
+          updateSelectColors(); updateCompletarGolden();
+          if(estado==='cortada') setTimeout(()=>checkBoardComplete(), 200);
+        }catch(err){ showToast('No se pudo guardar el estado.','info'); }
+      });
 
       function renderBoard(board){
         while(g.firstChild) g.removeChild(g.firstChild);
@@ -850,6 +1217,8 @@
   }
   const pendingByPiece = new Map();
       async function setPieceState(piezaId, estado){
+        // Bloquear si proyecto pausado
+        if(typeof window._isPausado === 'function' && window._isPausado()) return;
         // Persistencia asíncrona; no bloquea la UI
         try{
           const r = await fetch(`/api/operador/proyectos/${proyectoId}/piezas/${encodeURIComponent(piezaId)}`,{method:'PATCH', credentials:'same-origin', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()}, body: JSON.stringify({estado})});
@@ -857,27 +1226,18 @@
         }catch(err){
           // Fallback: marcar error en consola y permitir reintento manual (no revertimos para mantener fluidez)
           console.error('Persistencia de pieza falló:', err);
-          alert('No se pudo guardar la pieza. Intenta nuevamente.');
+          showToast('⚠️ No se pudo guardar la pieza. Verifica tu conexión.', 'info', 4000);
         } finally {
           pendingByPiece.delete(piezaId);
         }
       }
       function updatePieceUI(pid, estado){
         const dot = list.querySelector(`[data-row="${pid}"] span.rounded-circle`); if(dot) dot.style.background = stateColor(estado);
-        const sel = list.querySelector(`select[data-pieza="${pid}"]`); if(sel) sel.value = estado;
+        const sel = list.querySelector(`select[data-pieza="${pid}"]`);
+        if(sel){ _programmaticChange = true; sel.value = estado; _programmaticChange = false; }
         const rect = document.getElementById(`piece-${pid}`); if(rect) rect.setAttribute('fill', stateColor(estado));
       }
       function closePieceModal(){
-        // Si al abrir pusimos 'en_corte' y NO terminó en 'cortada', volver a 'pendiente'
-        if(modalPid && modalChangedToEnCorte && !modalWasCut){
-          const piece = getPieceById(modalPid);
-          if(piece && piece.estado !== 'cortada'){
-            piece.estado = 'pendiente';
-            updatePieceUI(modalPid, 'pendiente');
-            pendingByPiece.set(modalPid,true);
-            setPieceState(modalPid, 'pendiente');
-          }
-        }
         if(modalEl){ modalEl.remove(); }
         modalEl=null; modalPid=null; modalChangedToEnCorte=false; modalWasCut=false;
       }
@@ -885,13 +1245,6 @@
         closePieceModal();
         modalPid = p.pieza_id;
         modalChangedToEnCorte=false; modalWasCut=false;
-        // Al abrir: si no está cortada, pasar a 'en_corte'
-        if((p.estado||'pendiente') !== 'cortada'){
-          p.estado = 'en_corte';
-          updatePieceUI(p.pieza_id, 'en_corte');
-          pendingByPiece.set(p.pieza_id,true); setPieceState(p.pieza_id,'en_corte');
-          modalChangedToEnCorte = true;
-        }
         const backdrop = document.createElement('div');
         backdrop.className = 'piece-modal-backdrop';
         const modal = document.createElement('div');
@@ -995,13 +1348,20 @@
         backdrop.addEventListener('click',(e)=>{ if(e.target===backdrop) closePieceModal(); });
         modal.querySelector('#btnBackBoard')?.addEventListener('click',()=>{ closePieceModal(); });
         modal.querySelector('#btnMarkCut')?.addEventListener('click',()=>{
-          const pid = p.pieza_id; p.estado='cortada'; updatePieceUI(pid,'cortada'); pendingByPiece.set(pid,true); setPieceState(pid,'cortada'); modalWasCut=true; closePieceModal();
+          const pid = p.pieza_id; p.estado='cortada'; updatePieceUI(pid,'cortada'); pendingByPiece.set(pid,true);
+          maybeImprimirEtiqueta(p);
+          setPieceState(pid,'cortada'); modalWasCut=true; closePieceModal();
+          updateSelectColors(); updateCompletarGolden();
+          setTimeout(()=>checkBoardComplete(), 250);
         });
-        // Click en la pieza dentro del modal: marcar como cortada (equivalente al botón)
         try{
           const rectPrev = modal.querySelector('#pzRect');
           rectPrev?.addEventListener('click',()=>{
-            const pid = p.pieza_id; p.estado='cortada'; updatePieceUI(pid,'cortada'); pendingByPiece.set(pid,true); setPieceState(pid,'cortada'); modalWasCut=true; closePieceModal();
+            const pid = p.pieza_id; p.estado='cortada'; updatePieceUI(pid,'cortada'); pendingByPiece.set(pid,true);
+            maybeImprimirEtiqueta(p);
+            setPieceState(pid,'cortada'); modalWasCut=true; closePieceModal();
+            updateSelectColors(); updateCompletarGolden();
+            setTimeout(()=>checkBoardComplete(), 250);
           });
         }catch(_e){}
         modalEl = backdrop;
@@ -1033,11 +1393,17 @@
         svgEl.appendChild(gM);
       }
       function onPieceClick(ev, p){
+        // Bloquear interacción cuando el proyecto está pausado
+        if(typeof window._isPausado === 'function' && window._isPausado()) return;
         // Si Ctrl/Cmd está presionado, interpretamos como intención de mover y NO abrimos modal
         if(ev && (ev.ctrlKey || ev.metaKey)) return;
         // Si ya hay modal abierto para esta pieza, marca cortada
         if(modalEl && modalPid === p.pieza_id){
-          const pid = p.pieza_id; p.estado='cortada'; updatePieceUI(pid,'cortada'); pendingByPiece.set(pid,true); setPieceState(pid,'cortada'); closePieceModal();
+          const pid = p.pieza_id; p.estado='cortada'; updatePieceUI(pid,'cortada'); pendingByPiece.set(pid,true);
+          maybeImprimirEtiqueta(p);
+          setPieceState(pid,'cortada'); closePieceModal();
+          updateSelectColors(); updateCompletarGolden();
+          setTimeout(()=>checkBoardComplete(), 250);
           return;
         }
         // Abrir modal con info
@@ -1216,6 +1582,7 @@
   if (typeof updatePrevButtonVisibility === 'function') updatePrevButtonVisibility();
   updateMaterialControlsVisibility();
   updateBoardCounter();
+  updateSelectColors();
       });
   window.addEventListener('keydown',(e)=>{ 
     const board=tableros[idx]||{}; 
@@ -1257,35 +1624,153 @@
   updateNextButtonVisibility();
   if (typeof updatePrevButtonVisibility === 'function') updatePrevButtonVisibility();
   updateBoardCounter();
+  updateSelectColors();
+  updateCompletarGolden();
 
-      // Al iniciar edición, marcar proyecto EN PROCESO si no está completado
+      // Al iniciar edición, marcar proyecto EN PROCESO si no está en un estado especial
       try{
-        if(proyectoMeta && proyectoMeta.estado !== 'completado' && proyectoMeta.estado !== 'en_proceso'){
+        const _estadosProtegidos = ['completado', 'en_proceso', 'pausado', 'cancelado'];
+        if(proyectoMeta && !_estadosProtegidos.includes(proyectoMeta.estado)){
           await fetch(`/api/operador/proyectos/${proyectoId}/estado`,{method:'PATCH', credentials:'same-origin', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()}, body: JSON.stringify({estado:'en_proceso'})});
         }
       }catch(_e){}
 
+      // ── Utilidades de UI ─────────────────────────────────────────────────────────
+      // Toast de notificación
+      let _toastTimer = null;
+      function showToast(msg, type='success', ms=3200){
+        const el = document.getElementById('opToast');
+        if(!el) return;
+        el.textContent = msg;
+        el.className = 'show ' + type;
+        if(_toastTimer) clearTimeout(_toastTimer);
+        _toastTimer = setTimeout(()=>{ el.className = ''; }, ms);
+      }
+      // Modal de confirmación personalizado
+      function opConfirm(title, body){
+        return new Promise(resolve=>{
+          const backdrop = document.createElement('div');
+          backdrop.className = 'op-confirm-backdrop';
+          backdrop.innerHTML = '<div class="op-confirm-box"><h5>'+title+'</h5><p>'+body+'</p><div class="op-confirm-btns"><button class="op-btn" id="opConfirmNo" style="min-width:80px;">Cancelar</button><button class="op-btn" id="opConfirmYes" style="min-width:100px;background:#0d6efd;color:#fff;border-color:#0d6efd;">Confirmar</button></div></div>';
+          document.body.appendChild(backdrop);
+          const close = (val)=>{ backdrop.remove(); resolve(val); };
+          backdrop.querySelector('#opConfirmYes').addEventListener('click',()=>close(true));
+          backdrop.querySelector('#opConfirmNo').addEventListener('click',()=>close(false));
+          backdrop.addEventListener('click',(e)=>{ if(e.target===backdrop) close(false); });
+        });
+      }
+      // Modal de siguiente tablero al completar uno
+      function opShowNextBoard(nextBoard, nextMatNombre){
+        return new Promise(resolve=>{
+          const tipo = nextMatNombre || meta.material || '—';
+          const num = nextBoard.num || '?';
+          const ancho = nextBoard.ancho_mm || '?';
+          const largo = nextBoard.largo_mm || '?';
+          const grosor = nextBoard.grosor_mm ? ' · '+nextBoard.grosor_mm+' mm grosor' : '';
+          const backdrop = document.createElement('div');
+          backdrop.className = 'op-confirm-backdrop';
+          backdrop.innerHTML = '<div class="op-next-board-modal"><h5>✅ ¡Tablero completado!</h5><p style="color:#555;font-size:14px;margin:4px 0 0;">Todas las piezas de este tablero están cortadas.</p><div class="board-info"><strong>Siguiente → Tablero '+num+'</strong><span>Material: <b>'+tipo+'</b></span><br><span>Medidas: <b>'+ancho+' × '+largo+' mm'+grosor+'</b></span></div><div style="display:flex;gap:10px;justify-content:center;margin-top:4px;"><button class="op-btn" id="opNBStay" style="min-width:90px;">Quedarme aquí</button><button class="op-btn" id="opNBGo" style="min-width:130px;background:#198754;color:#fff;border-color:#198754;font-weight:600;">Ir al siguiente →</button></div></div>';
+          document.body.appendChild(backdrop);
+          const close = (go)=>{ backdrop.remove(); resolve(go); };
+          backdrop.querySelector('#opNBGo').addEventListener('click',()=>close(true));
+          backdrop.querySelector('#opNBStay').addEventListener('click',()=>close(false));
+          backdrop.addEventListener('click',(e)=>{ if(e.target===backdrop) close(false); });
+        });
+      }
+      // Calcular estado de progreso de un tablero
+      function boardProgress(board){
+        const piezas = (board.piezas||[]).filter(p=>p.estado!=='descartada');
+        if(!piezas.length) return 'done';
+        const cortadas = piezas.filter(p=>p.estado==='cortada').length;
+        if(cortadas===0) return 'none';
+        if(cortadas===piezas.length) return 'done';
+        return 'partial';
+      }
+      // Colorear dropdowns personalizados de tablero y material
+      function updateSelectColors(){
+        refreshTableroDropdown();
+        refreshMaterialDropdown();
+      }
+      // Revisar si TODO está cortado → botón dorado
+      function checkAllDone(){
+        const allP = (materiales||[]).flatMap(m=>(m.tableros||[]).flatMap(t=>(t.piezas||[]).filter(p=>p.estado!=='descartada')));
+        return allP.length > 0 && allP.every(p=>p.estado==='cortada');
+      }
+      function updateCompletarGolden(){
+        const btn = document.getElementById('btnCompletar'); if(!btn) return;
+        if(checkAllDone()) btn.classList.add('golden'); else btn.classList.remove('golden');
+      }
+      // Verificar si el tablero actual está completo y ofrecer ir al siguiente
+      async function checkBoardComplete(){
+        const board = tableros[idx]||{};
+        if(boardProgress(board)!=='done') return;
+        let nextBoard = null, nextMatNombre = null;
+        if(idx < tableros.length-1){
+          nextBoard = tableros[idx+1];
+          nextMatNombre = meta.material || '—';
+        } else if(matIdx < (materiales.length-1)){
+          const nextMat = materiales[matIdx+1];
+          nextBoard = (nextMat.tableros||[])[0] || null;
+          nextMatNombre = nextMat.nombre || '—';
+        }
+        if(!nextBoard) return;
+        const go = await opShowNextBoard(nextBoard, nextMatNombre);
+        if(go){
+          if(idx < tableros.length-1){
+            idx += 1; selTab.value=String(idx); selTab.dispatchEvent(new Event('change'));
+          } else {
+            idx = 0; switchToMaterial(matIdx+1, {toast:true});
+          }
+        }
+      }
+
       // Handler: marcar todas como cortadas
       document.getElementById('btnMarcarTodas').addEventListener('click', async ()=>{
-        if(!confirm('¿Marcar todas las piezas de este proyecto como CORTADAS?')) return;
+        const ok = await opConfirm(
+          '¿Marcar todas como cortadas?',
+          'Se marcará como <b>Cortada</b> todas las piezas pendientes del proyecto. Esta acción no se puede deshacer fácilmente.'
+        );
+        if(!ok) return;
         const btn = document.getElementById('btnMarcarTodas');
         const prevText = btn.textContent;
         btn.disabled = true; btn.textContent = 'Marcando…';
         try{
+          const piezasParaEtiquetar = [];
+          if(autoLabelActive){
+            for(const mat of (materiales||[])){
+              for(const t of (mat.tableros||[])){
+                for(const p of (t.piezas||[])){
+                  if(p.estado !== 'cortada' && p.estado !== 'descartada') piezasParaEtiquetar.push(p);
+                }
+              }
+            }
+          }
           const r = await fetch(`/api/operador/proyectos/${proyectoId}/piezas/marcar-todas`, {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()}, body: JSON.stringify({estado:'cortada'})});
           let jr = {};
           try { jr = await r.clone().json(); } catch(_) { try { jr = {message: await r.text()}; } catch(__) { jr = {}; } }
-          if(!r.ok){ alert(jr && jr.message ? jr.message : 'No se pudo marcar.'); return; }
-          // Refrescar UI local: setear a cortada
+          if(!r.ok){ showToast(jr && jr.message ? jr.message : 'No se pudo marcar.', 'info'); return; }
+          // Refrescar estado local
+          for(const mat of (materiales||[])){ for(const t of (mat.tableros||[])){ for(const p of (t.piezas||[])){ p.estado = 'cortada'; } } }
           for(const t of tableros){ for(const p of (t.piezas||[])){ p.estado = 'cortada'; } }
           renderList(tableros[idx]||{});
-          // Colorear rects actuales
           (tableros[idx]?.piezas||[]).forEach(p=>{ const rect=document.getElementById(`piece-${p.pieza_id}`); if(rect) rect.setAttribute('fill', stateColor('cortada')); });
-          // Actualizar estadísticas y botón completar
           updateStats(tableros[idx]||{});
           updateCompletarVisibility();
-          alert('Todas las piezas marcadas como cortadas.');
-        }catch(_e){ alert('Error al marcar todas como cortadas.'); }
+          updateSelectColors();
+          updateCompletarGolden();
+          showToast('✅ Todas las piezas marcadas como cortadas.', 'success', 4000);
+          // Imprimir secuencialmente
+          if(autoLabelActive && piezasParaEtiquetar.length > 0){
+            const device = await _getZbpDevice();
+            if(device){
+              for(let i = 0; i < piezasParaEtiquetar.length; i++){
+                btn.textContent = `Imprimiendo ${i+1}/${piezasParaEtiquetar.length}…`;
+                const zpl = _generarZPL(piezasParaEtiquetar[i]);
+                try{ await fetch(`${ZBP_URL}/write`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({device,data:zpl})}); }catch(_e){}
+              }
+            }
+          }
+        }catch(_e){ showToast('Error al marcar todas como cortadas.','info'); }
         finally{ btn.disabled = false; btn.textContent = prevText; }
       });
 
@@ -1307,5 +1792,111 @@
     </script>
 
     {% include "partials/scripts.html" %}
+
+    <script>
+    // ── Pausar / Continuar (script independiente del IIFE principal) ──────────────
+    (function(){
+      const _pid = parseInt('{{ proyecto.id }}', 10);
+      const _estadoInicial = '{{ proyecto.estado }}';
+      let _pausado = (_estadoInicial === 'pausado');
+
+      function _getCsrf(){
+        const v = document.cookie.split('; ').find(r=>r.startsWith('csrftoken='));
+        return v ? decodeURIComponent(v.split('=')[1]) : '';
+      }
+
+      function _showToast(msg, type){
+        const el = document.getElementById('opToast');
+        if(!el) return;
+        el.textContent = msg;
+        el.className = 'op-toast op-toast-' + (type||'success') + ' show';
+        clearTimeout(el._t);
+        el._t = setTimeout(()=>{ el.classList.remove('show'); }, 3200);
+      }
+
+      function _confirm(title, body){
+        return new Promise(resolve=>{
+          const bd = document.createElement('div');
+          bd.className = 'op-confirm-backdrop';
+          bd.innerHTML = '<div class="op-confirm-box"><h5>'+title+'</h5><p>'+body+'</p><div class="op-confirm-btns"><button class="op-btn" id="_pcNo" style="min-width:80px;">Cancelar</button><button class="op-btn" id="_pcYes" style="min-width:100px;background:#0d6efd;color:#fff;border-color:#0d6efd;">Confirmar</button></div></div>';
+          document.body.appendChild(bd);
+          const close = (v)=>{ bd.remove(); resolve(v); };
+          bd.querySelector('#_pcYes').addEventListener('click',()=>close(true));
+          bd.querySelector('#_pcNo').addEventListener('click',()=>close(false));
+          bd.addEventListener('click',(e)=>{ if(e.target===bd) close(false); });
+        });
+      }
+
+      function applyPausadoUI(){
+        const overlay = document.getElementById('pausadoOverlay');
+        const btnP   = document.getElementById('btnPausar');
+        const btnC   = document.getElementById('btnContinuar');
+        const btnM   = document.getElementById('btnMarcarTodas');
+        const list   = document.getElementById('listaPiezas');
+        const canvas = document.getElementById('canvasHost');
+        if(overlay) overlay.style.display   = _pausado ? 'block'        : 'none';
+        if(btnP)    btnP.style.display       = _pausado ? 'none'         : 'inline-block';
+        if(btnC)    btnC.style.display       = _pausado ? 'inline-block' : 'none';
+        if(btnM)    btnM.disabled            = _pausado;
+        if(list) list.querySelectorAll('select[data-pieza]').forEach(s=>{ s.disabled = _pausado; });
+        // Bloquear clicks en el canvas SVG visualmente
+        if(canvas) canvas.style.cursor = _pausado ? 'not-allowed' : '';
+        // Bloquear clicks en el canvas con pointer-events en el SVG
+        const svgEl = canvas ? canvas.querySelector('svg') : null;
+        if(svgEl) svgEl.style.pointerEvents = _pausado ? 'none' : '';
+      }
+
+      // Exponer para que el IIFE principal también pueda llamarla
+      window._applyPausadoUI = applyPausadoUI;
+      window._isPausado = ()=> _pausado;
+
+      document.getElementById('btnPausar').addEventListener('click', async function(){
+        const ok = await _confirm('¿Pausar proyecto?', 'El proyecto quedará en estado <b>Pausado</b>. Las piezas no se podrán editar hasta que lo continúes.');
+        if(!ok) return;
+        const btnP = document.getElementById('btnPausar');
+        const prevTxt = btnP.textContent;
+        btnP.disabled = true;
+        btnP.innerHTML = '<span class="_spin"></span> Pausando…';
+        try{
+          const r = await fetch('/api/operador/proyectos/'+_pid+'/estado',{
+            method:'PATCH', credentials:'same-origin',
+            headers:{'Content-Type':'application/json','X-CSRFToken':_getCsrf()},
+            body: JSON.stringify({estado:'pausado'})
+          });
+          if(!r.ok){ const j=await r.json().catch(()=>{}); throw new Error((j&&j.message)||'error'); }
+          _pausado = true;
+          applyPausadoUI();
+          _showToast('⏸ Proyecto pausado.', 'info');
+        }catch(e){ _showToast('No se pudo pausar: '+e.message, 'info'); }
+        finally{ btnP.disabled = false; btnP.textContent = prevTxt; }
+      });
+
+      document.getElementById('btnContinuar').addEventListener('click', async function(){
+        const btnC = document.getElementById('btnContinuar');
+        const prevTxt = btnC.textContent;
+        btnC.disabled = true;
+        btnC.innerHTML = '<span class="_spin"></span> Continuando…';
+        try{
+          const r = await fetch('/api/operador/proyectos/'+_pid+'/estado',{
+            method:'PATCH', credentials:'same-origin',
+            headers:{'Content-Type':'application/json','X-CSRFToken':_getCsrf()},
+            body: JSON.stringify({estado:'en_proceso'})
+          });
+          if(!r.ok){ const j=await r.json().catch(()=>{}); throw new Error((j&&j.message)||'error'); }
+          _pausado = false;
+          applyPausadoUI();
+          _showToast('▶ Proyecto continuado.', 'success');
+        }catch(e){ _showToast('No se pudo continuar: '+e.message, 'info'); }
+        finally{ btnC.disabled = false; btnC.textContent = prevTxt; }
+      });
+
+      // Aplicar estado inicial cuando la página cargue completamente
+      if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', applyPausadoUI);
+      } else {
+        applyPausadoUI();
+      }
+    })();
+    </script>
   </body>
   </html>

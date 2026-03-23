@@ -181,9 +181,12 @@ urlpatterns = [
     path('api/operador/proyectos/<int:proyecto_id>', api_views.operador_proyecto_detalle_api, name='api_operador_proyecto_detalle'),
     path('api/operador/proyectos/<int:proyecto_id>/estado', api_views.operador_proyecto_estado_api, name='api_operador_proyecto_estado'),
     path('api/operador/proyectos/<int:proyecto_id>/piezas/marcar-todas', api_views.operador_proyecto_marcar_todas_cortadas_api, name='api_operador_proyecto_marcar_todas'),
+    path('api/operador/proyectos/<int:proyecto_id>/piezas-batch', api_views.operador_piezas_batch_api, name='api_operador_piezas_batch'),
+    path('api/operador/proyectos/<int:proyecto_id>/piezas/<str:pieza_id>/imprimir-etiqueta', api_views.imprimir_etiqueta_pieza_api, name='api_imprimir_etiqueta_pieza'),
     path('api/operador/proyectos/<int:proyecto_id>/piezas/<str:pieza_id>', api_views.operador_pieza_estado_api, name='api_operador_pieza_estado'),
     path('api/operador/proyectos/<int:proyecto_id>/completar', api_views.operador_proyecto_completar_api, name='api_operador_proyecto_completar'),
     path('api/operador/proyectos/<int:proyecto_id>/tablero-completado', api_views.operador_tablero_completado_api, name='api_operador_tablero_completado'),
+    path('api/impresoras', api_views.impresoras_list_api, name='api_impresoras_list'),
 
     # enchapador API
     path('api/enchapador/proyectos/<int:proyecto_id>/completar-enchapado', enchapador_views.enchapador_completar_api, name='api_enchapador_completar'),

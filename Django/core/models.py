@@ -166,6 +166,7 @@ class Proyecto(models.Model):
         ('produccion', 'En Producción'),
         ('enchapado_pendiente', 'Enchapado Pendiente'),
         ('completado', 'Completado'),
+        ('pausado', 'Pausado'),
         ('cancelado', 'Cancelado')
     ]
     

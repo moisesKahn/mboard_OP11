@@ -86,9 +86,9 @@ class OptimizationEngine:
                 break
 
             colocada = False
-            # Probar primero en tableros existentes (más llenos primero)
-            tableros_ordenados = sorted(self.tableros, key=lambda t: len(t['piezas']), reverse=True)
-            for tablero in tableros_ordenados:
+            # Probar primero en tableros existentes (en orden de creación, no por cantidad de piezas,
+            # para llenar cada tablero antes de abrir uno nuevo)
+            for tablero in self.tableros:
                 if self._colocar_pieza_en_tablero(tablero, pieza):
                     colocada = True
                     break
@@ -1154,30 +1154,20 @@ def _pdf_from_result(proyecto, resultado, opts: Optional[dict] = None):
                 running_tipo = pieza.get('indiceUnidad') or corridas_global_por_tipo[kN]
                 total_tipo = pieza.get('totalUnidades') or totales_global_por_tipo.get(kN, 1)
 
-                # Normalización robusta de coordenadas a relativas al área útil
+                # Normalización de coordenadas a relativas al área útil.
+                # El backend SIEMPRE suma margen_x/margen_y antes de guardar (ver optimizacion(),
+                # líneas pieza['x'] += self.margen_x / pieza['y'] += self.margen_y).
+                # Por tanto restar siempre el margen para obtener coords relativas al área útil.
                 px_mm = float(pieza.get('x',0)); py_mm = float(pieza.get('y',0))
-                # Usar las dimensiones tal como vienen en JSON; 'rotada' solo afecta la etiqueta/orientación.
                 pa0 = float(aN); pl0 = float(lN)
                 pw_mm = pa0
                 ph_mm = pl0
                 mx_val = float(margen_x); my_val = float(margen_y)
-                def _fits(rx, ry, eps=2.0):
-                    return (
-                        rx >= -eps and ry >= -eps and
-                        rx + pw_mm <= effW_mm + eps and
-                        ry + ph_mm <= effH_mm + eps
-                    )
-                candA = (px_mm, py_mm)
-                candB = (px_mm - mx_val, py_mm - my_val)
-                if _fits(candB[0], candB[1], eps=2.0):
-                    px_rel_mm, py_rel_mm = candB
-                elif _fits(candA[0], candA[1], eps=2.0):
-                    px_rel_mm, py_rel_mm = candA
-                else:
-                    rx, ry = candB
-                    rx = max(0.0, min(rx, max(effW_mm - pw_mm, 0.0)))
-                    ry = max(0.0, min(ry, max(effH_mm - ph_mm, 0.0)))
-                    px_rel_mm, py_rel_mm = rx, ry
+                px_rel_mm = px_mm - mx_val
+                py_rel_mm = py_mm - my_val
+                # Clip de seguridad: nunca salir del área útil
+                px_rel_mm = max(0.0, min(px_rel_mm, max(effW_mm - pw_mm, 0.0)))
+                py_rel_mm = max(0.0, min(py_rel_mm, max(effH_mm - ph_mm, 0.0)))
 
                 px = px_rel_mm * scale
                 py = py_rel_mm * scale
@@ -1191,15 +1181,11 @@ def _pdf_from_result(proyecto, resultado, opts: Optional[dict] = None):
                 x1 = _q(x_raw + w)
                 y1 = _q(y_raw + h)
                 x = x0; y = y0; w = max(0.0, x1 - x0); h = max(0.0, y1 - y0)
-                # Guardar bordes RAW para canónico posterior
-                x0_raw = x_raw; x1_raw = x_raw + w
-                y0_raw = y_raw; y1_raw = y_raw + h
-                raw_xs.extend([x0_raw, x1_raw]); raw_ys.extend([y0_raw, y1_raw])
+                raw_xs.extend([x0, x1]); raw_ys.extend([y0, y1])
 
                 # Guardar geometría y metadatos mínimos para el dibujado posterior
                 piezas_geom.append({
                     'x': x, 'y': y, 'w': w, 'h': h,
-                    'x0_raw': x0_raw, 'x1_raw': x1_raw, 'y0_raw': y0_raw, 'y1_raw': y1_raw,
                     'nombre': str(pieza.get('nombre','Pieza')),
                     'pa': int(aN),
                     'pl': int(lN),
@@ -1222,55 +1208,9 @@ def _pdf_from_result(proyecto, resultado, opts: Optional[dict] = None):
                 except Exception:
                     pass
 
-            # Unificar coordenadas a valores canónicos (columnas/filas) para evitar solapes
-            try:
-                canon_eps = max(float(_opts.get('snap_step', 0.5)) * 0.75, 0.3)
-                def build_canonical(vals, eps):
-                    if not vals:
-                        return []
-                    arr = sorted(float(v) for v in vals)
-                    groups = []
-                    cur = [arr[0]]
-                    for v in arr[1:]:
-                        if abs(v - cur[-1]) <= eps:
-                            cur.append(v)
-                        else:
-                            groups.append(cur); cur = [v]
-                    groups.append(cur)
-                    step = float(_opts.get('snap_step', 0.5))
-                    reps = []
-                    for gvals in groups:
-                        m = sum(gvals)/len(gvals)
-                        reps.append(round(m/step)*step)
-                    return reps
-                canon_xs = build_canonical(raw_xs, canon_eps)
-                canon_ys = build_canonical(raw_ys, canon_eps)
-                import bisect as _bs
-                def nearest(sorted_vals, v):
-                    if not sorted_vals:
-                        return v
-                    i = _bs.bisect_left(sorted_vals, v)
-                    if i == 0:
-                        return sorted_vals[0]
-                    if i == len(sorted_vals):
-                        return sorted_vals[-1]
-                    a = sorted_vals[i-1]; b = sorted_vals[i]
-                    return a if abs(v-a) <= abs(v-b) else b
-
-                # Recalcular geometría de piezas y segmentos con coordenadas canónicas
-                _vert_segments.clear(); _horiz_segments.clear()
-                for g in piezas_geom:
-                    x0c = nearest(canon_xs, g['x0_raw']); x1c = nearest(canon_xs, g['x1_raw'])
-                    y0c = nearest(canon_ys, g['y0_raw']); y1c = nearest(canon_ys, g['y1_raw'])
-                    if x1c < x0c: x0c, x1c = x1c, x0c
-                    if y1c < y0c: y0c, y1c = y1c, y0c
-                    g['x'] = x0c; g['y'] = y0c; g['w'] = max(0.0, x1c - x0c); g['h'] = max(0.0, y1c - y0c)
-                    _vert_segments.setdefault(x0c, []).append((y0c, y1c))
-                    _vert_segments.setdefault(x1c, []).append((y0c, y1c))
-                    _horiz_segments.setdefault(y0c, []).append((x0c, x1c))
-                    _horiz_segments.setdefault(y1c, []).append((x0c, x1c))
-            except Exception:
-                pass
+            # Coordenadas ya calculadas y snapped por _q(). No aplicar canonización adicional
+            # porque agrupa bordes de piezas adyacentes separadas por kerf, deformando su tamaño.
+            # Los segmentos de corte ya están correctamente registrados.
 
             # Dibujar líneas de corte (kerf)
             # - visible si draw_kerf=True

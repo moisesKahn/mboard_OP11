@@ -15,6 +15,7 @@
         <option value="aprobado" {% if estado == 'aprobado' %}selected{% endif %}>Aprobado</option>
         <option value="produccion" {% if estado == 'produccion' %}selected{% endif %}>En Producción</option>
         <option value="completado" {% if estado == 'completado' %}selected{% endif %}>Completado</option>
+        <option value="pausado" {% if estado == 'pausado' %}selected{% endif %}>Pausado</option>
         <option value="cancelado" {% if estado == 'cancelado' %}selected{% endif %}>Cancelado</option>
       </select>
       <button class="btn btn-primary" type="submit">Filtrar</button>

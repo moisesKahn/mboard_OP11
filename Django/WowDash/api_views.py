@@ -1,4 +1,10 @@
 import re
+import json as _json
+import subprocess
+import tempfile
+import os
+from reportlab.lib.pagesizes import mm as _rl_mm
+from reportlab.pdfgen import canvas as _rl_canvas
 from django.contrib.auth import authenticate
 from django.http import JsonResponse, HttpRequest
 from django.views.decorators.csrf import csrf_exempt
@@ -8,6 +14,28 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Count
 from core.models import UsuarioPerfilOptimizador, Cliente, Proyecto, AuditLog, OptimizationRun
 from core.auth_utils import jwt_encode, get_auth_context
+
+
+def _parse_resultado(res):
+    """
+    Normaliza el campo resultado_optimizacion independientemente de cómo fue guardado.
+    - Si es dict (JSONField entregado ya parseado por Django) → lo devuelve tal cual.
+    - Si es string JSON simple → hace un json.loads.
+    - Si está doblemente serializado (string dentro de JSON) → hace dos json.loads.
+    Siempre retorna un dict.
+    """
+    if res is None:
+        return None
+    if isinstance(res, dict):
+        return res
+    try:
+        parsed = _json.loads(res)
+        if isinstance(parsed, str):
+            # Doblemente serializado: el JSON contenía un string JSON
+            return _json.loads(parsed)
+        return parsed
+    except Exception:
+        return None
 
 
 def _claims_for_user(user: User):
@@ -252,7 +280,7 @@ def operador_proyecto_detalle_api(request: HttpRequest, proyecto_id: int):
     if not res:
         return JsonResponse({'success': False, 'message': 'Proyecto sin resultado'}, status=404)
     try:
-        resd = _json.loads(res) if isinstance(res, str) else res
+        resd = _parse_resultado(res)
     except Exception:
         resd = res if isinstance(res, dict) else None
     if not isinstance(resd, (dict,)):
@@ -297,7 +325,6 @@ def operador_proyecto_detalle_api(request: HttpRequest, proyecto_id: int):
                 'largo_mm': t.get('largo') or mat.get('tablero_largo_original') or mat.get('tablero_largo_efectivo'),
                 'piezas': piezas,
                 'eficiencia': t.get('eficiencia_tablero'),
-                'cortes': t.get('cortes') or [],
             })
         normalized_materiales.append({
             'indice': m_idx,
@@ -336,14 +363,21 @@ def operador_pieza_estado_api(request: HttpRequest, proyecto_id: int, pieza_id: 
     """PATCH /api/operador/proyectos/<id>/piezas/<pieza_id>
     Body: { estado: 'pendiente'|'en_corte'|'cortada'|'descartada' }
     Persiste el estado dentro del JSON de resultado.
+    Usa select_for_update() para evitar race conditions cuando múltiples piezas
+    se guardan en paralelo (ej: Promise.all en el frontend).
     """
+    from django.db import transaction
+
     ctx = get_auth_context(request)
+
+    # Validar permisos y payload ANTES de abrir la transacción
     base_qs = Proyecto.objects
     if not (ctx.get('organization_is_general') or ctx.get('is_support')):
         base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
-    p = get_object_or_404(base_qs, id=proyecto_id)
-    if ctx.get('role') == 'operador' and p.operador_id != request.user.id:
-        return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
+    # Verificar existencia sin lock primero
+    if not base_qs.filter(id=proyecto_id).exists():
+        from django.http import Http404
+        raise Http404
 
     try:
         payload = _json.loads(request.body.decode('utf-8') or '{}')
@@ -353,62 +387,85 @@ def operador_pieza_estado_api(request: HttpRequest, proyecto_id: int, pieza_id: 
     if estado not in ('pendiente','en_corte','cortada','descartada'):
         return JsonResponse({'success': False, 'message': 'Estado inválido'}, status=400)
 
-    res = p.resultado_optimizacion
-    if not res:
-        return JsonResponse({'success': False, 'message': 'Proyecto sin resultado'}, status=404)
-    try:
-        resd = _json.loads(res) if isinstance(res, str) else res
-    except Exception:
-        return JsonResponse({'success': False, 'message': 'Resultado inválido'}, status=500)
-
-    materiales = resd.get('materiales') if isinstance(resd.get('materiales'), list) else [resd]
-    updated = False
-    # Intentar formato nuevo: m{m}t{t}p{i}
+    # Parsear pieza_id antes de la transacción
     mti = re.match(r'^m(\d+)t(\d+)p(\d+)$', pieza_id or '')
-    if mti:
-        target_m = int(mti.group(1))
-        target_t = int(mti.group(2))
-        target_p = int(mti.group(3))
-        for m_idx, mat in enumerate(materiales, start=1):
-            if m_idx != target_m:
-                continue
-            tableros = mat.get('tableros') or []
-            for t_idx, t in enumerate(tableros, start=1):
-                if t_idx != target_t:
+
+    with transaction.atomic():
+        # select_for_update: bloquea la fila hasta que la transacción termine.
+        # Esto serializa los PATCHes concurrentes y evita que un request
+        # sobreescriba los cambios de otro que llegó al mismo tiempo.
+        p = base_qs.select_for_update().get(id=proyecto_id)
+
+        if ctx.get('role') == 'operador' and p.operador_id != request.user.id:
+            return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
+
+        res = p.resultado_optimizacion
+        if not res:
+            return JsonResponse({'success': False, 'message': 'Proyecto sin resultado'}, status=404)
+        # IMPORTANTE: hacer deepcopy para que Django detecte el campo como modificado.
+        # El JSONField de Django entrega el mismo objeto dict en memoria; si se modifica
+        # in-place y se re-asigna el mismo objeto, Django no genera el UPDATE SQL.
+        import copy
+        resd = copy.deepcopy(_parse_resultado(res))
+        if resd is None:
+            return JsonResponse({'success': False, 'message': 'Resultado inválido'}, status=500)
+
+        materiales = resd.get('materiales') if isinstance(resd.get('materiales'), list) else [resd]
+        updated = False
+
+        if mti:
+            target_m = int(mti.group(1))
+            target_t = int(mti.group(2))
+            target_p = int(mti.group(3))
+            for m_idx, mat in enumerate(materiales, start=1):
+                if m_idx != target_m:
                     continue
-                piezas = t.get('piezas') or []
-                for i, pi in enumerate(piezas, start=1):
-                    if i == target_p:
-                        pi['estado'] = estado
-                        updated = True
-                        break
+                tableros = mat.get('tableros') or []
+                for t_idx, t in enumerate(tableros, start=1):
+                    if t_idx != target_t:
+                        continue
+                    piezas = t.get('piezas') or []
+                    for i, pi in enumerate(piezas, start=1):
+                        if i == target_p:
+                            pi['estado'] = estado
+                            updated = True
+                            break
+                    break
                 break
-            break
-    else:
-        # Compatibilidad: formato antiguo t{t}p{i} (sin material)
+        else:
+            # Compatibilidad: formato antiguo t{t}p{i} (sin material)
+            for mat in materiales:
+                tableros = mat.get('tableros') or []
+                for t_idx, t in enumerate(tableros, start=1):
+                    piezas = t.get('piezas') or []
+                    for i, pi in enumerate(piezas, start=1):
+                        pid = f"t{t_idx}p{i}"
+                        if pid == pieza_id:
+                            pi['estado'] = estado
+                            updated = True
+                            break
+                if updated:
+                    break
+
+        if not updated:
+            return JsonResponse({'success': False, 'message': 'Pieza no encontrada'}, status=404)
+
+        # Garantizar que TODAS las piezas tengan la clave 'estado' antes de persistir
         for mat in materiales:
-            tableros = mat.get('tableros') or []
-            for t_idx, t in enumerate(tableros, start=1):
-                piezas = t.get('piezas') or []
-                for i, pi in enumerate(piezas, start=1):
-                    pid = f"t{t_idx}p{i}"
-                    if pid == pieza_id:
-                        pi['estado'] = estado
-                        updated = True
-                        break
-            if updated:
-                break
-        # no-op
+            for tab in (mat.get('tableros') or []):
+                for pi in (tab.get('piezas') or []):
+                    if 'estado' not in pi:
+                        pi['estado'] = 'pendiente'
 
-    if not updated:
-        return JsonResponse({'success': False, 'message': 'Pieza no encontrada'}, status=404)
-
-    # Persistir
-    if 'materiales' in resd:
-        p.resultado_optimizacion = _json.dumps(resd, ensure_ascii=False)
-    else:
-        p.resultado_optimizacion = _json.dumps(materiales[0], ensure_ascii=False)
-    p.save(update_fields=['resultado_optimizacion'])
+        # Persistir dentro de la transacción (atómica con el select_for_update).
+        # IMPORTANTE: resultado_optimizacion es un JSONField — se debe asignar el DICT,
+        # no un string. Si se asigna json.dumps(...), Django re-serializa el string
+        # produciéndose doble codificación y el estado no se guarda correctamente.
+        if 'materiales' in resd:
+            p.resultado_optimizacion = resd
+        else:
+            p.resultado_optimizacion = materiales[0]
+        p.save(update_fields=['resultado_optimizacion'])
 
     # Auditoría
     try:
@@ -425,6 +482,106 @@ def operador_pieza_estado_api(request: HttpRequest, proyecto_id: int, pieza_id: 
         pass
 
     return JsonResponse({'success': True})
+
+
+@csrf_exempt
+@login_required
+@require_http_methods(["PATCH"])
+def operador_piezas_batch_api(request: HttpRequest, proyecto_id: int):
+    """PATCH /api/operador/proyectos/<id>/piezas-batch
+    Body: { piezas: [ {pieza_id: 'm1t1p3', estado: 'cortada'}, ... ] }
+    Aplica múltiples cambios de estado en UNA SOLA transacción/lock,
+    reduciendo el número de round-trips a la BD cuando se cortan varias
+    piezas de golpe (ej: siguiente corte marca 3 piezas a la vez).
+    """
+    from django.db import transaction
+
+    ctx = get_auth_context(request)
+    base_qs = Proyecto.objects
+    if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+        base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
+    if not base_qs.filter(id=proyecto_id).exists():
+        from django.http import Http404
+        raise Http404
+
+    try:
+        payload = _json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        return JsonResponse({'success': False, 'message': 'Payload inválido'}, status=400)
+
+    piezas_payload = payload.get('piezas') or []
+    if not isinstance(piezas_payload, list) or not piezas_payload:
+        return JsonResponse({'success': False, 'message': 'Se requiere lista de piezas'}, status=400)
+
+    ESTADOS_VALIDOS = {'pendiente', 'en_corte', 'cortada', 'descartada'}
+    cambios = {}  # pieza_id → estado (ya validados)
+    for item in piezas_payload:
+        if not isinstance(item, dict):
+            continue
+        pid = (item.get('pieza_id') or '').strip()
+        est = (item.get('estado') or '').strip()
+        if pid and est in ESTADOS_VALIDOS:
+            cambios[pid] = est
+
+    if not cambios:
+        return JsonResponse({'success': False, 'message': 'Sin cambios válidos'}, status=400)
+
+    with transaction.atomic():
+        p = base_qs.select_for_update().get(id=proyecto_id)
+        if ctx.get('role') == 'operador' and p.operador_id != request.user.id:
+            return JsonResponse({'success': False, 'message': 'Forbidden'}, status=403)
+
+        res = p.resultado_optimizacion
+        if not res:
+            return JsonResponse({'success': False, 'message': 'Proyecto sin resultado'}, status=404)
+
+        import copy
+        resd = copy.deepcopy(_parse_resultado(res))
+        if resd is None:
+            return JsonResponse({'success': False, 'message': 'Resultado inválido'}, status=500)
+
+        materiales = resd.get('materiales') if isinstance(resd.get('materiales'), list) else [resd]
+        pending = dict(cambios)  # copia para marcar los encontrados
+        updated = 0
+
+        for m_idx, mat in enumerate(materiales, start=1):
+            for t_idx, t in enumerate(mat.get('tableros') or [], start=1):
+                for p_idx, pi in enumerate(t.get('piezas') or [], start=1):
+                    pid = f'm{m_idx}t{t_idx}p{p_idx}'
+                    if pid in pending:
+                        pi['estado'] = pending.pop(pid)
+                        updated += 1
+                    # Compatibilidad con formato antiguo t{t}p{i}
+                    pid_legacy = f't{t_idx}p{p_idx}'
+                    if pid_legacy in pending:
+                        pi['estado'] = pending.pop(pid_legacy)
+                        updated += 1
+                    if 'estado' not in pi:
+                        pi['estado'] = 'pendiente'
+
+        if updated == 0:
+            return JsonResponse({'success': False, 'message': 'Ninguna pieza encontrada'}, status=404)
+
+        if 'materiales' in resd:
+            p.resultado_optimizacion = resd
+        else:
+            p.resultado_optimizacion = materiales[0]
+        p.save(update_fields=['resultado_optimizacion'])
+
+    try:
+        AuditLog.objects.create(
+            actor=request.user,
+            organizacion=p.organizacion,
+            verb='EDIT',
+            target_model='Proyecto',
+            target_id=str(p.id),
+            target_repr=p.codigo,
+            changes={'batch_piezas': list(cambios.keys()), 'count': updated},
+        )
+    except Exception:
+        pass
+
+    return JsonResponse({'success': True, 'updated': updated})
 
 
 @csrf_exempt
@@ -494,7 +651,8 @@ def operador_proyecto_marcar_todas_cortadas_api(request: HttpRequest, proyecto_i
     if not res:
         return JsonResponse({'success': False, 'message': 'Proyecto sin resultado'}, status=404)
     try:
-        resd = _json.loads(res) if isinstance(res, str) else res
+        import copy
+        resd = copy.deepcopy(_parse_resultado(res))
     except Exception:
         return JsonResponse({'success': False, 'message': 'Resultado inválido'}, status=500)
     materiales = resd.get('materiales') if isinstance(resd.get('materiales'), list) else [resd]
@@ -505,11 +663,11 @@ def operador_proyecto_marcar_todas_cortadas_api(request: HttpRequest, proyecto_i
                 if pi.get('estado') != 'cortada':
                     pi['estado'] = 'cortada'
                     count += 1
-    # Persistir
+    # Persistir — asignar dict directamente al JSONField (no json.dumps)
     if 'materiales' in resd:
-        p.resultado_optimizacion = _json.dumps(resd, ensure_ascii=False)
+        p.resultado_optimizacion = resd
     else:
-        p.resultado_optimizacion = _json.dumps(materiales[0], ensure_ascii=False)
+        p.resultado_optimizacion = materiales[0]
     p.save(update_fields=['resultado_optimizacion'])
     try:
         AuditLog.objects.create(
@@ -544,7 +702,7 @@ def operador_proyecto_completar_api(request: HttpRequest, proyecto_id: int):
     if not res:
         return JsonResponse({'success': False, 'message': 'Proyecto sin resultado'}, status=404)
     try:
-        resd = _json.loads(res) if isinstance(res, str) else res
+        resd = _parse_resultado(res)
     except Exception:
         return JsonResponse({'success': False, 'message': 'Resultado inválido'}, status=500)
     materiales = resd.get('materiales') if isinstance(resd.get('materiales'), list) else [resd]
@@ -631,7 +789,8 @@ def operador_tablero_completado_api(request: HttpRequest, proyecto_id: int):
     if not res:
         return JsonResponse({'success': False, 'message': 'Proyecto sin resultado.'}, status=404)
     try:
-        resd = _json.loads(res) if isinstance(res, str) else res
+        import copy
+        resd = copy.deepcopy(_parse_resultado(res))
     except Exception:
         return JsonResponse({'success': False, 'message': 'Resultado inválido.'}, status=500)
 
@@ -649,11 +808,11 @@ def operador_tablero_completado_api(request: HttpRequest, proyecto_id: int):
             pi['estado'] = 'cortada'
             count += 1
 
-    # Persistir
+    # Persistir — asignar dict directamente al JSONField (no json.dumps)
     if 'materiales' in resd:
-        p.resultado_optimizacion = _json.dumps(resd, ensure_ascii=False)
+        p.resultado_optimizacion = resd
     else:
-        p.resultado_optimizacion = _json.dumps(materiales[0], ensure_ascii=False)
+        p.resultado_optimizacion = materiales[0]
 
     # Actualizar estado del proyecto a en_proceso si corresponde
     campos_a_guardar = ['resultado_optimizacion']
@@ -697,3 +856,220 @@ def operador_tablero_completado_api(request: HttpRequest, proyecto_id: int):
         'total_tableros': total_tableros,
     })
 
+
+# ── Impresoras CUPS ────────────────────────────────────────────────────────────
+
+@login_required
+@require_http_methods(["GET"])
+def impresoras_list_api(request: HttpRequest):
+    """GET /api/impresoras  →  lista de impresoras CUPS disponibles."""
+    try:
+        result = subprocess.run(
+            ['lpstat', '-p'],
+            capture_output=True, text=True, timeout=5
+        )
+        lines = result.stdout.splitlines()
+        printers = []
+        for line in lines:
+            # formato: "la impresora NOMBRE está ..."
+            parts = line.split()
+            if len(parts) >= 3:
+                printers.append(parts[2])
+        # impresora por defecto
+        default_result = subprocess.run(
+            ['lpstat', '-d'],
+            capture_output=True, text=True, timeout=5
+        )
+        default_name = ''
+        for line in default_result.stdout.splitlines():
+            if ':' in line:
+                default_name = line.split(':', 1)[-1].strip()
+                break
+        return JsonResponse({'success': True, 'impresoras': printers, 'default': default_name})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e), 'impresoras': [], 'default': ''}, status=500)
+
+
+@csrf_exempt
+@login_required
+@require_http_methods(["POST"])
+def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id: str):
+    """POST /api/operador/proyectos/<id>/piezas/<pieza_id>/imprimir-etiqueta
+    Body JSON: { impresora: str (opcional), copias: int (opcional, default 1) }
+    Genera un PDF de etiqueta con reportlab y lo envía a la impresora CUPS.
+    """
+    ctx = get_auth_context(request)
+    base_qs = Proyecto.objects
+    if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+        base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
+
+    # Traer solo el campo necesario como dict (evita cargar el objeto completo)
+    row = base_qs.filter(id=proyecto_id).values('id', 'resultado_optimizacion').first()
+    if not row:
+        from django.http import Http404
+        raise Http404
+
+    try:
+        payload = _json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        payload = {}
+
+    impresora = (payload.get('impresora') or '').strip() or None
+    copias = max(1, min(10, int(payload.get('copias') or 1)))
+
+    # Buscar pieza en el resultado
+    res = row['resultado_optimizacion']
+    if not res:
+        return JsonResponse({'success': False, 'message': 'Proyecto sin resultado'}, status=404)
+    try:
+        resd = _parse_resultado(res)
+    except Exception:
+        return JsonResponse({'success': False, 'message': 'Resultado inválido'}, status=500)
+
+    materiales = resd.get('materiales') if isinstance(resd.get('materiales'), list) else [resd]
+    pieza_data = None
+    material_nombre = '—'
+
+    # pieza_id tiene formato m{m}t{t}p{i} (generado dinámicamente, no está en el JSON)
+    mti = re.match(r'^m(\d+)t(\d+)p(\d+)$', pieza_id or '')
+    if mti:
+        target_m = int(mti.group(1))
+        target_t = int(mti.group(2))
+        target_p = int(mti.group(3))
+        for m_idx, mat in enumerate(materiales, start=1):
+            if m_idx != target_m:
+                continue
+            mat_nombre = mat.get('material') or mat.get('nombre') or (mat.get('meta') or {}).get('material') or '—'
+            for t_idx, tablero in enumerate(mat.get('tableros') or [], start=1):
+                if t_idx != target_t:
+                    continue
+                piezas = tablero.get('piezas') or []
+                for i, pi in enumerate(piezas, start=1):
+                    if i == target_p:
+                        pieza_data = pi
+                        material_nombre = mat_nombre
+                        break
+                break
+            break
+    else:
+        # Compatibilidad: formato antiguo t{t}p{i}
+        for mat in materiales:
+            mat_nombre = mat.get('material') or mat.get('nombre') or '—'
+            for t_idx, tablero in enumerate(mat.get('tableros') or [], start=1):
+                for i, pi in enumerate(tablero.get('piezas') or [], start=1):
+                    pid = f"t{t_idx}p{i}"
+                    if pid == pieza_id:
+                        pieza_data = pi
+                        material_nombre = mat_nombre
+                        break
+                if pieza_data:
+                    break
+            if pieza_data:
+                break
+
+    if not pieza_data:
+        return JsonResponse({'success': False, 'message': 'Pieza no encontrada'}, status=404)
+
+    pw_mm = int(pieza_data.get('ancho') or 0)
+    ph_mm = int(pieza_data.get('largo') or 0)
+    nombre  = str(pieza_data.get('nombre') or pieza_id)
+    tc      = pieza_data.get('tapacantos') or {}
+    veta    = pieza_data.get('veta') or ''
+
+    # ── Nombre del material ────────────────────────────────────────────────────
+    if isinstance(material_nombre, dict):
+        material_nombre = material_nombre.get('nombre') or material_nombre.get('codigo') or '—'
+
+    # ── Generar ZPL (nativo Zebra — sin PDF, sin ReportLab) ───────────────────
+    # Etiqueta 100 × 150 mm a 300 dpi → 1181 × 1772 dots
+    # ^CF0,N = fuente 0 tamaño N dots
+    DPI = 300
+    def mm2d(v): return int(v * DPI / 25.4)   # mm → dots
+
+    LW = mm2d(100); LH = mm2d(150)
+    M  = mm2d(5)   # margen
+
+    # Rectángulo proporcional de la pieza (área de dibujo: 100×70mm desde top)
+    DA_W = LW - 2 * M
+    DA_H = mm2d(70)
+    DA_TOP = mm2d(16)   # Y desde arriba donde empieza el área de dibujo
+    scale = min(DA_W / max(pw_mm, 1), DA_H / max(ph_mm, 1)) * 0.85
+    rw = int(pw_mm * scale); rh = int(ph_mm * scale)
+    rx = (LW - rw) // 2;    ry = DA_TOP
+
+    # Tapacantos en texto
+    tc_parts = []
+    if tc.get('arriba'):    tc_parts.append('Arr')
+    if tc.get('derecha'):   tc_parts.append('Der')
+    if tc.get('abajo'):     tc_parts.append('Aba')
+    if tc.get('izquierda'): tc_parts.append('Izq')
+    tc_str = ' | '.join(tc_parts) if tc_parts else 'Sin tapacanto'
+
+    veta_str = {'horizontal': 'Horizontal', 'vertical': 'Vertical'}.get(veta, veta)
+
+    # Truncar strings para que no se salgan de la etiqueta
+    def _z(s, mx=28): return str(s)[:mx].replace('^', '').replace('~', '')
+
+    zpl_lines = [
+        '^XA',
+        '^LH0,0',
+        f'^PW{LW}',
+        f'^LL{LH}',
+        # ── Título (nombre pieza) ──────────────────────────────────────────────
+        f'^FO{M},{M}^CF0,45^FD{_z(nombre, 22)}^FS',
+        # ── Línea separadora ──────────────────────────────────────────────────
+        f'^FO{M},{mm2d(14)}^GB{LW - 2*M},2,2^FS',
+        # ── Rectángulo proporcional de la pieza ───────────────────────────────
+        f'^FO{rx},{ry}^GB{rw},{rh},3,W^FS',          # contorno blanco relleno
+        f'^FO{rx},{ry}^GB{rw},{rh},3^FS',            # borde negro
+    ]
+
+    # Tapacantos: líneas internas en los lados correspondientes
+    TC_OFF = max(4, int(min(rw, rh) * 0.06))
+    if tc.get('arriba'):
+        zpl_lines.append(f'^FO{rx},{ry + TC_OFF}^GB{rw},4,4^FS')
+    if tc.get('abajo'):
+        zpl_lines.append(f'^FO{rx},{ry + rh - TC_OFF - 4}^GB{rw},4,4^FS')
+    if tc.get('izquierda'):
+        zpl_lines.append(f'^FO{rx + TC_OFF},{ry}^GB4,{rh},4^FS')
+    if tc.get('derecha'):
+        zpl_lines.append(f'^FO{rx + rw - TC_OFF - 4},{ry}^GB4,{rh},4^FS')
+
+    # Nombre dentro del rectángulo (centrado)
+    fn_size = max(25, min(rw, rh) // 3)
+    nx = rx + (rw - len(_z(nombre, 12)) * fn_size // 2) // 2
+    ny = ry + rh // 2 - fn_size // 2
+    zpl_lines.append(f'^FO{nx},{ny}^CF0,{fn_size}^FD{_z(nombre, 12)}^FS')
+
+    # Cota ancho (encima del rect)
+    cota_y = ry - mm2d(7)
+    zpl_lines.append(f'^FO{rx},{cota_y}^CF0,28^FD{pw_mm} mm^FS')
+    # Cota largo (derecha del rect)
+    cota_x = rx + rw + mm2d(2)
+    zpl_lines.append(f'^FO{cota_x},{ry + rh//2 - 14}^CF0,28^FD{ph_mm} mm^FS')
+
+    # ── Datos textuales ────────────────────────────────────────────────────────
+    INFO_Y = ry + rh + mm2d(12)
+    ROW_H  = mm2d(7)
+    zpl_lines += [
+        f'^FO{M},{INFO_Y}^CF0,30^FDAncho: {pw_mm} mm^FS',
+        f'^FO{M},{INFO_Y + ROW_H}^CF0,30^FDLargo: {ph_mm} mm^FS',
+        f'^FO{M},{INFO_Y + 2*ROW_H}^CF0,28^FDTapacanto: {_z(tc_str, 26)}^FS',
+    ]
+    if veta_str:
+        zpl_lines.append(f'^FO{M},{INFO_Y + 3*ROW_H}^CF0,28^FDVeta: {_z(veta_str, 18)}^FS')
+
+    # Material (recuadro al fondo)
+    box_y = LH - mm2d(16)
+    zpl_lines += [
+        f'^FO{M},{box_y}^GB{LW - 2*M},{mm2d(13)},2,W^FS',
+        f'^FO{M + 6},{box_y + mm2d(2)}^CF0,32^FDMaterial: {_z(material_nombre, 22)}^FS',
+        f'^PQ{copias}',
+        '^XZ',
+    ]
+
+    zpl = '\n'.join(zpl_lines)
+
+    # Devolver el ZPL como texto — el navegador lo envía a Zebra Browser Print local
+    from django.http import HttpResponse
+    return HttpResponse(zpl, content_type='text/plain; charset=utf-8')

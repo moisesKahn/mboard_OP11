@@ -269,7 +269,7 @@ class Command(BaseCommand):
                                 'eficiencia_promedio': r.get('eficiencia', 0) or 0,
                                 'ultimo_folio': f"SEED-{timezone.now().strftime('%Y%m%d%H%M%S')}"
                             }
-                            proyecto.resultado_optimizacion = json.dumps(resultado_persist, ensure_ascii=False)
+                            proyecto.resultado_optimizacion = resultado_persist
                             proyecto.total_materiales = 1
                             proyecto.total_tableros = resultado_persist['total_tableros']
                             proyecto.total_piezas = resultado_persist['total_piezas']

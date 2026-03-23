@@ -46,6 +46,7 @@ def estado_badge(estado: str) -> str:
             'produccion': 'bg-primary',
             'enchapado_pendiente': 'bg-orange text-white',
             'completado': 'bg-success',
+            'pausado': 'bg-danger',
             'cancelado': 'bg-danger',
         }
         return mapping.get(e, 'bg-light text-dark')

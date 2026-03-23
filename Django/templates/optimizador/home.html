@@ -13,6 +13,15 @@
     #cfg3dOverlay .box { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px 22px; box-shadow: 0 10px 30px rgba(0,0,0,.08); min-width: 260px; text-align:center; }
     #cfg3dOverlay .spinner { width: 42px; height: 42px; border: 3px solid #cfd8dc; border-top-color: #1976d2; border-radius: 50%; margin: 0 auto 10px; animation: spin 0.9s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    /* Indicador de estado de optimización en las pestañas */
+    .tab-opt-badge { display: inline-flex; align-items: center; margin-left: 5px; font-size: 0.70rem; vertical-align: middle; pointer-events: none; }
+    .tab-opt-badge.optimizado i { color: #22c55e; }
+    .tab-opt-badge.pendiente  i { color: #f59e0b; }
+    /* Flash de aviso al bloquear cambio de pestaña */
+    #tabBlockAlert { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 4000;
+        background: #fff3cd; border: 1px solid #ffc107; color: #664d03; border-radius: 8px;
+        padding: 10px 22px; font-size: 0.88rem; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+        display: none; pointer-events: none; white-space: nowrap; }
     @keyframes hourglassFlip { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(180deg); } }
     #cfg3dOverlay.show { display: flex; }
     /* Placeholders más claros para inputs de ejemplo (EJ: 600/400) */
@@ -103,6 +112,9 @@
         </div>
     </div>
 </div>
+
+<!-- Aviso de bloqueo al cambiar pestaña sin optimizar -->
+<div id="tabBlockAlert"><i class="fa fa-exclamation-triangle me-1"></i><span id="tabBlockMsg"></span></div>
 
 <!-- 2. Selección de Tablero -->
 <div class="card mb-24">
@@ -509,6 +521,7 @@
     // Estado por material (pestaña): piezas y último resultado
     const materialState = {}; // { [index]: { piezas: [...], resultado: {...} } }
     let _dirty = false; // cambios sin optimizar en el material/proyecto actual
+    const _materialDirty = {}; // { [index]: boolean } estado dirty por pestaña
     // Habilita el botón Optimizar solo cuando hay al menos una pieza con ancho/alto válidos
     document.addEventListener('input', function(e){
         if (!document.getElementById('btnOptimizar')) return;
@@ -1076,12 +1089,68 @@
             t.id.startsWith('tableroSelect') || t.id.startsWith('tapacantoSelect') ||
             t.id === 'clienteInput' || t.id === 'nombreProyecto'){
             _dirty = true;
+            const idx = getActiveMaterialIndex();
+            _materialDirty[idx] = true;
+            actualizarEstadoTab(idx);
+        }
+    }, true);
+    // También capturar cambios en select (change event no burbujea a input)
+    document.addEventListener('change', (e)=>{
+        const t = e.target;
+        if (!t) return;
+        if (t.id && (t.id.startsWith('tableroSelect') || t.id.startsWith('tapacantoSelect'))){
+            _dirty = true;
+            const idx = getActiveMaterialIndex();
+            _materialDirty[idx] = true;
+            actualizarEstadoTab(idx);
         }
     }, true);
 
     function hayResultadoOptimizado(){
         const idx = getActiveMaterialIndex();
         return !!(materialState[idx] && materialState[idx].resultado);
+    }
+
+    // Muestra un aviso temporal en la parte superior (sin bloquear UI)
+    let _tabAlertTimer = null;
+    function mostrarAvisoTab(msg){
+        const el = document.getElementById('tabBlockAlert');
+        const msgEl = document.getElementById('tabBlockMsg');
+        if (!el || !msgEl) return;
+        msgEl.textContent = msg;
+        el.style.display = 'block';
+        if (_tabAlertTimer) clearTimeout(_tabAlertTimer);
+        _tabAlertTimer = setTimeout(()=>{ el.style.display = 'none'; }, 3000);
+    }
+
+    // Actualiza el badge de estado (optimizado / pendiente) en la pestaña indicada
+    function actualizarEstadoTab(idx){
+        const btn = document.getElementById(`material${idx}-tab`);
+        if (!btn) return;
+        // Quitar badge anterior
+        const old = btn.querySelector('.tab-opt-badge');
+        if (old) old.remove();
+        const tieneResultado = !!(materialState[idx] && materialState[idx].resultado);
+        const esDirty = !!_materialDirty[idx];
+        const span = document.createElement('span');
+        span.className = 'tab-opt-badge';
+        if (tieneResultado && !esDirty){
+            span.classList.add('optimizado');
+            span.innerHTML = '<i class="fa fa-check-circle"></i>';
+            span.title = 'Optimizado';
+        } else {
+            const piezas = materialState[idx] && materialState[idx].piezas;
+            const tienePiezas = Array.isArray(piezas) && piezas.some(p => Number(p.ancho) > 0 && Number(p.alto) > 0);
+            if (tienePiezas || esDirty){
+                span.classList.add('pendiente');
+                span.innerHTML = '<i class="fa fa-exclamation-circle"></i>';
+                span.title = 'Pendiente de optimización';
+            } else {
+                // Sin piezas: sin badge
+                return;
+            }
+        }
+        btn.appendChild(span);
     }
 
     // Control del botón PDF: habilitar/deshabilitar de forma centralizada
@@ -1100,17 +1169,23 @@
     }
 
     function updatePdfButton(){
-        // Regla: habilitar el botón solo si existe resultado optimizado guardado
-        // o si el material activo tiene un resultado en estado (después de optimizar y guardar).
+        // Regla: habilitar el botón solo si hay proyecto guardado Y todos los materiales
+        // tienen resultado optimizado vigente (sin dirty).
         try{
             const cont = document.getElementById('resultadosOptimizacion');
             const hasProyecto = !!(cont && cont.getAttribute('data-proyecto-id'));
-            const idx = getActiveMaterialIndex();
-            const tieneResultadoEnEstado = !!(materialState[idx] && materialState[idx].resultado);
             // Si estamos bloqueando explícitamente (durante optimización), respetarlo
             if (window._bloquearPDF) { setPdfButton(false); return; }
-            // Habilitar solo si hay proyecto y resultado
-            setPdfButton(hasProyecto && tieneResultadoEnEstado);
+            // Verificar que TODOS los materiales están optimizados
+            let allOptimized = true;
+            for (let i = 1; i <= contadorMateriales; i++){
+                const st = materialState[i];
+                if (!st || !st.resultado || _materialDirty[i]){
+                    allOptimized = false;
+                    break;
+                }
+            }
+            setPdfButton(hasProyecto && allOptimized);
         }catch(e){ console.warn('updatePdfButton error', e); }
     }
 
@@ -1148,7 +1223,10 @@
             const tbody = document.getElementById('piezasTableBody'); if (tbody){ tbody.innerHTML=''; contadorPiezas = 0; agregarFilaRapida(); }
         }catch(_e){}
         for (const k in materialState){ delete materialState[k]; }
+        for (const k in _materialDirty){ delete _materialDirty[k]; }
         _dirty = false; window._resetResultado = true;
+        // Limpiar badge del material 1 (único que queda)
+        try{ actualizarEstadoTab(1); }catch(_e){}
     }
 
     function nuevoProyecto(){
@@ -1202,7 +1280,26 @@
     document.addEventListener('DOMContentLoaded', ()=>{
         const tabs = document.querySelectorAll('#materialTabs button.nav-link');
         tabs.forEach(btn=>{
+            // show.bs.tab es cancelable (antes de que se muestre la nueva pestaña)
+            btn.addEventListener('show.bs.tab', (ev)=>{
+                if (btn.id === 'add-material-tab') return; // botón agregar, ignorar
+                const prevIndex = activeMaterialIndex;
+                // Si el destino es la misma pestaña, no bloquear
+                const targetId = btn.getAttribute('data-bs-target') || `#material${btn.id.replace('-tab','')}`;
+                if (prevIndex && document.querySelector(targetId) === document.getElementById(`material${prevIndex}`)) return;
+                // Verificar si el material actual tiene piezas sin optimizar
+                const prevState = materialState[prevIndex];
+                const piezasActuales = piezasFromDOM();
+                const tienePiezas = piezasActuales.some(p => Number(p.ancho) > 0 && Number(p.alto) > 0 && Number(p.cantidad) > 0);
+                const estaOptimizado = !!(prevState && prevState.resultado) && !_materialDirty[prevIndex];
+                if (tienePiezas && !estaOptimizado){
+                    ev.preventDefault();
+                    mostrarAvisoTab(`Optimiza el Material ${prevIndex} antes de cambiar de pestaña`);
+                    return;
+                }
+            });
             btn.addEventListener('shown.bs.tab', (ev)=>{
+                if (btn.id === 'add-material-tab') return;
                 const prevIndex = activeMaterialIndex;
                 // Guardar del anterior
                 if (prevIndex){
@@ -1215,6 +1312,11 @@
                 renderPiezasToDOM(state && state.piezas ? state.piezas : []);
                 // Aplicar configuración a la pestaña activa
                 applyConfigToTab(activeMaterialIndex);
+                // Si la pestaña de destino ya tenía resultado, forzar re-optimización
+                if (state && state.resultado){
+                    _materialDirty[activeMaterialIndex] = true;
+                    actualizarEstadoTab(activeMaterialIndex);
+                }
                 // Reutilizar snapshot almacenado si existe, evitando recomputar SVG
                 try {
                     const cont = document.getElementById('visualizacionTableros');
@@ -1284,6 +1386,7 @@
 
     // ── Búsqueda de cliente por RUT ──────────────────────────────────────────
     let rutSearchTimeout = null;
+    let _rutFetchSeq = 0;   // contador de secuencia para descartar respuestas obsoletas
 
     /** Normaliza RUT: quita puntos y espacios, mayúsculas */
     function _normRut(r){ return String(r||'').toUpperCase().trim().replace(/\./g,'').replace(/ /g,''); }
@@ -1312,12 +1415,20 @@
         if(badge) badge.style.display = 'none';
     }
 
-    /** Busca clientes por RUT en el servidor y actualiza el dropdown */
+    /** Busca clientes por RUT en el servidor y actualiza el dropdown.
+     *  Usa número de secuencia para ignorar respuestas de requests anteriores
+     *  y solo muestra "no encontrado" cuando la respuesta corresponde al request
+     *  activo, eliminando el desfase visual. */
     function buscarPorRut(rutRaw){
         const rutTrimmed = rutRaw.trim();
         const dd = document.getElementById('clientesDropdown');
         if(!dd) return;
+
+        // Cancelar timer anterior
         if(rutSearchTimeout) clearTimeout(rutSearchTimeout);
+
+        // Invalidar cualquier fetch en vuelo incrementando el contador
+        _rutFetchSeq++;
 
         // Limpiar si el campo está muy corto
         if(_normRut(rutTrimmed).length < 3){
@@ -1326,15 +1437,25 @@
             return;
         }
 
+        // Mostrar spinner SOLO mientras espera el debounce (aún no salió el fetch)
         dd.innerHTML = '<div class="estado"><i class="fa fa-spinner fa-spin me-1"></i>Buscando cliente…</div>';
         dd.style.display = 'block';
 
+        const mySeq = ++_rutFetchSeq;   // token de este intento
+
         rutSearchTimeout = setTimeout(()=>{
+            // Actualizar spinner al momento de lanzar el fetch real
+            if(_rutFetchSeq !== mySeq) return;  // ya se canceló
+            dd.innerHTML = '<div class="estado"><i class="fa fa-spinner fa-spin me-1"></i>Consultando base de datos…</div>';
+            dd.style.display = 'block';
+
             fetch(`{% url 'buscar_cliente_por_rut' %}?rut=${encodeURIComponent(rutTrimmed)}`)
                 .then(r=>r.json())
                 .then(data=>{
+                    // Descartar si llegó una búsqueda más nueva mientras viajaba este fetch
+                    if(_rutFetchSeq !== mySeq) return;
+
                     if(data.found && data.clientes && data.clientes.length){
-                        // Mostrar lista de coincidencias
                         dd.innerHTML = data.clientes.map(c=>`
                             <button type="button" class="item"
                                 data-id="${c.id}" data-rut="${c.rut||''}"
@@ -1347,28 +1468,30 @@
                             </button>`).join('');
                         dd.style.display = 'block';
                     } else {
-                        // No encontrado → ofrecer creación automática
+                        // No encontrado — solo mostrar opción de crear si no hay otro fetch pendiente
                         limpiarCliente();
                         dd.innerHTML = `
                             <div class="estado text-warning">
                                 <i class="fa fa-user-plus me-1"></i>
-                                RUT no encontrado.
+                                RUT no encontrado en su organización.
                                 <button type="button" class="btn btn-sm btn-warning mt-1 w-100"
                                     id="btnCrearCliente">
                                     Crear cliente con RUT <strong>${rutTrimmed}</strong>
                                 </button>
                             </div>`;
                         dd.style.display = 'block';
-                        document.getElementById('btnCrearCliente').addEventListener('click', ()=>{
+                        const btnCrear = document.getElementById('btnCrearCliente');
+                        if(btnCrear) btnCrear.addEventListener('click', ()=>{
                             crearClientePorRut(rutTrimmed);
                         });
                     }
                 })
                 .catch(err=>{
+                    if(_rutFetchSeq !== mySeq) return;
                     console.error('Error al buscar cliente por RUT:', err);
                     dd.innerHTML = '<div class="estado text-danger">Error al consultar clientes</div>';
                 });
-        }, 300);
+        }, 400);
     }
 
     /** Crea un cliente nuevo con el RUT dado y lo selecciona */
@@ -1526,12 +1649,15 @@
 
     // Agregar nueva pestaña de material
     function agregarMaterial() {
-        // Confirmar si hay cambios sin optimizar en pestaña activa
-        if (!hayResultadoOptimizado() && _dirty){
-            if (!window._autoOptimizeSilent) {
-                const ok = confirm('Tienes cambios sin optimizar. ¿Deseas continuar y agregar otro material igualmente?');
-                if (!ok) return;
-            }
+        // Bloquear si el material actual tiene piezas sin optimizar
+        const prevIdx = activeMaterialIndex;
+        const prevState = materialState[prevIdx];
+        const piezasActuales = piezasFromDOM();
+        const tienePiezas = piezasActuales.some(p => Number(p.ancho) > 0 && Number(p.alto) > 0 && Number(p.cantidad) > 0);
+        const estaOptimizado = !!(prevState && prevState.resultado) && !_materialDirty[prevIdx];
+        if (tienePiezas && !estaOptimizado){
+            mostrarAvisoTab(`Optimiza el Material ${prevIdx} antes de agregar otro material`);
+            return;
         }
         contadorMateriales++;
         const tabsContainer = document.getElementById('materialTabs');
@@ -1601,6 +1727,20 @@
         // Activar la nueva pestaña
         const newTabBtn = document.getElementById(`material${contadorMateriales}-tab`);
         // Hook de cambio para guardar/restaurar estado por material
+        newTabBtn.addEventListener('show.bs.tab', (ev)=>{
+            const currentPrevIdx = activeMaterialIndex;
+            const targetEl = document.getElementById(`material${contadorMateriales}`);
+            if (currentPrevIdx && document.getElementById(`material${currentPrevIdx}`) === targetEl) return;
+            const ps = materialState[currentPrevIdx];
+            const pa = piezasFromDOM();
+            const tp = pa.some(p => Number(p.ancho) > 0 && Number(p.alto) > 0 && Number(p.cantidad) > 0);
+            const eo = !!(ps && ps.resultado) && !_materialDirty[currentPrevIdx];
+            if (tp && !eo){
+                ev.preventDefault();
+                mostrarAvisoTab(`Optimiza el Material ${currentPrevIdx} antes de cambiar de pestaña`);
+                return;
+            }
+        });
         newTabBtn.addEventListener('shown.bs.tab', ()=>{
             const prevIndex = activeMaterialIndex;
             if (prevIndex){
@@ -1614,6 +1754,12 @@
             if (cont){ cont.innerHTML = ''; cont.removeAttribute('data-locked'); }
             // Aplicar configuración a la pestaña mostrada
             applyConfigToTab(activeMaterialIndex);
+            // Si volvemos a una pestaña ya optimizada, forzar re-optimización
+            if (state && state.resultado){
+                _materialDirty[activeMaterialIndex] = true;
+                actualizarEstadoTab(activeMaterialIndex);
+            }
+            try{ updatePdfButton(); }catch(_e){}
         });
         new bootstrap.Tab(newTabBtn).show();
 
@@ -3261,10 +3407,12 @@
                     }, 800);
                     window._resetResultado = false;
                     _dirty = false;
+                    _materialDirty[materialIndex] = false;
                     try {
                         // Persistir en estado por pestaña
                         materialState[materialIndex] = materialState[materialIndex] || {};
                         materialState[materialIndex].resultado = res.resultado;
+                        actualizarEstadoTab(materialIndex);
                         if (res.proyecto_id){
                             const resDiv = document.getElementById('resumenProyecto');
                             if (resDiv) resDiv.setAttribute('data-proyecto-id', String(res.proyecto_id));
