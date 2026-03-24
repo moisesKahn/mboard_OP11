@@ -1,3 +1,4 @@
+import json as _json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -171,6 +172,7 @@ def operador_corte_guiado(request: HttpRequest, proyecto_id: int):
         'title': f'Corte Guiado - {proyecto.codigo}',
         'subTitle': proyecto.nombre,
         'proyecto': proyecto,
+        'resultado_optimizacion_json': _json.dumps(proyecto.resultado_optimizacion) if proyecto.resultado_optimizacion else 'null',
     }
     return render(request, 'operador/corte_guiado.html', context)
 
@@ -183,7 +185,6 @@ def operador_proyectos_sse(request: HttpRequest):
     El cliente reconecta automáticamente si se cae la conexión.
     """
     import time
-    import json as _json
 
     ctx = get_auth_context(request)
     ESTADOS_HISTORIAL = ('completado', 'pendiente_enchapado', 'cancelado')

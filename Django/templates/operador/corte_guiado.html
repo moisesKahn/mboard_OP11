@@ -384,8 +384,8 @@
 // ===== DATOS DEL PROYECTO =====
 let proyectoData = null;
 try {
-  const rawData = '{{ proyecto.resultado_optimizacion|escapejs }}';
-  if (rawData && rawData !== 'None' && rawData !== 'null') {
+  const rawData = '{{ resultado_optimizacion_json|escapejs }}';
+  if (rawData && rawData !== 'null' && rawData !== '') {
     proyectoData = JSON.parse(rawData);
     // Inyectar pieza_id en CADA pieza de proyectoData desde el inicio,
     // usando el mismo formato que la API: m{mi+1}t{ti+1}p{pi+1}

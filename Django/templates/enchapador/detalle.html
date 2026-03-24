@@ -174,13 +174,13 @@
 
 <script>
 const proyectoId = {{ proyecto.id }};
-const rawData = '{{ proyecto.resultado_optimizacion|escapejs }}';
+const rawData = '{{ resultado_optimizacion_json|escapejs }}';
 let proyectoData = null;
 try {
-  if (rawData && rawData !== 'None' && rawData !== 'null') {
+  if (rawData && rawData !== 'null' && rawData !== '') {
     proyectoData = JSON.parse(rawData);
   }
-} catch(e) { console.error('Error parseando datos:', e); }
+} catch(e) { console.error('Error parseando datos del proyecto:', e); }
 
 function getCsrf() {
   return document.cookie.split(';').map(c => c.trim())

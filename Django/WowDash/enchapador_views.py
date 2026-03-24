@@ -132,10 +132,16 @@ def enchapador_proyecto(request: HttpRequest, proyecto_id: int):
 
     proyecto = get_object_or_404(base_qs, id=proyecto_id)
 
+    # Serializar a JSON string para evitar que Django template use str()
+    # sobre el dict Python (que produce Python repr con comillas simples,
+    # no JSON válido → JSON.parse() falla en el template)
+    resultado_json = _json.dumps(proyecto.resultado_optimizacion) if proyecto.resultado_optimizacion else 'null'
+
     return render(request, 'enchapador/detalle.html', {
         'title': f'Enchapado - {proyecto.codigo}',
         'subTitle': proyecto.nombre,
         'proyecto': proyecto,
+        'resultado_optimizacion_json': resultado_json,
     })
 
 

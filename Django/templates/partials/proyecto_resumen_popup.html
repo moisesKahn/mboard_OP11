@@ -2,21 +2,22 @@
      Uso: <button data-resumen-id="{{ p.id }}">👁</button> -->
 
 <div class="modal fade" id="proyectoResumenModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-centered">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content border-0 shadow-lg">
 
       <!-- Cabecera -->
-      <div class="modal-header py-3 px-4" style="background:#1e293b;">
-        <div style="flex:1;min-width:0;">
-          <div class="d-flex align-items-center gap-3 flex-wrap">
-            <span id="prm-codigo" class="text-white fw-bold" style="font-size:16px;font-family:monospace;"></span>
-            <span id="prm-estado-badge"></span>
+      <div class="modal-header px-3" style="background:#1e293b;border-bottom:none;padding-top:12px;padding-bottom:12px;position:relative;">
+        <div style="flex:1;min-width:0;padding-right:28px;">
+          <div class="d-flex align-items-center gap-3 flex-wrap mb-1">
+            <span id="prm-codigo" class="text-white fw-bold" style="font-size:26px;font-family:monospace;letter-spacing:2px;"></span>
+            <span id="prm-estado-badge" style="font-size:13px;"></span>
           </div>
-          <div style="font-size:14px;color:#94a3b8;margin-top:4px;">
-            <span id="prm-cliente"></span>
+          <div>
+            <span id="prm-cliente" class="text-white fw-semibold" style="font-size:20px;opacity:.9;"></span>
           </div>
         </div>
-        <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+          style="position:absolute;top:12px;right:12px;margin:0;"></button>
       </div>
 
       <!-- Cuerpo -->
@@ -27,51 +28,57 @@
         </div>
 
         <div id="prm-content" style="display:none;">
-          <table class="table table-bordered mb-0" style="font-size:15px;">
+
+          <!-- Tabla de materiales -->
+          <table class="table table-bordered mb-0" style="font-size:17px;">
             <thead class="table-dark">
               <tr>
-                <th class="py-2 px-3" style="width:50%;">Material</th>
-                <th class="text-center py-2">Tableros</th>
-                <th class="text-center py-2">Piezas</th>
+                <th class="py-1 px-3" style="width:55%;font-size:15px;">Material</th>
+                <th class="text-center py-1" style="width:12%;font-size:15px;">Tableros</th>
+                <th class="text-center py-1" style="width:12%;font-size:15px;">Piezas</th>
               </tr>
             </thead>
             <tbody id="prm-mat-table"></tbody>
-            <tfoot style="background:#e2e8f0;font-weight:700;font-size:15px;">
+            <tfoot style="background:#e2e8f0;font-weight:700;font-size:17px;">
               <tr>
-                <td class="px-3 py-2">TOTALES</td>
-                <td class="text-center py-2" id="prm-total-tab">—</td>
-                <td class="text-center py-2" id="prm-total-piezas">—</td>
+                <td class="px-3 py-1">TOTALES</td>
+                <td class="text-center py-1" id="prm-total-tab">—</td>
+                <td class="text-center py-1" id="prm-total-piezas">—</td>
               </tr>
             </tfoot>
           </table>
 
-          <table class="table table-bordered mb-0 border-top-0" style="font-size:15px;">
-            <tbody>
-              <tr>
-                <td class="px-3 py-2" style="width:50%;color:#475569;font-weight:500;">Cortes necesarios</td>
-                <td class="fw-semibold py-2 px-3" id="prm-total-cortes" colspan="2">—</td>
-              </tr>
-              <tr>
-                <td class="px-3 py-2" style="color:#475569;font-weight:500;">Tapacanto (metros lineales)</td>
-                <td class="fw-semibold py-2 px-3" id="prm-metros-tc" colspan="2">—</td>
-              </tr>
-              <tr>
-                <td class="px-3 py-2" style="color:#475569;font-weight:500;">Avance del proyecto</td>
-                <td class="py-2 px-3" colspan="2">
-                  <div class="d-flex align-items-center gap-3">
-                    <div class="progress flex-grow-1" style="height:14px;border-radius:6px;">
-                      <div id="prm-pct-bar" class="progress-bar" role="progressbar"
-                           style="width:0%;border-radius:6px;transition:width .4s;"></div>
-                    </div>
-                    <span id="prm-pct-label" class="fw-bold" style="min-width:48px;font-size:15px;">0%</span>
-                  </div>
-                  <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
-                    <span id="prm-piezas-cortadas">0</span> de <span id="prm-piezas-total-2">0</span> piezas cortadas
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <!-- Métricas inferiores en grid 2 columnas -->
+          <div class="d-grid gap-0" style="grid-template-columns:1fr 1fr;display:grid;border-top:1px solid #dee2e6;">
+
+            <!-- Cortes necesarios -->
+            <div class="px-3 py-2" style="border-right:1px solid #dee2e6;border-bottom:1px solid #dee2e6;">
+              <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:1px;">Cortes necesarios</div>
+              <div id="prm-total-cortes" class="fw-bold" style="font-size:26px;color:#1e293b;line-height:1.1;">—</div>
+            </div>
+
+            <!-- Tapacanto -->
+            <div class="px-3 py-2" style="border-bottom:1px solid #dee2e6;">
+              <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:1px;">Tapacanto (m lineales)</div>
+              <div id="prm-metros-tc" class="fw-bold" style="font-size:26px;color:#1e293b;line-height:1.1;">—</div>
+            </div>
+
+            <!-- Avance del proyecto — ocupa ambas columnas -->
+            <div class="px-3 py-2" style="grid-column:1/-1;">
+              <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px;">Avance del proyecto</div>
+              <div class="d-flex align-items-center gap-3">
+                <div class="progress flex-grow-1" style="height:16px;border-radius:8px;">
+                  <div id="prm-pct-bar" class="progress-bar" role="progressbar"
+                       style="width:0%;border-radius:8px;transition:width .4s;"></div>
+                </div>
+                <span id="prm-pct-label" class="fw-bold" style="min-width:52px;font-size:20px;color:#1e293b;">0%</span>
+                <span style="color:#94a3b8;font-size:14px;white-space:nowrap;">
+                  <span id="prm-piezas-cortadas">0</span> de <span id="prm-piezas-total-2">0</span> piezas cortadas
+                </span>
+              </div>
+            </div>
+
+          </div><!-- /grid -->
         </div><!-- /prm-content -->
       </div><!-- /modal-body -->
 
@@ -134,15 +141,16 @@ window.addEventListener('load', function () {
     var tbody = document.getElementById('prm-mat-table');
     tbody.innerHTML = d.materiales.length
       ? d.materiales.map(function(m) {
+          var tcLine = m.tapacanto
+            ? '<div style="font-size:12px;color:#f59e0b;font-weight:500;margin-top:3px;">↳ ' + m.tapacanto + '</div>'
+            : '';
           return '<tr>' +
-            '<td>' + m.nombre +
-              (m.tapacanto ? ' <span class="badge bg-warning text-dark ms-1" style="font-size:10px;">' + m.tapacanto + '</span>' : '') +
-            '</td>' +
-            '<td class="text-center">' + m.tableros + '</td>' +
-            '<td class="text-center">' + m.piezas + '</td>' +
+            '<td class="px-3 py-1" style="vertical-align:middle;"><div style="font-size:17px;font-weight:500;line-height:1.2;">' + m.nombre + '</div>' + tcLine + '</td>' +
+            '<td class="text-center" style="font-size:17px;vertical-align:middle;">' + m.tableros + '</td>' +
+            '<td class="text-center" style="font-size:17px;vertical-align:middle;">' + m.piezas + '</td>' +
           '</tr>';
         }).join('')
-      : '<tr><td colspan="3" class="text-muted text-center">Sin datos de optimización</td></tr>';
+      : '<tr><td colspan="3" class="text-muted text-center py-3">Sin datos de optimización</td></tr>';
 
     document.getElementById('prm-total-tab').textContent    = d.total_tableros;
     document.getElementById('prm-total-piezas').textContent = d.total_piezas;
