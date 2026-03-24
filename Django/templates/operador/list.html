@@ -3,50 +3,80 @@
 {% load ui_extras %}
 
 {% block content %}
-<div class="row g-3 mb-3">
-  <div class="col-md-3">
-    <form method="get" class="d-flex gap-2">
-      <input type="text" class="form-control" name="search" value="{{ search }}" placeholder="Buscar por código, nombre o cliente">
-      <select class="form-select" name="estado">
-        <option value="">Todos</option>
-        <option value="borrador" {% if estado == 'borrador' %}selected{% endif %}>Borrador</option>
-        <option value="en_proceso" {% if estado == 'en_proceso' %}selected{% endif %}>En Proceso</option>
-        <option value="optimizado" {% if estado == 'optimizado' %}selected{% endif %}>Optimizado</option>
-        <option value="aprobado" {% if estado == 'aprobado' %}selected{% endif %}>Aprobado</option>
-        <option value="produccion" {% if estado == 'produccion' %}selected{% endif %}>En Producción</option>
-        <option value="completado" {% if estado == 'completado' %}selected{% endif %}>Completado</option>
-        <option value="pausado" {% if estado == 'pausado' %}selected{% endif %}>Pausado</option>
-        <option value="cancelado" {% if estado == 'cancelado' %}selected{% endif %}>Cancelado</option>
-      </select>
-      <button class="btn btn-primary" type="submit">Filtrar</button>
-    </form>
-  </div>
+
+<!-- Indicador de actualización en tiempo real -->
+<div id="sseStatus" style="
+  display:none; position:fixed; bottom:18px; right:18px; z-index:9000;
+  background:#198754; color:#fff; border-radius:8px;
+  padding:8px 16px; font-size:13px; font-weight:600;
+  box-shadow:0 4px 16px rgba(0,0,0,.18); align-items:center; gap:8px;
+">
+  <span id="sseStatusIcon">🟢</span>
+  <span id="sseStatusMsg">Nuevos proyectos asignados — actualizando…</span>
 </div>
 
 <div class="card">
   <div class="card-body">
+
+    <!-- Buscador local + toggle vista -->
+    <form method="get" action="" class="mb-3" id="frmBuscar">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="input-group" style="max-width:420px;">
+          <span class="input-group-text bg-white border-end-0">
+            <iconify-icon icon="ion:search-outline" style="font-size:16px;color:#888;"></iconify-icon>
+          </span>
+          <input type="text" name="search" id="searchInput"
+                 class="form-control border-start-0 ps-0"
+                 placeholder="Buscar por ID, nombre, cliente, código…"
+                 value="{{ search|default:'' }}"
+                 autocomplete="off">
+          {% if search %}
+          <a href="?" class="btn btn-outline-secondary" title="Limpiar búsqueda">
+            <iconify-icon icon="mingcute:close-line" style="font-size:15px;"></iconify-icon>
+          </a>
+          {% endif %}
+          <button type="submit" class="btn btn-primary">Buscar</button>
+        </div>
+        <!-- Toggle de vista -->
+        <button type="button" id="btnToggleVista" class="btn btn-outline-secondary btn-sm ms-auto" title="Cambiar vista de tabla">
+          <i class="ri-layout-column-line"></i> Vista resumen
+        </button>
+      </div>
+    </form>
+
     <div class="table-responsive">
-      <table class="table align-middle">
+      <!-- Vista normal (por defecto) -->
+      <table class="table align-middle" id="tablaVistaNormal">
         <thead>
           <tr>
-            <th>ID del proyecto</th>
+            <th style="width:90px;">ID</th>
             <th>Nombre</th>
             <th>Cliente</th>
             <th>Estado</th>
             <th>Creado</th>
-            <th class="text-end">Tipo de vista</th>
+            <th class="text-end">Acciones</th>
           </tr>
         </thead>
         <tbody>
           {% for p in proyectos %}
           <tr>
-            <td>{{ p.public_id|default:p.id }}</td>
-            <td>{{ p.nombre }}</td>
+            <td>
+              <span class="badge bg-light text-dark border" style="font-size:11px;font-family:monospace;">{{ p.public_id|default:p.id }}</span>
+            </td>
+            <td>
+              <div class="fw-semibold">{{ p.nombre }}</div>
+              <div class="text-muted" style="font-size:11px;">{{ p.codigo }}</div>
+            </td>
             <td>{{ p.cliente.nombre }}</td>
             <td><span class="badge {{ p.estado|estado_badge }}">{{ p.get_estado_display }}</span></td>
-            <td>{{ p.fecha_creacion|date:'Y-m-d H:i' }}</td>
+            <td style="font-size:12px;">{{ p.fecha_creacion|date:'d/m/Y H:i' }}</td>
             <td class="text-end">
               <div class="btn-group" role="group">
+                <button type="button" class="btn btn-sm btn-outline-secondary prm-trigger"
+                  data-resumen-id="{{ p.id }}"
+                  title="Vista rápida del resumen del proyecto">
+                  <i class="ri-eye-line"></i>
+                </button>
                 <a class="btn btn-sm btn-outline-primary" href="{% url 'operador_proyecto' p.id %}" title="Vista clásica del proyecto">
                   <i class="ri-file-list-3-line"></i> Vista clásica
                 </a>
@@ -58,12 +88,146 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="6" class="text-center text-muted">Sin proyectos asignados.</td>
+            <td colspan="6" class="text-center text-muted py-4">Sin proyectos activos asignados.</td>
           </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <!-- Vista resumen (oculta por defecto, datos rellenados por JS desde cache) -->
+      <table class="table align-middle" id="tablaVistaResumen" style="display:none;">
+        <thead class="table-dark">
+          <tr>
+            <th style="width:80px;">ID</th>
+            <th>Cliente</th>
+            <th class="text-center">Materiales (tableros)</th>
+            <th class="text-center">Piezas totales</th>
+            <th>Tapacanto</th>
+            <th class="text-center">Avance</th>
+            <th>Estado</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyResumen">
+          {% for p in proyectos %}
+          <tr data-pid="{{ p.id }}">
+            <td><span class="badge bg-light text-dark border" style="font-size:11px;font-family:monospace;">{{ p.public_id|default:p.id }}</span></td>
+            <td>{{ p.cliente.nombre }}</td>
+            <td class="text-center prm-col-mat" style="font-size:12px;color:#64748b;">—</td>
+            <td class="text-center prm-col-piezas" style="font-size:13px;font-weight:600;">—</td>
+            <td class="prm-col-tc" style="font-size:12px;">—</td>
+            <td class="text-center prm-col-pct" style="min-width:100px;">—</td>
+            <td><span class="badge {{ p.estado|estado_badge }}">{{ p.get_estado_display }}</span></td>
+            <td class="text-end">
+              <div class="btn-group" role="group">
+                <button type="button" class="btn btn-sm btn-outline-secondary prm-trigger"
+                  data-resumen-id="{{ p.id }}"
+                  title="Vista rápida del resumen del proyecto">
+                  <i class="ri-eye-line"></i>
+                </button>
+                <a class="btn btn-sm btn-outline-primary" href="{% url 'operador_proyecto' p.id %}" title="Vista clásica">
+                  <i class="ri-file-list-3-line"></i>
+                </a>
+                <a class="btn btn-sm btn-primary" href="{% url 'operador_corte_guiado' p.id %}" title="Corte guiado">
+                  <i class="ri-scissors-cut-line"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted py-4">Sin proyectos activos asignados.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
-  </div>
+</div>
+{% include 'partials/proyecto_resumen_popup.html' %}
+{% endblock %}
+
+{% block script %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var STATUS = document.getElementById('sseStatus');
+  if (STATUS) STATUS.style.display = 'none';
+
+  // ── Toggle vista normal / vista resumen ──────────────────────────────────
+  var btnToggle    = document.getElementById('btnToggleVista');
+  var tablaNormal  = document.getElementById('tablaVistaNormal');
+  var tablaResumen = document.getElementById('tablaVistaResumen');
+  var vistaResumen  = false;
+  var resumenRelleno = false;
+
+  function rellenarFilasResumen(cache) {
+    document.querySelectorAll('#tbodyResumen tr[data-pid]').forEach(function(row) {
+      var pid = row.dataset.pid;
+      var d   = cache[pid];
+      if (!d) return;
+
+      // Materiales: "Nombre (N tab · N pz)" por línea
+      var matHtml = '';
+      if (d.materiales && d.materiales.length > 0) {
+        matHtml = d.materiales.map(function(m) {
+          return '<span style="display:block;">' + m.nombre +
+            ' <span class="text-muted">(' + m.tableros + ' tab · ' + m.piezas + ' pz)</span></span>';
+        }).join('');
+      } else if (d.total_tableros > 0 || d.total_piezas > 0) {
+        matHtml = '<span class="text-muted" style="font-size:11px;">' +
+          d.total_tableros + ' tablero(s)</span>';
+      }
+      row.querySelector('.prm-col-mat').innerHTML = matHtml || '<span class="text-muted" style="font-size:11px;">Sin datos</span>';
+
+      row.querySelector('.prm-col-piezas').textContent = d.total_piezas || '—';
+
+      // Tapacanto
+      var tc = d.metros_tapacanto > 0
+        ? '<span class="badge bg-warning text-dark">' + d.metros_tapacanto + ' m</span>'
+        : '<span class="text-muted" style="font-size:11px;">Sin tapacanto</span>';
+      row.querySelector('.prm-col-tc').innerHTML = tc;
+
+      // Avance
+      var pct = d.pct_avance || 0;
+      var barColor = pct >= 100 ? '#22c55e' : pct > 0 ? '#3b82f6' : '#cbd5e1';
+      row.querySelector('.prm-col-pct').innerHTML =
+        '<div class="d-flex align-items-center gap-1">' +
+          '<div class="progress flex-grow-1" style="height:8px;border-radius:4px;">' +
+            '<div class="progress-bar" style="width:' + pct + '%;background:' + barColor + ';border-radius:4px;"></div>' +
+          '</div>' +
+          '<span style="font-size:11px;font-weight:600;min-width:32px;">' + pct + '%</span>' +
+        '</div>';
+    });
+    resumenRelleno = true;
+  }
+
+  if (btnToggle) {
+    btnToggle.addEventListener('click', function() {
+      vistaResumen = !vistaResumen;
+      if (vistaResumen) {
+        tablaNormal.style.display  = 'none';
+        tablaResumen.style.display = '';
+        btnToggle.innerHTML = '<i class="ri-list-unordered"></i> Vista normal';
+        btnToggle.classList.replace('btn-outline-secondary', 'btn-secondary');
+
+        if (!resumenRelleno && window._prmCache) {
+          rellenarFilasResumen(window._prmCache);
+        } else if (!resumenRelleno) {
+          // Esperar a que el batch termine (máx 3s)
+          var intentos = 0;
+          var t = setInterval(function() {
+            if (window._prmCache || ++intentos > 30) {
+              clearInterval(t);
+              if (window._prmCache) rellenarFilasResumen(window._prmCache);
+            }
+          }, 100);
+        }
+      } else {
+        tablaNormal.style.display  = '';
+        tablaResumen.style.display = 'none';
+        btnToggle.innerHTML = '<i class="ri-layout-column-line"></i> Vista resumen';
+        btnToggle.classList.replace('btn-secondary', 'btn-outline-secondary');
+      }
+    });
+  }
+});
+</script>
 {% endblock %}

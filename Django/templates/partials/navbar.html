@@ -10,7 +10,7 @@
                 <button type="button" class="sidebar-mobile-toggle">
                     <iconify-icon icon="heroicons:bars-3-solid" class="icon"></iconify-icon>
                 </button>
-                {% if user.is_authenticated and user.usuarioperfiloptimizador.rol != 'autoservicio' and user.usuarioperfiloptimizador.rol != 'enchapador' %}
+                {% if user.is_authenticated and user.usuarioperfiloptimizador.rol != 'autoservicio' and user.usuarioperfiloptimizador.rol != 'enchapador' and user.usuarioperfiloptimizador.rol != 'operador' %}
                 <div class="navbar-search position-relative">
                     <input type="text" id="globalSearch" name="search" placeholder="Buscar proyectos, clientes, usuarios..." autocomplete="off">
                     <iconify-icon icon="ion:search-outline" class="icon"></iconify-icon>
@@ -119,31 +119,19 @@
                 </div><!-- Language dropdown end -->
 
                 {% if user.is_authenticated and user.usuarioperfiloptimizador.rol != 'autoservicio' and user.usuarioperfiloptimizador.rol != 'enchapador' %}
-                <div class="dropdown">
-                    <button id="btnMessages" class="position-relative w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center" type="button" data-bs-toggle="dropdown">
-                        <iconify-icon icon="mage:email" class="text-primary-light text-xl"></iconify-icon>
-                        <span id="messagesBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">0</span>
-                    </button>
-                    <div id="messagesDropdown" class="dropdown-menu to-top dropdown-menu-lg p-0">
-                        <div class="p-3 border-bottom d-flex align-items-center justify-content-between">
-                            <strong>Mensajes</strong>
-                            <a href="{% url 'chat' %}" class="text-primary-600 text-sm">Abrir chat</a>
-                        </div>
-                        <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between gap-2">
-                            <div class="d-flex align-items-center gap-2">
-                                <iconify-icon icon="mdi:volume-high" id="soundIcon" class="text-primary"></iconify-icon>
-                                <span class="small">Sonido</span>
-                            </div>
-                            <div class="form-check form-switch m-0">
-                                <input class="form-check-input" type="checkbox" role="switch" id="toggleChatSound">
-                            </div>
-                        </div>
-                        <div id="messagesList" class="max-h-400-px overflow-y-auto scroll-sm pe-4">
-                            <div class="p-4 text-center text-muted" id="noMessages">No tienes mensajes nuevos</div>
-                        </div>
-                    </div>
-                </div><!-- Message dropdown end -->
-                {% endif %}
+                <!-- Botón etiqueta global (solo operadores) -->
+                {% if user.usuarioperfiloptimizador.rol == 'operador' %}
+                <button id="btnEtiquetaGlobalNav" type="button"
+                        title="Activa/desactiva impresión automática de etiquetas"
+                        style="display:inline-flex;align-items:center;gap:7px;padding:6px 14px;
+                               border-radius:8px;border:2px solid #dee2e6;background:#f8f9fa;
+                               cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;
+                               transition:background .2s,border-color .2s,color .2s;">
+                    <iconify-icon icon="ri:price-tag-3-line" id="etqNavIcon" style="font-size:18px;"></iconify-icon>
+                    <span id="etqNavLabel">🏷 Etiqueta global: OFF</span>
+                </button>
+                {% endif %}<!-- etiqueta global end -->
+                {% endif %}<!-- autenticado end -->
 
                 <div class="dropdown d-none">
                     <button class="has-indicator w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center" type="button" data-bs-toggle="dropdown">
@@ -369,20 +357,34 @@ function showChangePasswordModal() {
     alert('Funcionalidad de cambio de contraseña - En desarrollo');
 }
 
-// Toggle de sonido del chat (persistente en localStorage)
-document.addEventListener('DOMContentLoaded', () => {
-    const toggle = document.getElementById('toggleChatSound');
-    const icon = document.getElementById('soundIcon');
-    if (!toggle || !icon) return;
-    // estado inicial: true si no existe, respeta 'false'
-    const pref = localStorage.getItem('chatSoundEnabled');
-    const enabled = pref !== 'false';
-    toggle.checked = enabled;
-    icon.setAttribute('icon', enabled ? 'mdi:volume-high' : 'mdi:volume-off');
-    toggle.addEventListener('change', () => {
-        const isOn = toggle.checked;
-        localStorage.setItem('chatSoundEnabled', isOn ? 'true' : 'false');
-        icon.setAttribute('icon', isOn ? 'mdi:volume-high' : 'mdi:volume-off');
-    });
-});
+// Toggle de etiqueta global (operador)
+(function(){
+  const btn = document.getElementById('btnEtiquetaGlobalNav');
+  const icon = document.getElementById('etqNavIcon');
+  const lbl  = document.getElementById('etqNavLabel');
+  if (!btn) return;
+  const KEY = 'cg_globalAutoLabel';
+  function applyState(on){
+    if(on){
+      btn.style.background     = '#198754';
+      btn.style.borderColor    = '#146c43';
+      btn.style.color          = '#fff';
+      icon.setAttribute('icon','ri:price-tag-3-fill');
+      lbl.textContent = '🏷 Etiqueta global: ON';
+    } else {
+      btn.style.background     = '#f8f9fa';
+      btn.style.borderColor    = '#dee2e6';
+      btn.style.color          = '#212529';
+      icon.setAttribute('icon','ri:price-tag-3-line');
+      lbl.textContent = '🏷 Etiqueta global: OFF';
+    }
+  }
+  let active = localStorage.getItem(KEY) === '1';
+  applyState(active);
+  btn.addEventListener('click', function(){
+    active = !active;
+    localStorage.setItem(KEY, active ? '1' : '0');
+    applyState(active);
+  });
+})();
 </script>

@@ -114,6 +114,41 @@
     #cgBtnPausar:hover { background:#c0392b; color:#fff; }
     #cgBtnContinuar { border-color:#198754; color:#198754; font-weight:600; }
     #cgBtnContinuar:hover { background:#198754; color:#fff; }
+
+    /* ── Modal inicio proyecto ── */
+    #cgInicioModal {
+      position:fixed; inset:0; background:rgba(0,0,0,.55);
+      display:flex; align-items:center; justify-content:center; z-index:9500;
+    }
+    .cg-inicio-box {
+      background:#fff; border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.28);
+      padding:30px 32px; min-width:340px; max-width:500px; width:90%; text-align:center;
+    }
+    .cg-inicio-box h4 { margin:0 0 4px; font-size:18px; font-weight:700; }
+    .cg-inicio-box .cg-inicio-sub { color:#888; font-size:13px; margin-bottom:20px; }
+    .cg-inicio-materiales {
+      background:#f8f9fa; border-radius:8px; padding:14px 16px;
+      margin-bottom:22px; text-align:left;
+    }
+    .cg-inicio-materiales h6 {
+      margin:0 0 10px; font-size:13px; font-weight:700; color:#444;
+      text-transform:uppercase; letter-spacing:.04em;
+    }
+    .cg-mat-row {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:7px 0; border-bottom:1px solid #eee; font-size:13px;
+    }
+    .cg-mat-row:last-child { border-bottom:none; }
+    .cg-mat-nombre { font-weight:600; }
+    .cg-mat-badge {
+      background:#0d6efd; color:#fff; border-radius:20px;
+      font-size:11px; padding:2px 10px; font-weight:600; white-space:nowrap;
+    }
+    .cg-inicio-btns { display:flex; gap:10px; justify-content:center; }
+    .cg-btn-volver { padding:9px 20px; border:2px solid #dee2e6; border-radius:8px; background:#fff; cursor:pointer; font-size:14px; font-weight:600; }
+    .cg-btn-volver:hover { background:#f0f0f0; }
+    .cg-btn-iniciar { padding:9px 24px; border:2px solid #198754; border-radius:8px; background:#198754; color:#fff; cursor:pointer; font-size:14px; font-weight:700; }
+    .cg-btn-iniciar:hover { background:#146c43; border-color:#146c43; }
     #cgPausadoOverlay {
       position:fixed; inset:0 0 0 0; top:46px;
       background:rgba(180,0,0,.06); z-index:800;
@@ -214,6 +249,23 @@
   <div class="cg-sep"></div>
   <button class="cg-btn" id="cgBtnPausar" title="Pausar proyecto">⏸ Pausar</button>
   <button class="cg-btn" id="cgBtnContinuar" style="display:none;" title="Continuar proyecto pausado">▶ Continuar</button>
+</div>
+
+<!-- ── MODAL INICIO PROYECTO ── -->
+<div id="cgInicioModal" style="display:none;">
+  <div class="cg-inicio-box">
+    <div style="font-size:36px;margin-bottom:8px;">📋</div>
+    <h4>Verificar materiales</h4>
+    <p class="cg-inicio-sub">Antes de comenzar, confirma que tienes los materiales disponibles para este proyecto.</p>
+    <div class="cg-inicio-materiales">
+      <h6>Materiales necesarios</h6>
+      <div id="cgInicioMatLista"></div>
+    </div>
+    <div class="cg-inicio-btns">
+      <button class="cg-btn-volver" id="cgInicioBtnVolver">← Mis proyectos</button>
+      <button class="cg-btn-iniciar" id="cgInicioBtnIniciar">✅ Iniciar proyecto</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── OVERLAYS ── -->
@@ -778,8 +830,13 @@ document.getElementById('cgBtnCompletar').addEventListener('click', async () => 
 });
 
 // ===== ZBP / ETIQUETA =====
-const LABEL_KEY = `cg_autoLabel_${proyectoId}`;
-let autoLabel = localStorage.getItem(LABEL_KEY) === '1';
+const LABEL_KEY        = `cg_autoLabel_${proyectoId}`;
+const LABEL_GLOBAL_KEY = 'cg_globalAutoLabel';
+// Si el proyecto ya tiene preferencia guardada úsala; si no, heredar del global
+const _savedLabel = localStorage.getItem(LABEL_KEY);
+let autoLabel = _savedLabel !== null
+  ? _savedLabel === '1'
+  : localStorage.getItem(LABEL_GLOBAL_KEY) === '1';
 let _zbpP = null;
 function getZbpDevice() {
   if (!_zbpP) _zbpP = fetch('http://localhost:9100/available').then(r => r.json())
@@ -883,20 +940,68 @@ document.addEventListener('DOMContentLoaded', async function() {
     _seleccionarTableroDesdeDD(_apiMateriales, _mi, _ti);
   }
 
-  // Auto marcar en_proceso
+  // ── Modal de inicio: mostrar si el proyecto está 'asignado'
+  //    o si es un estado pre-proceso y todas las piezas siguen pendientes
   try {
-    const EP = ['completado','en_proceso','pausado','cancelado'];
-    const r2 = await fetch(`/api/operador/proyectos/${proyectoId}`, {credentials:'same-origin'});
-    if (r2.ok) {
-      const d2 = await r2.json();
-      const estado = (d2.proyecto||{}).estado;
-      if (!EP.includes(estado)) {
-        await fetch(`/api/operador/proyectos/${proyectoId}/estado`, {
-          method:'PATCH', credentials:'same-origin',
-          headers:{'Content-Type':'application/json','X-CSRFToken':getCsrf()},
-          body: JSON.stringify({estado:'en_proceso'})
-        });
+    const _estadoProyecto = '{{ proyecto.estado }}';
+    const ESTADOS_PRE_INICIO = ['asignado', 'aprobado', 'produccion', 'optimizado'];
+    const _todasPendientes = _apiMateriales.length > 0 &&
+      _apiMateriales.every(m => (m.tableros||[]).every(t =>
+        (t.piezas||[]).filter(p => p.estado !== 'descartada')
+                       .every(p => !p.estado || p.estado === 'pendiente')
+      ));
+    const _mostrarModal = _estadoProyecto === 'asignado' ||
+      (_todasPendientes && ESTADOS_PRE_INICIO.includes(_estadoProyecto));
+
+    if (_mostrarModal) {
+      // Construir lista de materiales para el modal
+      const _listaEl = document.getElementById('cgInicioMatLista');
+      if (_listaEl) {
+        _listaEl.innerHTML = _apiMateriales.map(m => {
+          const nombre = m.nombre || 'Material sin nombre';
+          const nTableros = (m.tableros || []).length;
+          return `<div class="cg-mat-row">
+            <span class="cg-mat-nombre">${nombre}</span>
+            <span class="cg-mat-badge">${nTableros} tablero${nTableros !== 1 ? 's' : ''}</span>
+          </div>`;
+        }).join('');
       }
+      // Mostrar modal (ocultar loading si ya estaba)
+      const _lo2 = document.getElementById('cgLoadingOverlay');
+      if (_lo2) _lo2.style.display = 'none';
+      const _modal = document.getElementById('cgInicioModal');
+      if (_modal) _modal.style.display = 'flex';
+
+      // Botón Volver → ir a mis proyectos sin cambiar estado
+      document.getElementById('cgInicioBtnVolver').addEventListener('click', () => {
+        window.location.href = '{% url "operador_home" %}';
+      });
+
+      // Botón Iniciar → marcar en_proceso y cerrar modal
+      document.getElementById('cgInicioBtnIniciar').addEventListener('click', async () => {
+        const btnI = document.getElementById('cgInicioBtnIniciar');
+        btnI.disabled = true;
+        btnI.innerHTML = '<span class="_spin"></span> Iniciando…';
+        try {
+          await fetch(`/api/operador/proyectos/${proyectoId}/estado`, {
+            method: 'PATCH', credentials: 'same-origin',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+            body: JSON.stringify({estado: 'en_proceso'})
+          });
+        } catch(_) {}
+        if (_modal) _modal.style.display = 'none';
+        // Dejar que el flujo normal continúe
+      });
+      // No continuar con el resto de la inicialización hasta que el usuario confirme
+      // (ya se ocultó el loading overlay, el canvas queda debajo del modal)
+    } else if (!['en_proceso','pausado','completado','cancelado'].includes(_estadoProyecto)) {
+      // Estado no reconocido como pre-inicio pero tampoco es proceso activo:
+      // marcar en_proceso silenciosamente (comportamiento anterior)
+      await fetch(`/api/operador/proyectos/${proyectoId}/estado`, {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+        body: JSON.stringify({estado: 'en_proceso'})
+      }).catch(() => {});
     }
   } catch(_) {}
 

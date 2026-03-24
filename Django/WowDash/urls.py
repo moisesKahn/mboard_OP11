@@ -65,6 +65,8 @@ urlpatterns = [
     path('proyectos/duplicar/<int:proyecto_id>/', core_views.duplicate_proyecto, name='duplicate_proyecto'),
     path('proyectos/actualizar-estado/', core_views.update_project_status, name='update_project_status'),
     path('proyectos/asignar-operador/', core_views.asignar_operador, name='asignar_operador'),
+    path('api/operador/notificaciones/', core_views.operador_notificaciones_api, name='operador_notificaciones_api'),
+    path('api/enchapador/notificaciones/', core_views.enchapador_notificaciones_api, name='enchapador_notificaciones_api'),
 
 # clientes routes
     path('clientes/', core_views.clientes_list, name='clientes_lista'),
@@ -154,6 +156,7 @@ urlpatterns = [
     path('operador/historial/', operator_views.operador_historial, name='operador_historial'),
     path('operador/proyecto/<int:proyecto_id>/', operator_views.operador_proyecto, name='operador_proyecto'),
     path('operador/corte-guiado/<int:proyecto_id>/', operator_views.operador_corte_guiado, name='operador_corte_guiado'),
+    path('operador/proyectos/eventos/', operator_views.operador_proyectos_sse, name='operador_proyectos_sse'),
 
 # enchapador routes
     path('enchapador/', enchapador_views.enchapador_home, name='enchapador_home'),
@@ -187,6 +190,8 @@ urlpatterns = [
     path('api/operador/proyectos/<int:proyecto_id>/completar', api_views.operador_proyecto_completar_api, name='api_operador_proyecto_completar'),
     path('api/operador/proyectos/<int:proyecto_id>/tablero-completado', api_views.operador_tablero_completado_api, name='api_operador_tablero_completado'),
     path('api/impresoras', api_views.impresoras_list_api, name='api_impresoras_list'),
+    path('api/proyectos/<int:proyecto_id>/resumen', api_views.proyecto_resumen_api, name='api_proyecto_resumen'),
+    path('api/proyectos/resumen-batch', api_views.proyectos_resumen_batch_api, name='api_proyectos_resumen_batch'),
 
     # enchapador API
     path('api/enchapador/proyectos/<int:proyecto_id>/completar-enchapado', enchapador_views.enchapador_completar_api, name='api_enchapador_completar'),

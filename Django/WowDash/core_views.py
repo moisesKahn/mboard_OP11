@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.db.models import Q, Count
 from django.db.models.functions import TruncMonth, TruncWeek
-from core.models import Cliente, Proyecto, Organizacion
+from core.models import Cliente, Proyecto, Organizacion, NotificacionOperador, NotificacionEnchapador
 from core.auth_utils import get_auth_context
 from core.models import UsuarioPerfilOptimizador
 from core.forms import ClienteForm, ProyectoForm
@@ -578,8 +578,32 @@ def asignar_operador(request):
                 return JsonResponse({'success': False, 'message': 'El usuario no tiene perfil válido.'})
 
         proyecto.operador = operador_obj
-        proyecto.save(update_fields=['operador'])
-        return JsonResponse({'success': True, 'message': 'Operador asignado correctamente.'})
+
+        # Si se asignó un operador y el estado es 'optimizado' (listo para producción),
+        # avanzarlo automáticamente a 'asignado' para que aparezca en la lista del operador.
+        fields_to_save = ['operador']
+        ESTADOS_ASIGNABLES = ('optimizado', 'aprobado', 'produccion')
+        if operador_obj and proyecto.estado in ESTADOS_ASIGNABLES:
+            proyecto.estado = 'asignado'
+            fields_to_save.append('estado')
+
+        proyecto.save(update_fields=fields_to_save)
+
+        # Crear notificación persistente en BD para el operador
+        if operador_obj:
+            NotificacionOperador.objects.create(
+                destinatario=operador_obj,
+                proyecto_nombre=proyecto.nombre or '',
+                proyecto_id=proyecto.id,
+            )
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Operador asignado correctamente.',
+            'nuevo_estado': proyecto.estado,
+            'operador_id': operador_obj.id if operador_obj else None,
+            'proyecto_nombre': proyecto.nombre,
+        })
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'Error asignando operador: {str(e)}'})
 
@@ -809,3 +833,52 @@ def toggle_organizacion(request, organizacion_id):
         })
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)})
+
+
+@login_required
+def operador_notificaciones_api(request):
+    """
+    GET  → devuelve las notificaciones no leídas del operador actual y las marca como leídas.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    notifs = NotificacionOperador.objects.filter(
+        destinatario=request.user,
+        leida=False,
+    ).order_by('fecha')
+    data = [
+        {
+            'id': n.id,
+            'proyecto_nombre': n.proyecto_nombre,
+            'proyecto_id': n.proyecto_id,
+            'fecha': n.fecha.isoformat(),
+        }
+        for n in notifs
+    ]
+    # Marcar todas como leídas en un solo UPDATE
+    notifs.update(leida=True)
+    return JsonResponse({'notificaciones': data})
+
+
+@login_required
+def enchapador_notificaciones_api(request):
+    """
+    GET → devuelve las notificaciones no leídas del enchapador actual y las marca como leídas.
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    notifs = NotificacionEnchapador.objects.filter(
+        destinatario=request.user,
+        leida=False,
+    ).order_by('fecha')
+    data = [
+        {
+            'id': n.id,
+            'proyecto_nombre': n.proyecto_nombre,
+            'proyecto_id': n.proyecto_id,
+            'fecha': n.fecha.isoformat(),
+        }
+        for n in notifs
+    ]
+    notifs.update(leida=True)
+    return JsonResponse({'notificaciones': data})

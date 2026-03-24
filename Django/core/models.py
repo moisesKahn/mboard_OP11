@@ -163,6 +163,7 @@ class Proyecto(models.Model):
         ('en_proceso', 'En Proceso'),
         ('optimizado', 'Optimizado'),
         ('aprobado', 'Aprobado'),
+        ('asignado', 'Asignado'),
         ('produccion', 'En Producción'),
         ('enchapado_pendiente', 'Enchapado Pendiente'),
         ('completado', 'Completado'),
@@ -444,3 +445,45 @@ class OptimizationRun(models.Model):
 
     def __str__(self):
         return f"Run {self.id} Proy {self.proyecto_id} ({self.run_at:%Y-%m-%d %H:%M})"
+
+
+class NotificacionOperador(models.Model):
+    """Notificaciones de proyecto asignado para operadores (cross-device)."""
+    destinatario = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='notificaciones_operador',
+        verbose_name="Operador destinatario"
+    )
+    proyecto_nombre = models.CharField(max_length=200, blank=True, default='')
+    proyecto_id = models.IntegerField(null=True, blank=True)
+    leida = models.BooleanField(default=False, verbose_name="Leída")
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Notificación de operador"
+        verbose_name_plural = "Notificaciones de operador"
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"Notif → {self.destinatario_id} | {self.proyecto_nombre} | leida={self.leida}"
+
+
+class NotificacionEnchapador(models.Model):
+    """Notificaciones de proyecto listo para enchapado (cross-device)."""
+    destinatario = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='notificaciones_enchapador',
+        verbose_name="Enchapador destinatario"
+    )
+    proyecto_nombre = models.CharField(max_length=200, blank=True, default='')
+    proyecto_id = models.IntegerField(null=True, blank=True)
+    leida = models.BooleanField(default=False, verbose_name="Leída")
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Notificación de enchapador"
+        verbose_name_plural = "Notificaciones de enchapador"
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"NotifEnch → {self.destinatario_id} | {self.proyecto_nombre} | leida={self.leida}"

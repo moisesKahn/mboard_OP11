@@ -110,6 +110,12 @@
                     </td>
                     {% endif %}
                     <td>
+                        <button type="button"
+                          class="w-32-px h-32-px bg-warning-focus text-warning-main rounded-circle d-inline-flex align-items-center justify-content-center prm-trigger me-1"
+                          data-resumen-id="{{ proyecto.id }}" data-resumen-hover="{{ proyecto.id }}"
+                          title="Vista rápida del proyecto">
+                          <iconify-icon icon="ri:eye-line"></iconify-icon>
+                        </button>
                         <a href="{% url 'exportar_pdf_json' proyecto.id %}" target="_blank" class="w-32-px h-32-px bg-primary-light text-primary-600 rounded-circle d-inline-flex align-items-center justify-content-center" title="Ver/descargar PDF">
                             <iconify-icon icon="iconamoon:eye-light"></iconify-icon>
                         </a>
@@ -270,9 +276,41 @@ function assignOperador(selectElement) {
     .then(data => {
         if (data.success) {
             showNotification('success', data.message);
+            // Si el estado cambió a 'asignado', actualizar el select visible Y notificar al operador
+            if (data.nuevo_estado) {
+                const row = selectElement.closest('tr');
+                if (row) {
+                    const statusSelect = row.querySelector('.status-select');
+                    if (statusSelect && statusSelect.value !== data.nuevo_estado) {
+                        statusSelect.value = data.nuevo_estado;
+                        if (statusSelect.value !== data.nuevo_estado) {
+                            setTimeout(() => location.reload(), 800);
+                        }
+                    }
+                }
+            }
+            // ⚡ Disparar notificación instantánea al operador vía BroadcastChannel
+            // (funciona si el operador tiene otra pestaña/ventana abierta en el mismo navegador)
+            if (data.nuevo_estado === 'asignado' && data.operador_id) {
+                try {
+                    const ch = new BroadcastChannel('cg_op_' + data.operador_id);
+                    ch.postMessage({ tipo: 'nuevo_proyecto', nombre: data.proyecto_nombre || '', cant: 1 });
+                    ch.close();
+                } catch (_) {}
+                // También guardar en localStorage para mostrar al próximo page load del operador
+                try {
+                    const KEY = 'cg_op_notifs_pendientes';
+                    const lista = JSON.parse(localStorage.getItem(KEY) || '[]');
+                    lista.push({ nombre: data.proyecto_nombre || '', ts: Date.now() });
+                    localStorage.setItem(KEY, JSON.stringify(lista));
+                    // Y sumar badge pendiente
+                    const bk = 'cg_op_nuevos';
+                    const prev = parseInt(localStorage.getItem(bk) || '0', 10);
+                    localStorage.setItem(bk, String(prev + 1));
+                } catch (_) {}
+            }
         } else {
             showNotification('error', data.message);
-            // En caso de error recargar la página para mantener consistencia
             setTimeout(() => location.reload(), 800);
         }
     })
@@ -350,6 +388,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-{% endblock %}
-
 {% include 'invoice/project_preview_modal.html' %}
+{% include 'partials/proyecto_resumen_popup.html' %}
+{% endblock %}

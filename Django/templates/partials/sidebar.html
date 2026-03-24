@@ -17,9 +17,16 @@
             {% if rol == 'operador' %}
               <!-- Menú exclusivo para Operador: solo sus proyectos, historial y salir -->
               <li>
-                  <a href="{% url 'operador_home' %}">
+                  <a href="{% url 'operador_home' %}" id="cgMisProyectosLink" style="position:relative;">
                       <iconify-icon icon="solar:scissors-outline" class="menu-icon"></iconify-icon>
                       <span>Mis Proyectos</span>
+                      <span id="cgNavBadge" style="
+                        display:none; position:absolute; top:6px; right:10px;
+                        background:#dc3545; color:#fff; font-size:10px; font-weight:700;
+                        min-width:17px; height:17px; border-radius:9px;
+                        padding:0 4px; line-height:17px; text-align:center;
+                        box-shadow:0 1px 4px rgba(0,0,0,.25);
+                      "></span>
                   </a>
               </li>
               <li>
@@ -154,3 +161,323 @@
     margin-top: auto !important;
 }
 </style>
+
+{% if user.usuarioperfiloptimizador.rol == 'operador' %}
+<style>
+#cgOpNotifContainer {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.cg-op-notif {
+  pointer-events: all;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #b91c1c;
+  color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.28);
+  padding: 13px 14px 13px 16px;
+  min-width: 280px;
+  max-width: 360px;
+  animation: cgNotifIn .35s cubic-bezier(.22,1,.36,1);
+}
+@keyframes cgNotifIn {
+  from { opacity:0; transform: translateX(60px); }
+  to   { opacity:1; transform: translateX(0); }
+}
+.cg-op-notif-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.cg-op-notif-body {
+  flex: 1;
+}
+.cg-op-notif-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 3px;
+  letter-spacing: .01em;
+}
+.cg-op-notif-msg {
+  font-size: 12px;
+  opacity: .9;
+  line-height: 1.4;
+}
+.cg-op-notif-link {
+  display: inline-block;
+  margin-top: 7px;
+  background: rgba(255,255,255,.18);
+  color: #fff;
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid rgba(255,255,255,.35);
+  transition: background .15s;
+}
+.cg-op-notif-link:hover { background: rgba(255,255,255,.3); color:#fff; }
+.cg-op-notif-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,.75);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+  transition: color .15s;
+}
+.cg-op-notif-close:hover { color: #fff; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+  const BADGE_KEY = 'cg_op_nuevos';
+  const badge = document.getElementById('cgNavBadge');
+  const OP_HOME = '{% url "operador_home" %}';
+
+  /* ── Crear contenedor de notificaciones en el body (no en el aside) ── */
+  let _notifContainer = document.getElementById('cgOpNotifContainer');
+  if (!_notifContainer) {
+    _notifContainer = document.createElement('div');
+    _notifContainer.id = 'cgOpNotifContainer';
+    document.body.appendChild(_notifContainer);
+  }
+
+  /* ── Badge en sidebar ── */
+  function setBadge(n) {
+    if (!badge) return;
+    if (n > 0) {
+      badge.textContent = n > 99 ? '99+' : String(n);
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+      badge.textContent = '';
+    }
+  }
+
+  function sumarBadge(cant) {
+    const prev = parseInt(localStorage.getItem(BADGE_KEY) || '0', 10);
+    const total = prev + cant;
+    localStorage.setItem(BADGE_KEY, String(total));
+    setBadge(total);
+  }
+
+  const NOTIF_KEY = 'cg_op_notifs_pendientes'; // lista JSON de {nombre, ts}
+
+  // Restaurar badge guardado
+  setBadge(parseInt(localStorage.getItem(BADGE_KEY) || '0', 10));
+
+  // Limpiar badge si estamos en la lista de proyectos
+  if (window.location.pathname === OP_HOME) {
+    localStorage.setItem(BADGE_KEY, '0');
+    setBadge(0);
+  }
+
+  /* ── Notificación roja persistente ── */
+  function mostrarNotifProyecto(nombre) {
+    const container = _notifContainer;
+    if (!container) return;
+
+    const el = document.createElement('div');
+    el.className = 'cg-op-notif';
+    const nombreHtml = nombre ? `<b>${nombre}</b>` : 'un proyecto';
+    el.innerHTML = `
+      <span class="cg-op-notif-icon">🔴</span>
+      <div class="cg-op-notif-body">
+        <div class="cg-op-notif-title">Nuevo proyecto asignado</div>
+        <div class="cg-op-notif-msg">Se te asignó ${nombreHtml}.</div>
+        <a href="${OP_HOME}" class="cg-op-notif-link">Ver mis proyectos →</a>
+      </div>
+      <button class="cg-op-notif-close" title="Cerrar">✕</button>
+    `;
+
+    el.querySelector('.cg-op-notif-close').addEventListener('click', function () {
+      el.style.animation = 'none';
+      el.style.transition = 'opacity .2s, transform .2s';
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(40px)';
+      setTimeout(() => el.remove(), 220);
+    });
+
+    container.appendChild(el);
+  }
+
+  /* ── Persistir notificación para mostrar al próximo page load ── */
+  function guardarNotifPendiente(nombre) {
+    try {
+      const lista = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+      lista.push({ nombre: nombre || '', ts: Date.now() });
+      localStorage.setItem(NOTIF_KEY, JSON.stringify(lista));
+    } catch (_) {}
+  }
+
+  function mostrarNotifsPendientes() {
+    try {
+      const lista = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+      if (!lista.length) return;
+      localStorage.removeItem(NOTIF_KEY);
+      // Mostrar con pequeño delay para que el DOM esté visible
+      setTimeout(function () {
+        lista.forEach(function (item) {
+          mostrarNotifProyecto(item.nombre || '');
+        });
+      }, 400);
+    } catch (_) {}
+  }
+
+  /* ── Manejador central: llega notificación de nuevo proyecto ── */
+  function onNuevoProyecto(ev) {
+    const nombre = (ev && ev.nombre) ? ev.nombre : '';
+    const cant = (ev && ev.cant) ? ev.cant : 1;
+    sumarBadge(cant);
+    mostrarNotifProyecto(nombre);
+  }
+
+  // Al cargar la página, mostrar notifs que llegaron mientras se navegaba
+  mostrarNotifsPendientes();
+
+  // ── Consultar notificaciones pendientes en el SERVIDOR (funciona cross-device) ──
+  function _fetchNotifs() {
+    fetch('/api/operador/notificaciones/', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.notificaciones || !d.notificaciones.length) return;
+        d.notificaciones.forEach(function (n) {
+          sumarBadge(1);
+          mostrarNotifProyecto(n.proyecto_nombre || '');
+        });
+      })
+      .catch(function () {});
+  }
+
+  // Consulta inmediata al cargar y luego cada 5 segundos (sin recarga de página)
+  _fetchNotifs();
+  setInterval(_fetchNotifs, 5000);
+
+  /* ── 1. BroadcastChannel: INSTANTÁNEO (misma máquina/navegador) ── */
+  if (window.BroadcastChannel) {
+    try {
+      const bc = new BroadcastChannel('cg_op_{{ user.id }}');
+      bc.onmessage = function (ev) {
+        if (ev.data && ev.data.tipo === 'nuevo_proyecto') {
+          // Consultar el servidor para obtener el nombre real y no duplicar
+          _fetchNotifs();
+        }
+      };
+    } catch (_) {}
+  }
+
+  /* ── 2. SSE: fallback para otros dispositivos/navegadores ── */
+  if (!window.EventSource) return;
+  let _es = null;
+
+  function conectarSSE() {
+    if (_es) return;
+    _es = new EventSource('{% url "operador_proyectos_sse" %}');
+    _es.addEventListener('cambio', function (e) {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.nuevos > 0) {
+          // Consultar el servidor para obtener nombre y detalles reales
+          _fetchNotifs();
+        }
+      } catch (_) {}
+    });
+  }
+
+  if (document.visibilityState !== 'hidden') conectarSSE();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') conectarSSE();
+  });
+}());
+</script>
+{% endif %}
+
+{% if user.usuarioperfiloptimizador.rol == 'enchapador' %}
+<style>
+#cgEnchNotifContainer { position:fixed; top:18px; right:18px; z-index:99999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+.cg-ench-notif {
+  pointer-events:all;
+  background:#92400e;
+  color:#fff;
+  border-radius:10px;
+  padding:12px 14px 12px 12px;
+  min-width:270px; max-width:340px;
+  display:flex; align-items:flex-start; gap:10px;
+  box-shadow:0 4px 18px rgba(0,0,0,.28);
+  animation:cgEnchNotifIn .35s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes cgEnchNotifIn {
+  from { opacity:0; transform:translateX(60px) scale(.95); }
+  to   { opacity:1; transform:translateX(0) scale(1); }
+}
+.cg-ench-notif-icon { font-size:22px; flex-shrink:0; margin-top:1px; }
+.cg-ench-notif-body { flex:1; min-width:0; }
+.cg-ench-notif-title { font-weight:700; font-size:13px; margin-bottom:2px; }
+.cg-ench-notif-msg   { font-size:12px; opacity:.9; }
+.cg-ench-notif-link  { display:inline-block; margin-top:5px; font-size:12px; color:#fde68a; text-decoration:underline; }
+.cg-ench-notif-close { background:none; border:none; color:rgba(255,255,255,.75); font-size:17px; line-height:1; cursor:pointer; padding:0 2px; flex-shrink:0; transition:color .15s; }
+.cg-ench-notif-close:hover { color:#fff; }
+</style>
+<script>
+(function () {
+  'use strict';
+  const ENCH_HOME = '{% url "enchapador_home" %}';
+
+  let _enchContainer = document.getElementById('cgEnchNotifContainer');
+  if (!_enchContainer) {
+    _enchContainer = document.createElement('div');
+    _enchContainer.id = 'cgEnchNotifContainer';
+    document.body.appendChild(_enchContainer);
+  }
+
+  function mostrarNotifEnchapado(nombre) {
+    const el = document.createElement('div');
+    el.className = 'cg-ench-notif';
+    const nombreHtml = nombre ? `<b>${nombre}</b>` : 'un proyecto';
+    el.innerHTML = `
+      <span class="cg-ench-notif-icon">🪵</span>
+      <div class="cg-ench-notif-body">
+        <div class="cg-ench-notif-title">Proyecto listo para enchapado</div>
+        <div class="cg-ench-notif-msg">${nombreHtml} está listo para encharpar.</div>
+        <a href="${ENCH_HOME}" class="cg-ench-notif-link">Ver proyectos pendientes →</a>
+      </div>
+      <button class="cg-ench-notif-close" title="Cerrar">✕</button>
+    `;
+    el.querySelector('.cg-ench-notif-close').addEventListener('click', function () {
+      el.style.transition = 'opacity .2s, transform .2s';
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(40px)';
+      setTimeout(() => el.remove(), 220);
+    });
+    _enchContainer.appendChild(el);
+  }
+
+  function _fetchEnchNotifs() {
+    fetch('/api/enchapador/notificaciones/', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.notificaciones || !d.notificaciones.length) return;
+        d.notificaciones.forEach(function (n) {
+          mostrarNotifEnchapado(n.proyecto_nombre || '');
+        });
+      })
+      .catch(function () {});
+  }
+
+  _fetchEnchNotifs();
+  setInterval(_fetchEnchNotifs, 5000);
+}());
+</script>
+{% endif %}

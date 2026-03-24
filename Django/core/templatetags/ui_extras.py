@@ -43,6 +43,7 @@ def estado_badge(estado: str) -> str:
             'en_proceso': 'bg-warning text-dark',
             'optimizado': 'bg-info text-dark',
             'aprobado': 'bg-primary',
+            'asignado': 'bg-info text-dark',
             'produccion': 'bg-primary',
             'enchapado_pendiente': 'bg-orange text-white',
             'completado': 'bg-success',

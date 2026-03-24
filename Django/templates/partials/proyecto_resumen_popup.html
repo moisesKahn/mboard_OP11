@@ -1,0 +1,200 @@
+<!-- Modal resumen proyecto — include reutilizable.
+     Uso: <button data-resumen-id="{{ p.id }}">👁</button> -->
+
+<div class="modal fade" id="proyectoResumenModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+
+      <!-- Cabecera -->
+      <div class="modal-header py-3 px-4" style="background:#1e293b;">
+        <div style="flex:1;min-width:0;">
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <span id="prm-codigo" class="text-white fw-bold" style="font-size:16px;font-family:monospace;"></span>
+            <span id="prm-estado-badge"></span>
+          </div>
+          <div style="font-size:14px;color:#94a3b8;margin-top:4px;">
+            <span id="prm-cliente"></span>
+          </div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal"></button>
+      </div>
+
+      <!-- Cuerpo -->
+      <div class="modal-body p-0">
+        <div id="prm-loading" class="text-center py-5">
+          <div class="spinner-border text-secondary" role="status"></div>
+          <div class="text-muted mt-2" style="font-size:14px;">Cargando…</div>
+        </div>
+
+        <div id="prm-content" style="display:none;">
+          <table class="table table-bordered mb-0" style="font-size:15px;">
+            <thead class="table-dark">
+              <tr>
+                <th class="py-2 px-3" style="width:50%;">Material</th>
+                <th class="text-center py-2">Tableros</th>
+                <th class="text-center py-2">Piezas</th>
+              </tr>
+            </thead>
+            <tbody id="prm-mat-table"></tbody>
+            <tfoot style="background:#e2e8f0;font-weight:700;font-size:15px;">
+              <tr>
+                <td class="px-3 py-2">TOTALES</td>
+                <td class="text-center py-2" id="prm-total-tab">—</td>
+                <td class="text-center py-2" id="prm-total-piezas">—</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <table class="table table-bordered mb-0 border-top-0" style="font-size:15px;">
+            <tbody>
+              <tr>
+                <td class="px-3 py-2" style="width:50%;color:#475569;font-weight:500;">Cortes necesarios</td>
+                <td class="fw-semibold py-2 px-3" id="prm-total-cortes" colspan="2">—</td>
+              </tr>
+              <tr>
+                <td class="px-3 py-2" style="color:#475569;font-weight:500;">Tapacanto (metros lineales)</td>
+                <td class="fw-semibold py-2 px-3" id="prm-metros-tc" colspan="2">—</td>
+              </tr>
+              <tr>
+                <td class="px-3 py-2" style="color:#475569;font-weight:500;">Avance del proyecto</td>
+                <td class="py-2 px-3" colspan="2">
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="progress flex-grow-1" style="height:14px;border-radius:6px;">
+                      <div id="prm-pct-bar" class="progress-bar" role="progressbar"
+                           style="width:0%;border-radius:6px;transition:width .4s;"></div>
+                    </div>
+                    <span id="prm-pct-label" class="fw-bold" style="min-width:48px;font-size:15px;">0%</span>
+                  </div>
+                  <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
+                    <span id="prm-piezas-cortadas">0</span> de <span id="prm-piezas-total-2">0</span> piezas cortadas
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div><!-- /prm-content -->
+      </div><!-- /modal-body -->
+
+    </div>
+  </div>
+</div>
+
+<style>
+.prm-trigger { cursor: pointer; }
+</style>
+
+<script>
+window.addEventListener('load', function () {
+  var modal   = document.getElementById('proyectoResumenModal');
+  if (!modal) return;
+  var bsModal = new bootstrap.Modal(modal);
+
+  // Cache de datos precargados: { "123": {...}, ... }
+  var _cache = {};
+  // IDs pendientes de cargar
+  var _pendingIds = [];
+
+  // Recopilar todos los IDs de la página al cargar
+  var allBtns = document.querySelectorAll('[data-resumen-id]');
+  allBtns.forEach(function(btn) { _pendingIds.push(btn.dataset.resumenId); });
+
+  // Eliminar duplicados
+  _pendingIds = _pendingIds.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+  // Precarga batch: una sola petición con todos los IDs
+  if (_pendingIds.length > 0) {
+    fetch('/api/proyectos/resumen-batch?ids=' + _pendingIds.join(','), { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function(data) {
+        var res = data.resumenes || {};
+        Object.keys(res).forEach(function(id) { if (res[id]) _cache[id] = res[id]; });
+        window._prmCache = _cache;  // exponer para vista resumen en tabla
+      })
+      .catch(function() { /* silencioso — se cargará al hacer clic */ });
+  }
+
+  function estadoBadge(estado, display) {
+    var MAP = {
+      borrador:'secondary', en_proceso:'info', optimizado:'primary',
+      aprobado:'success', asignado:'warning', produccion:'warning',
+      enchapado_pendiente:'orange', completado:'success',
+      pausado:'secondary', cancelado:'danger'
+    };
+    var bg = MAP[estado] || 'secondary';
+    var style = estado === 'enchapado_pendiente' ? 'background:#fd7e14;color:#fff;border:none;' : '';
+    return '<span class="badge bg-' + bg + '" style="font-size:11px;' + style + '">' + display + '</span>';
+  }
+
+  function render(d) {
+    document.getElementById('prm-codigo').textContent  = '#' + d.codigo;
+    document.getElementById('prm-cliente').textContent = d.cliente;
+    document.getElementById('prm-estado-badge').innerHTML = estadoBadge(d.estado, d.estado_display);
+
+    // Tabla materiales
+    var tbody = document.getElementById('prm-mat-table');
+    tbody.innerHTML = d.materiales.length
+      ? d.materiales.map(function(m) {
+          return '<tr>' +
+            '<td>' + m.nombre +
+              (m.tapacanto ? ' <span class="badge bg-warning text-dark ms-1" style="font-size:10px;">' + m.tapacanto + '</span>' : '') +
+            '</td>' +
+            '<td class="text-center">' + m.tableros + '</td>' +
+            '<td class="text-center">' + m.piezas + '</td>' +
+          '</tr>';
+        }).join('')
+      : '<tr><td colspan="3" class="text-muted text-center">Sin datos de optimización</td></tr>';
+
+    document.getElementById('prm-total-tab').textContent    = d.total_tableros;
+    document.getElementById('prm-total-piezas').textContent = d.total_piezas;
+    document.getElementById('prm-total-cortes').textContent = d.total_cortes;
+
+    var tcTexto = d.metros_tapacanto > 0 ? d.metros_tapacanto + ' m' : 'Sin tapacanto';
+    document.getElementById('prm-metros-tc').textContent = tcTexto;
+
+    var pct = d.pct_avance;
+    var bar = document.getElementById('prm-pct-bar');
+    bar.style.width      = pct + '%';
+    bar.style.background = pct >= 100 ? '#22c55e' : pct > 0 ? '#3b82f6' : '#cbd5e1';
+    document.getElementById('prm-pct-label').textContent         = pct + '%';
+    document.getElementById('prm-piezas-cortadas').textContent   = d.total_piezas_cortadas;
+    document.getElementById('prm-piezas-total-2').textContent    = d.total_piezas;
+
+    document.getElementById('prm-loading').style.display = 'none';
+    document.getElementById('prm-content').style.display = '';
+  }
+
+  function showResumen(id) {
+    // Resetear estado visual
+    document.getElementById('prm-loading').style.display = '';
+    document.getElementById('prm-loading').innerHTML =
+      '<div class="spinner-border spinner-border-sm text-secondary" role="status"></div>' +
+      '<span class="text-muted ms-2" style="font-size:13px;">Cargando\u2026</span>';
+    document.getElementById('prm-content').style.display = 'none';
+    bsModal.show();
+
+    if (_cache[id]) {
+      // Datos ya precargados → mostrar instantáneo
+      render(_cache[id]);
+    } else {
+      // Fallback: petición individual
+      fetch('/api/proyectos/' + id + '/resumen', { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function(d) { _cache[id] = d; window._prmCache = _cache; render(d); })
+        .catch(function() {
+          document.getElementById('prm-loading').innerHTML =
+            '<span class="text-danger">Error al cargar el resumen.</span>';
+        });
+    }
+  }
+
+  // Solo clic — sin hover
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-resumen-id]');
+    if (!btn) return;
+    e.preventDefault();
+    showResumen(btn.dataset.resumenId);
+  });
+
+  window.showProyectoResumen = showResumen;
+});
+</script>

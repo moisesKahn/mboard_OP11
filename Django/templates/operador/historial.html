@@ -47,7 +47,16 @@
             <td>{{ p.cliente.nombre }}</td>
             <td><span class="badge {{ p.estado|estado_badge }}">{{ p.get_estado_display }}</span></td>
             <td>{{ p.fecha_modificacion|date:'Y-m-d H:i' }}</td>
-            <td class="text-end"><a class="btn btn-sm btn-primary" href="{% url 'operador_proyecto' p.id %}">Abrir</a></td>
+            <td class="text-end">
+              <div class="d-flex gap-1 justify-content-end">
+                <button type="button" class="btn btn-sm btn-outline-secondary prm-trigger"
+                  data-resumen-id="{{ p.id }}" data-resumen-hover="{{ p.id }}"
+                  title="Vista rápida del resumen del proyecto">
+                  <i class="ri-eye-line"></i>
+                </button>
+                <a class="btn btn-sm btn-primary" href="{% url 'operador_proyecto' p.id %}">Abrir</a>
+              </div>
+            </td>
           </tr>
           {% empty %}
           <tr>
@@ -59,4 +68,5 @@
     </div>
   </div>
 </div>
+{% include 'partials/proyecto_resumen_popup.html' %}
 {% endblock %}

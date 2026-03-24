@@ -12,7 +12,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
 from django.db.models import Count
-from core.models import UsuarioPerfilOptimizador, Cliente, Proyecto, AuditLog, OptimizationRun
+from core.models import UsuarioPerfilOptimizador, Cliente, Proyecto, AuditLog, OptimizationRun, NotificacionEnchapador
 from core.auth_utils import jwt_encode, get_auth_context
 
 
@@ -754,6 +754,23 @@ def operador_proyecto_completar_api(request: HttpRequest, proyecto_id: int):
         )
     except Exception:
         pass
+    # Notificar a todos los enchapadores de la organización si hay enchapado pendiente
+    if nuevo_estado == 'enchapado_pendiente':
+        try:
+            from django.contrib.auth.models import User as _User
+            from core.models import UsuarioPerfilOptimizador as _UP
+            enchapadores = _User.objects.filter(
+                usuarioperfiloptimizador__rol='enchapador',
+                usuarioperfiloptimizador__organizacion_id=p.organizacion_id,
+            )
+            for enc in enchapadores:
+                NotificacionEnchapador.objects.create(
+                    destinatario=enc,
+                    proyecto_nombre=p.nombre or '',
+                    proyecto_id=p.id,
+                )
+        except Exception:
+            pass
     return JsonResponse({'success': True, 'estado': nuevo_estado, 'enchapado_pendiente': nuevo_estado == 'enchapado_pendiente'})
 
 
@@ -1073,3 +1090,312 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
     # Devolver el ZPL como texto — el navegador lo envía a Zebra Browser Print local
     from django.http import HttpResponse
     return HttpResponse(zpl, content_type='text/plain; charset=utf-8')
+
+
+# ---------------------------------------------------------------------------
+# RESUMEN DE PROYECTO — popup de previsualización
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["GET"])
+def proyecto_resumen_api(request, proyecto_id: int):
+    """GET /api/proyectos/<id>/resumen
+    Devuelve un resumen calculado del proyecto: materiales, tableros, piezas,
+    cortes, metros de tapacanto y porcentaje de avance.
+
+    Estructura real de resultado_optimizacion:
+      { materiales: [ { material: {nombre, codigo}, tapacanto: {nombre, codigo},
+                        tableros: [ { piezas: [ {nombre, ancho, largo,
+                                                  indiceUnidad, totalUnidades,
+                                                  estado?, tapacantos:{arriba,abajo,izq,der} } ] } ] } ],
+        total_piezas, total_tableros, ... }
+    """
+    import json as _json
+    from core.auth_utils import get_auth_context
+    ctx = get_auth_context(request)
+    qs = Proyecto.objects.select_related('cliente', 'operador')
+    if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+        qs = qs.filter(organizacion_id=ctx.get('organization_id'))
+    p = get_object_or_404(qs, id=proyecto_id)
+
+    # resultado_optimizacion puede ser dict o string JSON
+    raw = p.resultado_optimizacion or {}
+    if isinstance(raw, str):
+        try:
+            resultado = _json.loads(raw)
+        except Exception:
+            resultado = {}
+    else:
+        resultado = raw
+
+    materiales_raw = resultado.get('materiales') or []
+
+    total_piezas_global = 0
+    total_piezas_cortadas = 0
+    total_tableros = 0
+    total_cortes = 0
+    metros_tapacanto = 0.0
+    tiene_tapacanto = False
+    materiales_resumen = []
+
+    for mat in materiales_raw:
+        # material es un dict {nombre, codigo, ...}
+        mat_info = mat.get('material') or {}
+        mat_nombre = mat_info.get('nombre') or mat_info.get('codigo') or mat.get('nombre') or '—'
+
+        # tapacanto es un dict {nombre, codigo}
+        tap_info = mat.get('tapacanto') or {}
+        tap_nombre = (tap_info.get('nombre') or tap_info.get('codigo') or '').strip()
+
+        tableros = mat.get('tableros') or []
+        mat_tableros = len(tableros)
+
+        # Conteo de piezas: cada (nombre, indiceUnidad) es una pieza distinta.
+        # totalUnidades indica cuántas unidades del tipo hay (no útil para contar).
+        piezas_vistas: set = set()    # set de (nombre, indiceUnidad)
+        piezas_cortadas_vistas: set = set()
+        mat_tc_metros = 0.0
+        mat_cortes = 0
+
+        for t in tableros:
+            piezas = t.get('piezas') or []
+            piezas_activas = []
+            for pi in piezas:
+                estado_pi = (pi.get('estado') or 'pendiente').strip()
+                if estado_pi == 'descartada':
+                    continue
+                piezas_activas.append(pi)
+
+                clave = (pi.get('nombre') or '', int(pi.get('indiceUnidad') or 0))
+                piezas_vistas.add(clave)
+                if estado_pi == 'cortada':
+                    piezas_cortadas_vistas.add(clave)
+
+                # Metros de tapacanto por pieza (dimensiones en mm → metros)
+                tc = pi.get('tapacantos') or {}
+                ancho_m = float(pi.get('ancho') or 0) / 1000
+                largo_m = float(pi.get('largo') or 0) / 1000
+                if tc.get('arriba'):    mat_tc_metros += ancho_m
+                if tc.get('abajo'):     mat_tc_metros += ancho_m
+                if tc.get('izquierda'): mat_tc_metros += largo_m
+                if tc.get('derecha'):   mat_tc_metros += largo_m
+                if any(tc.get(k) for k in ('arriba', 'abajo', 'izquierda', 'derecha')):
+                    tiene_tapacanto = True
+
+            # Cortes guillotina: filas + columnas únicas de corte en este tablero
+            if piezas_activas:
+                xs = set(round(pi.get('x', 0)) for pi in piezas_activas)
+                ys = set(round(pi.get('y', 0)) for pi in piezas_activas)
+                mat_cortes += max(0, len(xs) - 1) + max(0, len(ys) - 1)
+
+        if tap_nombre:
+            tiene_tapacanto = True
+
+        # Totales de piezas para este material
+        mat_total_piezas = len(piezas_vistas)
+        mat_cortadas = len(piezas_cortadas_vistas)
+
+        total_piezas_global += mat_total_piezas
+        total_piezas_cortadas += mat_cortadas
+        total_tableros += mat_tableros
+        total_cortes += mat_cortes
+        metros_tapacanto += mat_tc_metros
+
+        materiales_resumen.append({
+            'nombre': mat_nombre,
+            'tableros': mat_tableros,
+            'piezas': mat_total_piezas,
+            'tapacanto': tap_nombre,
+            'tiene_tapacanto': bool(tap_nombre) or mat_tc_metros > 0,
+        })
+
+    pct_avance = 0
+    if total_piezas_global > 0:
+        pct_avance = round(total_piezas_cortadas * 100 / total_piezas_global, 1)
+
+    # Si el proyecto no ha entrado a producción las piezas no tienen estado → 0%
+    estado_sin_avance = p.estado in ('borrador', 'optimizado', 'aprobado', 'asignado', 'enchapado_pendiente')
+    if estado_sin_avance:
+        pct_avance = 0
+        total_piezas_cortadas = 0
+
+    # Usar totales del header JSON si el parseo de piezas da cero (proyecto nuevo)
+    if total_piezas_global == 0 and resultado.get('total_piezas'):
+        total_piezas_global = int(resultado['total_piezas'])
+    if total_tableros == 0 and resultado.get('total_tableros'):
+        total_tableros = int(resultado['total_tableros'])
+
+    # Si no hay detalle por material pero sí hay totales globales, crear entry genérico
+    if not materiales_resumen and (total_piezas_global > 0 or total_tableros > 0):
+        materiales_resumen = [{
+            'nombre': '—',
+            'tableros': total_tableros,
+            'piezas': total_piezas_global,
+            'tapacanto': '',
+            'tiene_tapacanto': tiene_tapacanto,
+        }]
+
+    return JsonResponse({
+        'id': p.id,
+        'codigo': p.public_id or p.codigo,
+        'nombre': p.nombre,
+        'cliente': p.cliente.nombre if p.cliente else '—',
+        'estado': p.estado,
+        'estado_display': p.get_estado_display(),
+        'operador': (p.operador.get_full_name() or p.operador.username) if p.operador else None,
+        'total_materiales': len(materiales_resumen),
+        'total_tableros': total_tableros,
+        'total_piezas': total_piezas_global,
+        'total_piezas_cortadas': total_piezas_cortadas,
+        'total_cortes': total_cortes,
+        'metros_tapacanto': round(metros_tapacanto, 2),
+        'tiene_tapacanto': tiene_tapacanto,
+        'pct_avance': pct_avance,
+        'materiales': materiales_resumen,
+    })
+
+
+# ---------------------------------------------------------------------------
+# RESUMEN BATCH — precarga múltiples proyectos en una sola petición
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["GET"])
+def proyectos_resumen_batch_api(request):
+    """GET /api/proyectos/resumen-batch?ids=1,2,3
+    Devuelve los resúmenes de varios proyectos en una sola llamada.
+    Usado para precargar datos al cargar la página.
+    """
+    import json as _json
+    from core.auth_utils import get_auth_context
+    ctx = get_auth_context(request)
+
+    ids_raw = request.GET.get('ids', '')
+    try:
+        ids = [int(x) for x in ids_raw.split(',') if x.strip().isdigit()]
+    except Exception:
+        ids = []
+
+    if not ids:
+        return JsonResponse({'resumenes': {}})
+
+    qs = Proyecto.objects.select_related('cliente', 'operador').filter(id__in=ids)
+    if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+        qs = qs.filter(organizacion_id=ctx.get('organization_id'))
+
+    def _calcular(p):
+        raw = p.resultado_optimizacion or {}
+        if isinstance(raw, str):
+            try:
+                resultado = _json.loads(raw)
+            except Exception:
+                resultado = {}
+        else:
+            resultado = raw
+
+        materiales_raw = resultado.get('materiales') or []
+        total_piezas_global = 0
+        total_piezas_cortadas = 0
+        total_tableros = 0
+        total_cortes = 0
+        metros_tapacanto = 0.0
+        tiene_tapacanto = False
+        materiales_resumen = []
+
+        for mat in materiales_raw:
+            mat_info = mat.get('material') or {}
+            mat_nombre = mat_info.get('nombre') or mat_info.get('codigo') or mat.get('nombre') or '—'
+            tap_info = mat.get('tapacanto') or {}
+            tap_nombre = (tap_info.get('nombre') or tap_info.get('codigo') or '').strip()
+            tableros = mat.get('tableros') or []
+            mat_tableros = len(tableros)
+            piezas_vistas = set()
+            piezas_cortadas_vistas = set()
+            mat_tc_metros = 0.0
+            mat_cortes = 0
+
+            for t in tableros:
+                piezas_activas = []
+                for pi in (t.get('piezas') or []):
+                    if (pi.get('estado') or '').strip() == 'descartada':
+                        continue
+                    piezas_activas.append(pi)
+                    clave = (pi.get('nombre') or '', int(pi.get('indiceUnidad') or 0))
+                    piezas_vistas.add(clave)
+                    if (pi.get('estado') or '').strip() == 'cortada':
+                        piezas_cortadas_vistas.add(clave)
+                    tc = pi.get('tapacantos') or {}
+                    ancho_m = float(pi.get('ancho') or 0) / 1000
+                    largo_m = float(pi.get('largo') or 0) / 1000
+                    if tc.get('arriba'):    mat_tc_metros += ancho_m
+                    if tc.get('abajo'):     mat_tc_metros += ancho_m
+                    if tc.get('izquierda'): mat_tc_metros += largo_m
+                    if tc.get('derecha'):   mat_tc_metros += largo_m
+                    if any(tc.get(k) for k in ('arriba', 'abajo', 'izquierda', 'derecha')):
+                        tiene_tapacanto = True
+                if piezas_activas:
+                    xs = set(round(pi.get('x', 0)) for pi in piezas_activas)
+                    ys = set(round(pi.get('y', 0)) for pi in piezas_activas)
+                    mat_cortes += max(0, len(xs) - 1) + max(0, len(ys) - 1)
+
+            if tap_nombre:
+                tiene_tapacanto = True
+
+            mat_total_piezas = len(piezas_vistas)
+            mat_cortadas = len(piezas_cortadas_vistas)
+            total_piezas_global += mat_total_piezas
+            total_piezas_cortadas += mat_cortadas
+            total_tableros += mat_tableros
+            total_cortes += mat_cortes
+            metros_tapacanto += mat_tc_metros
+            materiales_resumen.append({
+                'nombre': mat_nombre,
+                'tableros': mat_tableros,
+                'piezas': mat_total_piezas,
+                'tapacanto': tap_nombre,
+            })
+
+        pct_avance = 0
+        if total_piezas_global > 0:
+            pct_avance = round(total_piezas_cortadas * 100 / total_piezas_global, 1)
+        if p.estado in ('borrador', 'optimizado', 'aprobado', 'asignado', 'enchapado_pendiente'):
+            pct_avance = 0
+            total_piezas_cortadas = 0
+        if total_piezas_global == 0 and resultado.get('total_piezas'):
+            total_piezas_global = int(resultado['total_piezas'])
+        if total_tableros == 0 and resultado.get('total_tableros'):
+            total_tableros = int(resultado['total_tableros'])
+
+        # Si no hay detalle por material pero sí hay totales globales, crear entry genérico
+        if not materiales_resumen and (total_piezas_global > 0 or total_tableros > 0):
+            materiales_resumen = [{
+                'nombre': '—',
+                'tableros': total_tableros,
+                'piezas': total_piezas_global,
+                'tapacanto': '',
+            }]
+
+        return {
+            'id': p.id,
+            'codigo': p.public_id or p.codigo,
+            'cliente': p.cliente.nombre if p.cliente else '—',
+            'estado': p.estado,
+            'estado_display': p.get_estado_display(),
+            'total_tableros': total_tableros,
+            'total_piezas': total_piezas_global,
+            'total_piezas_cortadas': total_piezas_cortadas,
+            'total_cortes': total_cortes,
+            'metros_tapacanto': round(metros_tapacanto, 2),
+            'tiene_tapacanto': tiene_tapacanto,
+            'pct_avance': pct_avance,
+            'materiales': materiales_resumen,
+        }
+
+    resumenes = {}
+    for p in qs:
+        try:
+            resumenes[str(p.id)] = _calcular(p)
+        except Exception:
+            resumenes[str(p.id)] = None
+
+    return JsonResponse({'resumenes': resumenes})

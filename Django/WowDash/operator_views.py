@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.http import JsonResponse, HttpRequest
+from django.http import JsonResponse, HttpRequest, StreamingHttpResponse
 from django.db.models import Q
 from core.models import Proyecto
 from core.auth_utils import get_auth_context
@@ -34,11 +34,23 @@ def operador_home(request: HttpRequest):
     # Scope por rol operador: solo asignados a sí mismo
     if ctx.get('role') == 'operador':
         qs = qs.filter(operador=request.user)
-    # Filtros
+    # Excluir estados que pertenecen al historial (completado y pendiente_enchapado)
+    ESTADOS_HISTORIAL = ('completado', 'pendiente_enchapado')
     if estado:
         qs = qs.filter(estado=estado)
+    else:
+        qs = qs.exclude(estado__in=ESTADOS_HISTORIAL)
     if search:
-        qs = qs.filter(Q(codigo__icontains=search) | Q(nombre__icontains=search) | Q(cliente__nombre__icontains=search))
+        search_q = (
+            Q(codigo__icontains=search)
+            | Q(nombre__icontains=search)
+            | Q(cliente__nombre__icontains=search)
+        )
+        try:
+            search_q |= Q(public_id=int(search))
+        except (ValueError, TypeError):
+            pass
+        qs = qs.filter(search_q)
 
     proyectos = qs.order_by('-fecha_creacion')[:200]
     context = {
@@ -82,7 +94,16 @@ def operador_historial(request: HttpRequest):
         qs = qs.filter(estado__in=list(estados_hist))
 
     if search:
-        qs = qs.filter(Q(codigo__icontains=search) | Q(nombre__icontains=search) | Q(cliente__nombre__icontains=search))
+        search_q = (
+            Q(codigo__icontains=search)
+            | Q(nombre__icontains=search)
+            | Q(cliente__nombre__icontains=search)
+        )
+        try:
+            search_q |= Q(public_id=int(search))
+        except (ValueError, TypeError):
+            pass
+        qs = qs.filter(search_q)
 
     proyectos = qs.order_by('-fecha_modificacion', '-fecha_creacion')[:200]
     context = {
@@ -123,7 +144,10 @@ def operador_proyecto(request: HttpRequest, proyecto_id: int):
 @ensure_csrf_cookie
 def operador_corte_guiado(request: HttpRequest, proyecto_id: int):
     """Vista de corte guiado paso a paso para operadores.
-    Muestra el tablero con piezas y guía el operador cortando de forma secuencial."""
+    Muestra el tablero con piezas y guía el operador cortando de forma secuencial.
+    Si el proyecto está en un estado pre-inicio (aprobado/produccion/optimizado),
+    lo marca como 'asignado' para que el operador vea el modal de verificación de materiales.
+    """
     ctx = get_auth_context(request)
     base_qs = Proyecto.objects.select_related('cliente')
     if not (ctx.get('organization_is_general') or ctx.get('is_support')):
@@ -134,9 +158,72 @@ def operador_corte_guiado(request: HttpRequest, proyecto_id: int):
     if ctx.get('role') == 'operador' and proyecto.operador_id != request.user.id:
         return redirect('operador_home')
 
+    # Si el proyecto está en un estado "listo para producción" pero aún no iniciado,
+    # transicionarlo a 'asignado' para que el operador vea el modal de materiales.
+    ESTADOS_PRE_INICIO = ('aprobado', 'produccion', 'optimizado')
+    if proyecto.estado in ESTADOS_PRE_INICIO:
+        proyecto.estado = 'asignado'
+        proyecto.save(update_fields=['estado'])
+
     context = {
         'title': f'Corte Guiado - {proyecto.codigo}',
         'subTitle': proyecto.nombre,
         'proyecto': proyecto,
     }
     return render(request, 'operador/corte_guiado.html', context)
+
+
+@login_required
+def operador_proyectos_sse(request: HttpRequest):
+    """SSE /operador/proyectos/eventos/
+    Emite un evento 'cambio' cada vez que el conjunto de proyectos activos
+    del operador cambia (nuevo proyecto, cambio de estado, etc.).
+    El cliente reconecta automáticamente si se cae la conexión.
+    """
+    import time
+    import json as _json
+
+    ctx = get_auth_context(request)
+    ESTADOS_HISTORIAL = ('completado', 'pendiente_enchapado', 'cancelado')
+
+    def _get_firma():
+        """Devuelve una firma liviana del estado actual: lista de (id, estado)."""
+        qs = Proyecto.objects.only('id', 'estado', 'nombre')
+        if not (ctx.get('organization_is_general') or ctx.get('is_support')):
+            qs = qs.filter(organizacion_id=ctx.get('organization_id'))
+        if ctx.get('role') == 'operador':
+            qs = qs.filter(operador=request.user)
+        qs = qs.exclude(estado__in=ESTADOS_HISTORIAL)
+        return frozenset((p.id, p.estado) for p in qs)
+
+    def _event_stream():
+        # Inicializar con el estado actual para NO disparar un cambio falso al conectar
+        firma_anterior = _get_firma()
+        INTERVALO = 8   # segundos entre chequeos
+        HEARTBEAT  = 25 # segundos entre keep-alive
+        ultimo_hb  = time.time()
+        yield 'retry: 5000\n\n'   # reconectar tras 5 s si se corta
+        while True:
+            try:
+                firma = _get_firma()
+                if firma != firma_anterior:
+                    # Proyectos añadidos al conjunto visible del operador
+                    nuevos = firma - firma_anterior
+                    payload = _json.dumps({
+                        'total': len(firma),
+                        'nuevos': len(nuevos),
+                    })
+                    yield f'event: cambio\ndata: {payload}\n\n'
+                    firma_anterior = firma
+                # Heartbeat para mantener la conexión viva
+                if time.time() - ultimo_hb >= HEARTBEAT:
+                    yield ': keep-alive\n\n'
+                    ultimo_hb = time.time()
+            except Exception:
+                pass
+            time.sleep(INTERVALO)
+
+    resp = StreamingHttpResponse(_event_stream(), content_type='text/event-stream')
+    resp['Cache-Control'] = 'no-cache'
+    resp['X-Accel-Buffering'] = 'no'   # Nginx: deshabilitar buffering
+    return resp

@@ -47,6 +47,11 @@
             <td><span class="badge {{ p.estado|estado_badge }}">{{ p.get_estado_display }}</span></td>
             <td>{{ p.fecha_modificacion|date:'d-m-Y H:i' }}</td>
             <td class="text-end">
+              <a class="btn btn-sm btn-outline-secondary prm-trigger me-1"
+                 data-resumen-id="{{ p.id }}" data-resumen-hover="{{ p.id }}"
+                 href="javascript:void(0)" title="Vista rápida del resumen">
+                <i class="ri-eye-line"></i>
+              </a>
               <a class="btn btn-sm btn-outline-primary"
                  href="{% url 'enchapador_proyecto' p.id %}">Ver</a>
             </td>
@@ -63,4 +68,5 @@
     </div>
   </div>
 </div>
+{% include 'partials/proyecto_resumen_popup.html' %}
 {% endblock %}

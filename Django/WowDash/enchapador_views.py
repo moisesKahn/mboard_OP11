@@ -82,9 +82,9 @@ def enchapador_historial(request: HttpRequest):
         qs = qs.filter(organizacion_id=ctx.get('organization_id'))
 
     if ctx.get('role') == 'enchapador':
-        qs = qs.filter(operador=request.user)
-
-    if estado:
+        # Enchapador ve proyectos completados de su organización
+        qs = qs.filter(estado__in=['completado'])
+    elif estado:
         qs = qs.filter(estado=estado)
     else:
         qs = qs.filter(estado='completado')
