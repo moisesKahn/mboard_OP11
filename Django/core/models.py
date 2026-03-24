@@ -208,6 +208,9 @@ class Proyecto(models.Model):
         unique_together = [('cliente', 'correlativo')]
         indexes = [
             models.Index(fields=["organizacion", "fecha_creacion"], name="proy_org_fecha_idx"),
+            models.Index(fields=["organizacion", "estado", "fecha_creacion"], name="proy_org_estado_fecha_idx"),
+            models.Index(fields=["operador", "estado"], name="proy_operador_estado_idx"),
+            models.Index(fields=["estado"], name="proy_estado_idx"),
         ]
     
     def __str__(self):

@@ -27,7 +27,9 @@ def operador_home(request: HttpRequest):
     estado = request.GET.get('estado') or ''
     search = request.GET.get('search') or ''
 
-    qs = Proyecto.objects.select_related('cliente')
+    qs = Proyecto.objects.select_related('cliente').defer(
+        'resultado_optimizacion', 'configuracion', 'descripcion'
+    )
     # Scope por organización (excepto soporte)
     if not (ctx.get('organization_is_general') or ctx.get('is_support')):
         qs = qs.filter(organizacion_id=ctx.get('organization_id'))

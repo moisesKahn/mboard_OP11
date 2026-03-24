@@ -380,8 +380,10 @@ def proyectos_list(request):
     except Exception:
         pass
     
-    # Query base con relaciones
-    proyectos = Proyecto.objects.select_related('cliente', 'creado_por').all()
+    # Query base con relaciones (sin campos JSON pesados que no se muestran en listados)
+    proyectos = Proyecto.objects.select_related('cliente', 'creado_por').defer(
+        'resultado_optimizacion', 'configuracion', 'descripcion'
+    ).all()
     if not (ctx.get('organization_is_general') or ctx.get('is_support')):
         # Scope por organización del proyecto
         proyectos = proyectos.filter(organizacion_id=ctx.get('organization_id'))
