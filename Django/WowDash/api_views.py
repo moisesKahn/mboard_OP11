@@ -1026,19 +1026,21 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
     # Etiqueta 100 × 150 mm a 300 dpi → 1181 × 1772 dots
     DPI = 300
     def mm2d(v): return int(v * DPI / 25.4)
+    def _z(s, mx=28): return str(s)[:mx].replace('^', '').replace('~', '')
 
     LW = mm2d(100); LH = mm2d(150)
     M  = mm2d(4)   # margen lateral
 
-    # ── Zona header (ID + cliente) — ~18mm desde arriba ───────────────────────
-    HDR_H = mm2d(18)
-    # ── Zona dibujo pieza — 60mm de alto ──────────────────────────────────────
+    # ── Header: 2 columnas ~22mm de alto ──────────────────────────────────────
+    HDR_H = mm2d(22)
+    COL1  = int(LW * 0.35)   # separador vertical al 35% del ancho
+
+    # ── Zona dibujo pieza ──────────────────────────────────────────────────────
     DA_TOP = HDR_H + mm2d(2)
-    DA_W   = LW - 2 * M - mm2d(12)   # dejar margen derecho para cota vertical
-    DA_H   = mm2d(60)
-    scale  = min(DA_W / max(pw_mm, 1), DA_H / max(ph_mm, 1)) * 0.82
+    DA_W   = LW - 2 * M
+    DA_H   = mm2d(76)
+    scale  = min(DA_W / max(pw_mm, 1), DA_H / max(ph_mm, 1)) * 0.78
     rw = int(pw_mm * scale); rh = int(ph_mm * scale)
-    # Centrar horizontalmente dentro del área de dibujo (sin contar zona cota derecha)
     rx = M + (DA_W - rw) // 2
     ry = DA_TOP + (DA_H - rh) // 2
 
@@ -1048,31 +1050,31 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
     if tc.get('derecha'):   tc_parts.append('→Der')
     if tc.get('abajo'):     tc_parts.append('↓Aba')
     if tc.get('izquierda'): tc_parts.append('←Izq')
-    tc_str = '  '.join(tc_parts) if tc_parts else 'Sin tapacanto'
+    tc_str = ' '.join(tc_parts) if tc_parts else 'Sin tapacanto'
 
     veta_str = {'horizontal': 'Horizontal', 'vertical': 'Vertical'}.get(veta, veta)
 
-    def _z(s, mx=28): return str(s)[:mx].replace('^', '').replace('~', '')
-
     # Nombre pieza + contador
-    nombre_label = _z(nombre, 16)
-    if pieza_count_str:
-        nombre_label += ' ' + pieza_count_str
+    nombre_label = _z(nombre + (' ' + pieza_count_str if pieza_count_str else ''), 18)
 
     zpl_lines = [
         '^XA',
         '^LH0,0',
         f'^PW{LW}',
         f'^LL{LH}',
-        # ── HEADER: ID proyecto ────────────────────────────────────────────────
-        f'^FO{M},{M}^CF0,50^FD#{folio_id}^FS',
-        # ── HEADER: nombre cliente ─────────────────────────────────────────────
-        f'^FO{M},{mm2d(12)}^CF0,32^FD{_z(cliente_n, 26)}^FS',
-        # ── Línea separadora ──────────────────────────────────────────────────
-        f'^FO{M},{HDR_H}^GB{LW - 2*M},3,3^FS',
-        # ── Rectángulo proporcional de la pieza (borde más grueso) ───────────
-        f'^FO{rx},{ry}^GB{rw},{rh},6,W^FS',   # relleno blanco
-        f'^FO{rx},{ry}^GB{rw},{rh},6^FS',     # borde negro 6 dots (~0.5mm)
+        # ── HEADER izquierda: #ID (fila1) + cliente (fila2) ───────────────────
+        f'^FO{M},{M}^CF0,48^FD#{_z(folio_id, 10)}^FS',
+        f'^FO{M},{mm2d(12)}^CF0,30^FD{_z(cliente_n, 14)}^FS',
+        # ── Separador vertical header ─────────────────────────────────────────
+        f'^FO{COL1},{M}^GB3,{HDR_H - mm2d(2)},3^FS',
+        # ── HEADER derecha: nombre pieza (fila1) + material (fila2) ──────────
+        f'^FO{COL1 + mm2d(2)},{M}^CF0,38^FD{nombre_label}^FS',
+        f'^FO{COL1 + mm2d(2)},{mm2d(12)}^CF0,28^FD{_z(material_nombre, 18)}^FS',
+        # ── Línea separadora horizontal ───────────────────────────────────────
+        f'^FO0,{HDR_H}^GB{LW},3,3^FS',
+        # ── Rectángulo proporcional (relleno blanco + borde 6 dots) ──────────
+        f'^FO{rx},{ry}^GB{rw},{rh},6,W^FS',
+        f'^FO{rx},{ry}^GB{rw},{rh},6^FS',
     ]
 
     # Tapacantos: líneas internas
@@ -1087,48 +1089,25 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
     if tc.get('derecha'):
         zpl_lines.append(f'^FO{rx + rw - TC_OFF - BORDER},{ry}^GB{BORDER},{rh},{BORDER}^FS')
 
-    # Nombre dentro del rectángulo (centrado horizontal y vertical)
-    fn_size = max(30, min(rw, rh) // 3)
-    # Centrado horizontal aproximado: ~14 dots por carácter a fn_size
-    chars = len(_z(nombre_label, 14))
-    char_w = int(fn_size * 0.6)
-    nx = rx + max(4, (rw - chars * char_w) // 2)
-    ny = ry + (rh - fn_size) // 2
-    zpl_lines.append(f'^FO{nx},{ny}^CF0,{fn_size}^FD{_z(nombre_label, 14)}^FS')
-
-    # ── COTA ANCHO: centrada encima del rectángulo ─────────────────────────────
-    cota_size = 32
-    cota_y = ry - mm2d(9)
+    # ── COTA ANCHO: centrada horizontalmente dentro del rect, fila superior ───
+    cota_size = 28
     cota_ancho_str = f'{pw_mm} mm'
-    cota_ancho_x = rx + max(0, (rw - len(cota_ancho_str) * int(cota_size * 0.6)) // 2)
-    zpl_lines.append(f'^FO{cota_ancho_x},{cota_y}^CF0,{cota_size}^FD{cota_ancho_str}^FS')
+    cota_ancho_x = rx + max(4, (rw - len(cota_ancho_str) * int(cota_size * 0.6)) // 2)
+    zpl_lines.append(f'^FO{cota_ancho_x},{ry + mm2d(3)}^CF0,{cota_size}^FD{cota_ancho_str}^FS')
 
-    # ── COTA LARGO: centrada a la derecha del rectángulo ──────────────────────
-    cota_x = rx + rw + mm2d(2)
+    # ── COTA LARGO: centrada verticalmente, columna derecha dentro del rect ───
     cota_largo_str = f'{ph_mm} mm'
-    cota_largo_y = ry + max(0, (rh - cota_size) // 2)
-    zpl_lines.append(f'^FO{cota_x},{cota_largo_y}^CF0,{cota_size}^FD{cota_largo_str}^FS')
+    cota_largo_y = ry + max(4, (rh - cota_size) // 2)
+    cota_largo_x = rx + rw - len(cota_largo_str) * int(cota_size * 0.6) - mm2d(2)
+    zpl_lines.append(f'^FO{cota_largo_x},{cota_largo_y}^CF0,{cota_size}^FD{cota_largo_str}^FS')
 
-    # ── DATOS INFERIORES ───────────────────────────────────────────────────────
-    INFO_Y = DA_TOP + DA_H + mm2d(4)
-    ROW_H  = mm2d(8)
-    DATA_SIZE = 34
-
-    # Línea separadora antes de datos
-    zpl_lines.append(f'^FO{M},{INFO_Y - mm2d(2)}^GB{LW - 2*M},2,2^FS')
-
-    zpl_lines += [
-        f'^FO{M},{INFO_Y}^CF0,{DATA_SIZE}^FD{pw_mm} x {ph_mm} mm^FS',
-        f'^FO{M},{INFO_Y + ROW_H}^CF0,{DATA_SIZE}^FDTc: {_z(tc_str, 24)}^FS',
-    ]
+    # ── Tc: al pie del área de dibujo ─────────────────────────────────────────
+    tc_y = DA_TOP + DA_H + mm2d(2)
+    zpl_lines.append(f'^FO{M},{tc_y}^CF0,30^FDTc: {_z(tc_str, 28)}^FS')
     if veta_str:
-        zpl_lines.append(f'^FO{M},{INFO_Y + 2*ROW_H}^CF0,{DATA_SIZE}^FDVeta: {_z(veta_str, 18)}^FS')
+        zpl_lines.append(f'^FO{M},{tc_y + mm2d(8)}^CF0,28^FDVeta: {_z(veta_str, 18)}^FS')
 
-    # ── MATERIAL (franja inferior) ─────────────────────────────────────────────
-    box_y = LH - mm2d(14)
     zpl_lines += [
-        f'^FO0,{box_y}^GB{LW},{mm2d(14)},400^FS',   # fondo negro
-        f'^FO{M},{box_y + mm2d(2)}^CF0,34^FR^FD{_z(material_nombre, 26)}^FS',  # texto blanco (^FR invierte)
         f'^PQ{copias}',
         '^XZ',
     ]
