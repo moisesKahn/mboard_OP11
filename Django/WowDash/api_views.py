@@ -1063,13 +1063,13 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
         f'^PW{LW}',
         f'^LL{LH}',
         # ── HEADER izquierda: #ID (fila1) + cliente (fila2) ───────────────────
-        f'^FO{M},{M}^CF0,48^FD#{_z(folio_id, 10)}^FS',
-        f'^FO{M},{mm2d(12)}^CF0,30^FD{_z(cliente_n, 14)}^FS',
+        f'^FO{M},{M}^CF0,60^FD#{_z(folio_id, 10)}^FS',
+        f'^FO{M},{mm2d(14)}^CF0,38^FD{_z(cliente_n, 14)}^FS',
         # ── Separador vertical header ─────────────────────────────────────────
         f'^FO{COL1},{M}^GB3,{HDR_H - mm2d(2)},3^FS',
         # ── HEADER derecha: nombre pieza (fila1) + material (fila2) ──────────
-        f'^FO{COL1 + mm2d(2)},{M}^CF0,38^FD{nombre_label}^FS',
-        f'^FO{COL1 + mm2d(2)},{mm2d(12)}^CF0,28^FD{_z(material_nombre, 18)}^FS',
+        f'^FO{COL1 + mm2d(2)},{M}^CF0,48^FD{nombre_label}^FS',
+        f'^FO{COL1 + mm2d(2)},{mm2d(14)}^CF0,36^FD{_z(material_nombre, 18)}^FS',
         # ── Línea separadora horizontal ───────────────────────────────────────
         f'^FO0,{HDR_H}^GB{LW},3,3^FS',
         # ── Rectángulo proporcional (relleno blanco + borde 6 dots) ──────────
@@ -1090,7 +1090,7 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
         zpl_lines.append(f'^FO{rx + rw - TC_OFF - BORDER},{ry}^GB{BORDER},{rh},{BORDER}^FS')
 
     # ── COTA ANCHO: centrada horizontalmente dentro del rect, fila superior ───
-    cota_size = 28
+    cota_size = 36
     cota_ancho_str = f'{pw_mm} mm'
     cota_ancho_x = rx + max(4, (rw - len(cota_ancho_str) * int(cota_size * 0.6)) // 2)
     zpl_lines.append(f'^FO{cota_ancho_x},{ry + mm2d(3)}^CF0,{cota_size}^FD{cota_ancho_str}^FS')
@@ -1103,9 +1103,9 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
 
     # ── Tc: al pie del área de dibujo ─────────────────────────────────────────
     tc_y = DA_TOP + DA_H + mm2d(2)
-    zpl_lines.append(f'^FO{M},{tc_y}^CF0,30^FDTc: {_z(tc_str, 28)}^FS')
+    zpl_lines.append(f'^FO{M},{tc_y}^CF0,38^FDTc: {_z(tc_str, 28)}^FS')
     if veta_str:
-        zpl_lines.append(f'^FO{M},{tc_y + mm2d(8)}^CF0,28^FDVeta: {_z(veta_str, 18)}^FS')
+        zpl_lines.append(f'^FO{M},{tc_y + mm2d(10)}^CF0,36^FDVeta: {_z(veta_str, 18)}^FS')
 
     zpl_lines += [
         f'^PQ{copias}',

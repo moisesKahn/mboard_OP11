@@ -876,30 +876,27 @@ function generarZPL(p) {
   if(tc.abajo)tcParts.push('↓Aba');  if(tc.izquierda)tcParts.push('←Izq');
   const tcStr=tcParts.length?tcParts.join(' '):'Sin tapacanto';
 
-  // Layout
-  // Header: ~22mm (fila1: ID+nombre, fila2: cliente+material)
-  const HDR_H=mm2d(22);
-  // Columna izquierda del header: 35% del ancho
+  // Layout — header 26mm para fuentes grandes
+  const HDR_H=mm2d(26);
   const COL1=Math.round(LW*0.35);
-  // Zona dibujo
   const DA_TOP=HDR_H+mm2d(2);
-  const DA_W=LW-2*M,DA_H=mm2d(76);
+  const DA_W=LW-2*M,DA_H=mm2d(70);
   const scale=Math.min(DA_W/Math.max(pw_mm,1),DA_H/Math.max(ph_mm,1))*0.78;
   const rw=Math.round(pw_mm*scale),rh=Math.round(ph_mm*scale);
   const rx=M+Math.round((DA_W-rw)/2),ry=DA_TOP+Math.round((DA_H-rh)/2);
 
   const lines=['^XA','^LH0,0',`^PW${LW}`,`^LL${LH}`,
-    // ─ Header izquierda: #ID (fila 1) + cliente (fila 2)
-    `^FO${M},${M}^CF0,48^FD#${_z(proyectoFolio,10)}^FS`,
-    `^FO${M},${mm2d(12)}^CF0,30^FD${_z(proyectoCliente,14)}^FS`,
-    // ─ Separador vertical en header
+    // ─ Header izq: #ID (fila1) + cliente (fila2)
+    `^FO${M},${M}^CF0,60^FD#${_z(proyectoFolio,10)}^FS`,
+    `^FO${M},${mm2d(14)}^CF0,38^FD${_z(proyectoCliente,14)}^FS`,
+    // ─ Separador vertical header
     `^FO${COL1},${M}^GB3,${HDR_H-mm2d(2)},3^FS`,
-    // ─ Header derecha: nombre pieza (fila 1) + material (fila 2)
-    `^FO${COL1+mm2d(2)},${M}^CF0,38^FD${_z(nombreLabel,16)}^FS`,
-    `^FO${COL1+mm2d(2)},${mm2d(12)}^CF0,28^FD${matNombre}^FS`,
+    // ─ Header der: nombre pieza (fila1) + material (fila2)
+    `^FO${COL1+mm2d(2)},${M}^CF0,48^FD${_z(nombreLabel,16)}^FS`,
+    `^FO${COL1+mm2d(2)},${mm2d(14)}^CF0,36^FD${matNombre}^FS`,
     // ─ Línea separadora horizontal
     `^FO0,${HDR_H}^GB${LW},3,3^FS`,
-    // ─ Rect pieza: relleno blanco + borde negro 6 dots
+    // ─ Rect pieza
     `^FO${rx},${ry}^GB${rw},${rh},6,W^FS`,
     `^FO${rx},${ry}^GB${rw},${rh},6^FS`,
   ];
@@ -911,13 +908,13 @@ function generarZPL(p) {
   if(tc.izquierda)lines.push(`^FO${rx+TC_OFF},${ry}^GB${BORDER},${rh},${BORDER}^FS`);
   if(tc.derecha)  lines.push(`^FO${rx+rw-TC_OFF-BORDER},${ry}^GB${BORDER},${rh},${BORDER}^FS`);
 
-  // ─ Cota ANCHO: centrada horizontalmente, en fila superior dentro del rect
-  const cotaSize=28;
+  // ─ Cota ANCHO: centrada horizontalmente, fila superior dentro del rect
+  const cotaSize=36;
   const cotaW=`${pw_mm} mm`;
   const cotaWx=rx+Math.max(4,Math.round((rw-cotaW.length*Math.round(cotaSize*0.6))/2));
   lines.push(`^FO${cotaWx},${ry+mm2d(3)}^CF0,${cotaSize}^FD${cotaW}^FS`);
 
-  // ─ Cota LARGO: centrada verticalmente, en columna derecha dentro del rect
+  // ─ Cota LARGO: centrada verticalmente, columna derecha dentro del rect
   const cotaL=`${ph_mm} mm`;
   const cotaLy=ry+Math.max(4,Math.round((rh-cotaSize)/2));
   const cotaLx=rx+rw-Math.round(cotaL.length*Math.round(cotaSize*0.6))-mm2d(2);
@@ -925,7 +922,7 @@ function generarZPL(p) {
 
   // ─ Tc: al pie del área de dibujo
   const TC_Y=DA_TOP+DA_H+mm2d(2);
-  lines.push(`^FO${M},${TC_Y}^CF0,30^FDTc: ${_z(tcStr,28)}^FS`);
+  lines.push(`^FO${M},${TC_Y}^CF0,38^FDTc: ${_z(tcStr,28)}^FS`);
 
   lines.push('^PQ1','^XZ');
   return lines.join('\n');
