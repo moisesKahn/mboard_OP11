@@ -404,7 +404,9 @@ try {
   console.error('Error parseando datos del proyecto:', e);
 }
 
-const proyectoId = {{ proyecto.id }};
+const proyectoId     = {{ proyecto.id }};
+const proyectoFolio  = '{{ proyecto.folio|default:proyecto.id }}';
+const proyectoCliente = '{{ proyecto.cliente.nombre|default:""|escapejs }}';
 
 // ===== ESTADO GLOBAL =====
 let tableroActual = null;
@@ -855,39 +857,71 @@ document.getElementById('cgBtnEtiqueta').addEventListener('click', () => {
 });
 function generarZPL(p) {
   const DPI=300,mm2d=v=>Math.round(v*DPI/25.4),_z=(s,mx)=>String(s||'').slice(0,mx).replace(/\^/g,'').replace(/~/g,'');
-  const LW=mm2d(100),LH=mm2d(150),M=mm2d(5);
+  const LW=mm2d(100),LH=mm2d(150),M=mm2d(4);
   const pw_mm=parseInt(p.ancho)||0,ph_mm=parseInt(p.largo||p.alto)||0;
   const nombre=p.nombre||p.pieza_id||'';
   const tc=p.tapacantos||{};
-  const matNombre=_z((_apiMateriales[_apiMatIdx]||{}).nombre||'—',22);
-  const DA_W=LW-2*M,DA_H=mm2d(70),DA_TOP=mm2d(16);
-  const scale=Math.min(DA_W/Math.max(pw_mm,1),DA_H/Math.max(ph_mm,1))*0.85;
+  const matNombre=_z((_apiMateriales[_apiMatIdx]||{}).nombre||'—',26);
+
+  // Contar cuántas piezas con el mismo nombre hay (para mostrar idx/total)
+  const todasPiezas=_apiMateriales.flatMap(m=>(m.tableros||[]).flatMap(t=>t.piezas||[]));
+  const mismoNombre=todasPiezas.filter(pp=>(pp.nombre||pp.pieza_id||'')===nombre);
+  const piezaIdx=mismoNombre.indexOf(p)+1;
+  const countStr=mismoNombre.length>1?` (${piezaIdx}/${mismoNombre.length})`:'';
+  const nombreLabel=_z(nombre+countStr,18);
+
+  // Layout
+  const HDR_H=mm2d(18),DA_TOP=HDR_H+mm2d(2);
+  const DA_W=LW-2*M-mm2d(12),DA_H=mm2d(60);
+  const scale=Math.min(DA_W/Math.max(pw_mm,1),DA_H/Math.max(ph_mm,1))*0.82;
   const rw=Math.round(pw_mm*scale),rh=Math.round(ph_mm*scale);
-  const rx=Math.round((LW-rw)/2),ry=DA_TOP;
+  const rx=M+Math.round((DA_W-rw)/2),ry=DA_TOP+Math.round((DA_H-rh)/2);
+
   const tcParts=[];
-  if(tc.arriba)tcParts.push('Arr');if(tc.derecha)tcParts.push('Der');
-  if(tc.abajo)tcParts.push('Aba');if(tc.izquierda)tcParts.push('Izq');
-  const tc_str=tcParts.length?tcParts.join(' | '):'Sin tapacanto';
+  if(tc.arriba)tcParts.push('↑Arr'); if(tc.derecha)tcParts.push('→Der');
+  if(tc.abajo)tcParts.push('↓Aba');  if(tc.izquierda)tcParts.push('←Izq');
+  const tcStr=tcParts.length?tcParts.join('  '):'Sin tapacanto';
+
   const lines=['^XA','^LH0,0',`^PW${LW}`,`^LL${LH}`,
-    `^FO${M},${M}^CF0,45^FD${_z(nombre,22)}^FS`,
-    `^FO${M},${mm2d(14)}^GB${LW-2*M},2,2^FS`,
-    `^FO${rx},${ry}^GB${rw},${rh},3,W^FS`,`^FO${rx},${ry}^GB${rw},${rh},3^FS`];
-  const TC_OFF=Math.max(4,Math.round(Math.min(rw,rh)*0.06));
-  if(tc.arriba)lines.push(`^FO${rx},${ry+TC_OFF}^GB${rw},4,4^FS`);
-  if(tc.abajo)lines.push(`^FO${rx},${ry+rh-TC_OFF-4}^GB${rw},4,4^FS`);
-  if(tc.izquierda)lines.push(`^FO${rx+TC_OFF},${ry}^GB4,${rh},4^FS`);
-  if(tc.derecha)lines.push(`^FO${rx+rw-TC_OFF-4},${ry}^GB4,${rh},4^FS`);
-  const fn_size=Math.max(25,Math.round(Math.min(rw,rh)/3));
-  lines.push(`^FO${rx+Math.round((rw-_z(nombre,12).length*fn_size/2)/2)},${ry+Math.round(rh/2-fn_size/2)}^CF0,${fn_size}^FD${_z(nombre,12)}^FS`);
-  lines.push(`^FO${rx},${ry-mm2d(7)}^CF0,28^FD${pw_mm} mm^FS`);
-  lines.push(`^FO${rx+rw+mm2d(2)},${ry+Math.round(rh/2)-14}^CF0,28^FD${ph_mm} mm^FS`);
-  const INFO_Y=ry+rh+mm2d(12),ROW_H=mm2d(7);
-  lines.push(`^FO${M},${INFO_Y}^CF0,30^FDAncho: ${pw_mm} mm^FS`,
-    `^FO${M},${INFO_Y+ROW_H}^CF0,30^FDLargo: ${ph_mm} mm^FS`,
-    `^FO${M},${INFO_Y+2*ROW_H}^CF0,28^FDTapacanto: ${_z(tc_str,26)}^FS`);
-  const box_y=LH-mm2d(16);
-  lines.push(`^FO${M},${box_y}^GB${LW-2*M},${mm2d(13)},2,W^FS`,
-    `^FO${M+6},${box_y+mm2d(2)}^CF0,32^FDMaterial: ${matNombre}^FS`,'^PQ1','^XZ');
+    // Header: ID + cliente
+    `^FO${M},${M}^CF0,50^FD#${_z(proyectoFolio,10)}^FS`,
+    `^FO${M},${mm2d(12)}^CF0,32^FD${_z(proyectoCliente,26)}^FS`,
+    // Separador
+    `^FO${M},${HDR_H}^GB${LW-2*M},3,3^FS`,
+    // Rect borde 6 dots
+    `^FO${rx},${ry}^GB${rw},${rh},6,W^FS`,
+    `^FO${rx},${ry}^GB${rw},${rh},6^FS`,
+  ];
+
+  const TC_OFF=Math.max(5,Math.round(Math.min(rw,rh)*0.07)),BORDER=5;
+  if(tc.arriba)   lines.push(`^FO${rx},${ry+TC_OFF}^GB${rw},${BORDER},${BORDER}^FS`);
+  if(tc.abajo)    lines.push(`^FO${rx},${ry+rh-TC_OFF-BORDER}^GB${rw},${BORDER},${BORDER}^FS`);
+  if(tc.izquierda)lines.push(`^FO${rx+TC_OFF},${ry}^GB${BORDER},${rh},${BORDER}^FS`);
+  if(tc.derecha)  lines.push(`^FO${rx+rw-TC_OFF-BORDER},${ry}^GB${BORDER},${rh},${BORDER}^FS`);
+
+  // Nombre centrado
+  const fn_size=Math.max(30,Math.round(Math.min(rw,rh)/3));
+  const charW=Math.round(fn_size*0.6);
+  const nx=rx+Math.max(4,Math.round((rw-nombreLabel.length*charW)/2));
+  lines.push(`^FO${nx},${ry+Math.round((rh-fn_size)/2)}^CF0,${fn_size}^FD${_z(nombreLabel,14)}^FS`);
+
+  // Cota ancho (centrada encima)
+  const cotaSize=32,cotaAncho=`${pw_mm} mm`;
+  lines.push(`^FO${rx+Math.max(0,Math.round((rw-cotaAncho.length*Math.round(cotaSize*0.6))/2))},${ry-mm2d(9)}^CF0,${cotaSize}^FD${cotaAncho}^FS`);
+  // Cota largo (centrada a la derecha)
+  lines.push(`^FO${rx+rw+mm2d(2)},${ry+Math.round((rh-cotaSize)/2)}^CF0,${cotaSize}^FD${ph_mm} mm^FS`);
+
+  // Datos inferiores
+  const INFO_Y=DA_TOP+DA_H+mm2d(4),ROW_H=mm2d(8),DATA_SIZE=34;
+  lines.push(`^FO${M},${INFO_Y-mm2d(2)}^GB${LW-2*M},2,2^FS`);
+  lines.push(`^FO${M},${INFO_Y}^CF0,${DATA_SIZE}^FD${pw_mm} x ${ph_mm} mm^FS`);
+  lines.push(`^FO${M},${INFO_Y+ROW_H}^CF0,${DATA_SIZE}^FDTc: ${_z(tcStr,24)}^FS`);
+
+  // Material franja negra inferior
+  const box_y=LH-mm2d(14);
+  lines.push(`^FO0,${box_y}^GB${LW},${mm2d(14)},400^FS`);
+  lines.push(`^FO${M},${box_y+mm2d(2)}^CF0,34^FR^FD${matNombre}^FS`);
+  lines.push('^PQ1','^XZ');
   return lines.join('\n');
 }
 async function imprimirEtiqueta(p) {

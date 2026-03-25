@@ -223,6 +223,11 @@
                     {% if user.usuarioperfiloptimizador.rol == 'autoservicio' or user.usuarioperfiloptimizador.rol == 'enchapador' %}
                     <!-- Modo restringido: Solo mostrar nombre del usuario -->
                     <div class="d-flex align-items-center gap-3">
+                        <!-- Indicador carga batch resumen -->
+                        <div id="prm-batch-indicator" class="d-none align-items-center gap-1" style="font-size:12px;">
+                          <span id="prm-batch-spinner" class="spinner-border spinner-border-sm text-warning" style="width:14px;height:14px;border-width:2px;" role="status"></span>
+                          <span id="prm-batch-text" class="text-warning fw-semibold" style="font-size:11px;">Cargando info…</span>
+                        </div>
                         <div class="text-end">
                             <div class="text-sm fw-semibold text-primary-light">
                                 <i class="ri-user-line"></i> <span>{{ user.get_full_name|default:user.username }}</span>
@@ -234,7 +239,12 @@
                     </div>
                     {% else %}
                     <!-- Modo Normal: Dropdown de usuario -->
-                    <div class="dropdown">
+                    <div class="dropdown d-flex align-items-center gap-2">
+                        <!-- Indicador carga batch resumen -->
+                        <div id="prm-batch-indicator" class="d-none align-items-center gap-1">
+                          <span id="prm-batch-spinner" class="spinner-border spinner-border-sm text-warning" style="width:14px;height:14px;border-width:2px;" role="status"></span>
+                          <span id="prm-batch-text" class="text-warning fw-semibold" style="font-size:11px;white-space:nowrap;">Cargando info…</span>
+                        </div>
                         <button class="d-flex justify-content-center align-items-center rounded-circle" type="button" data-bs-toggle="dropdown">
                             <div class="w-40-px h-40-px rounded-circle d-flex align-items-center justify-content-center fw-bold text-white"
                                  style="background-color:#6c5ce7;">

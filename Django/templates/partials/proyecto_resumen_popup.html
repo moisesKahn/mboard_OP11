@@ -109,15 +109,43 @@ window.addEventListener('load', function () {
   _pendingIds = _pendingIds.filter(function(v, i, a) { return a.indexOf(v) === i; });
 
   // Precarga batch: una sola petición con todos los IDs
+  function _setBatchIndicator(loading) {
+    var el = document.getElementById('prm-batch-indicator');
+    var sp = document.getElementById('prm-batch-spinner');
+    var tx = document.getElementById('prm-batch-text');
+    if (!el) return;
+    if (loading) {
+      el.classList.remove('d-none');
+      el.classList.add('d-flex');
+      sp.style.display = '';
+      tx.textContent = 'Cargando info…';
+      tx.className = 'text-warning fw-semibold';
+      tx.style.fontSize = '11px';
+    } else {
+      sp.style.display = 'none';
+      tx.textContent = '✓ Info lista';
+      tx.className = 'text-success fw-semibold';
+      tx.style.fontSize = '11px';
+      setTimeout(function() {
+        el.classList.add('d-none');
+        el.classList.remove('d-flex');
+      }, 2500);
+    }
+  }
+
   if (_pendingIds.length > 0) {
+    _setBatchIndicator(true);
     fetch('/api/proyectos/resumen-batch?ids=' + _pendingIds.join(','), { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function(data) {
         var res = data.resumenes || {};
         Object.keys(res).forEach(function(id) { if (res[id]) _cache[id] = res[id]; });
         window._prmCache = _cache;  // exponer para vista resumen en tabla
+        _setBatchIndicator(false);
       })
-      .catch(function() { /* silencioso — se cargará al hacer clic */ });
+      .catch(function() {
+        _setBatchIndicator(false);
+      });
   }
 
   function estadoBadge(estado, display) {

@@ -920,8 +920,10 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
     if not (ctx.get('organization_is_general') or ctx.get('is_support')):
         base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
 
-    # Traer solo el campo necesario como dict (evita cargar el objeto completo)
-    row = base_qs.filter(id=proyecto_id).values('id', 'resultado_optimizacion').first()
+    # Traer campos necesarios incluyendo cliente y public_id
+    row = base_qs.filter(id=proyecto_id).select_related('cliente').values(
+        'id', 'resultado_optimizacion', 'public_id', 'cliente__nombre'
+    ).first()
     if not row:
         from django.http import Http404
         raise Http404
@@ -993,94 +995,140 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
     tc      = pieza_data.get('tapacantos') or {}
     veta    = pieza_data.get('veta') or ''
 
+    # Datos del proyecto para el header de la etiqueta
+    folio_id   = str(row.get('public_id') or proyecto_id)
+    cliente_n  = str(row.get('cliente__nombre') or '').strip()
+
     # ── Nombre del material ────────────────────────────────────────────────────
     if isinstance(material_nombre, dict):
         material_nombre = material_nombre.get('nombre') or material_nombre.get('codigo') or '—'
 
+    # ── Contar cuántas piezas con el mismo nombre hay en todos los tableros ────
+    # Para mostrar pieza N (idx/total)
+    if mti:
+        target_m2 = int(mti.group(1)); target_t2 = int(mti.group(2)); target_p2 = int(mti.group(3))
+        mismo_nombre = [p for mat in materiales for t in (mat.get('tableros') or [])
+                        for p in (t.get('piezas') or []) if str(p.get('nombre') or '') == nombre]
+        pieza_idx_global = 0
+        cnt = 0
+        for mat2 in materiales:
+            for t_i, tab2 in enumerate(mat2.get('tableros') or [], 1):
+                for p_i, pp in enumerate(tab2.get('piezas') or [], 1):
+                    if str(pp.get('nombre') or '') == nombre:
+                        cnt += 1
+                        if mat2 is materiales[target_m2-1] and t_i == target_t2 and p_i == target_p2:
+                            pieza_idx_global = cnt
+        pieza_count_str = f'({pieza_idx_global}/{cnt})' if cnt > 1 else ''
+    else:
+        pieza_count_str = ''
+
     # ── Generar ZPL (nativo Zebra — sin PDF, sin ReportLab) ───────────────────
     # Etiqueta 100 × 150 mm a 300 dpi → 1181 × 1772 dots
-    # ^CF0,N = fuente 0 tamaño N dots
     DPI = 300
-    def mm2d(v): return int(v * DPI / 25.4)   # mm → dots
+    def mm2d(v): return int(v * DPI / 25.4)
 
     LW = mm2d(100); LH = mm2d(150)
-    M  = mm2d(5)   # margen
+    M  = mm2d(4)   # margen lateral
 
-    # Rectángulo proporcional de la pieza (área de dibujo: 100×70mm desde top)
-    DA_W = LW - 2 * M
-    DA_H = mm2d(70)
-    DA_TOP = mm2d(16)   # Y desde arriba donde empieza el área de dibujo
-    scale = min(DA_W / max(pw_mm, 1), DA_H / max(ph_mm, 1)) * 0.85
+    # ── Zona header (ID + cliente) — ~18mm desde arriba ───────────────────────
+    HDR_H = mm2d(18)
+    # ── Zona dibujo pieza — 60mm de alto ──────────────────────────────────────
+    DA_TOP = HDR_H + mm2d(2)
+    DA_W   = LW - 2 * M - mm2d(12)   # dejar margen derecho para cota vertical
+    DA_H   = mm2d(60)
+    scale  = min(DA_W / max(pw_mm, 1), DA_H / max(ph_mm, 1)) * 0.82
     rw = int(pw_mm * scale); rh = int(ph_mm * scale)
-    rx = (LW - rw) // 2;    ry = DA_TOP
+    # Centrar horizontalmente dentro del área de dibujo (sin contar zona cota derecha)
+    rx = M + (DA_W - rw) // 2
+    ry = DA_TOP + (DA_H - rh) // 2
 
     # Tapacantos en texto
     tc_parts = []
-    if tc.get('arriba'):    tc_parts.append('Arr')
-    if tc.get('derecha'):   tc_parts.append('Der')
-    if tc.get('abajo'):     tc_parts.append('Aba')
-    if tc.get('izquierda'): tc_parts.append('Izq')
-    tc_str = ' | '.join(tc_parts) if tc_parts else 'Sin tapacanto'
+    if tc.get('arriba'):    tc_parts.append('↑Arr')
+    if tc.get('derecha'):   tc_parts.append('→Der')
+    if tc.get('abajo'):     tc_parts.append('↓Aba')
+    if tc.get('izquierda'): tc_parts.append('←Izq')
+    tc_str = '  '.join(tc_parts) if tc_parts else 'Sin tapacanto'
 
     veta_str = {'horizontal': 'Horizontal', 'vertical': 'Vertical'}.get(veta, veta)
 
-    # Truncar strings para que no se salgan de la etiqueta
     def _z(s, mx=28): return str(s)[:mx].replace('^', '').replace('~', '')
+
+    # Nombre pieza + contador
+    nombre_label = _z(nombre, 16)
+    if pieza_count_str:
+        nombre_label += ' ' + pieza_count_str
 
     zpl_lines = [
         '^XA',
         '^LH0,0',
         f'^PW{LW}',
         f'^LL{LH}',
-        # ── Título (nombre pieza) ──────────────────────────────────────────────
-        f'^FO{M},{M}^CF0,45^FD{_z(nombre, 22)}^FS',
+        # ── HEADER: ID proyecto ────────────────────────────────────────────────
+        f'^FO{M},{M}^CF0,50^FD#{folio_id}^FS',
+        # ── HEADER: nombre cliente ─────────────────────────────────────────────
+        f'^FO{M},{mm2d(12)}^CF0,32^FD{_z(cliente_n, 26)}^FS',
         # ── Línea separadora ──────────────────────────────────────────────────
-        f'^FO{M},{mm2d(14)}^GB{LW - 2*M},2,2^FS',
-        # ── Rectángulo proporcional de la pieza ───────────────────────────────
-        f'^FO{rx},{ry}^GB{rw},{rh},3,W^FS',          # contorno blanco relleno
-        f'^FO{rx},{ry}^GB{rw},{rh},3^FS',            # borde negro
+        f'^FO{M},{HDR_H}^GB{LW - 2*M},3,3^FS',
+        # ── Rectángulo proporcional de la pieza (borde más grueso) ───────────
+        f'^FO{rx},{ry}^GB{rw},{rh},6,W^FS',   # relleno blanco
+        f'^FO{rx},{ry}^GB{rw},{rh},6^FS',     # borde negro 6 dots (~0.5mm)
     ]
 
-    # Tapacantos: líneas internas en los lados correspondientes
-    TC_OFF = max(4, int(min(rw, rh) * 0.06))
+    # Tapacantos: líneas internas
+    TC_OFF = max(5, int(min(rw, rh) * 0.07))
+    BORDER = 5
     if tc.get('arriba'):
-        zpl_lines.append(f'^FO{rx},{ry + TC_OFF}^GB{rw},4,4^FS')
+        zpl_lines.append(f'^FO{rx},{ry + TC_OFF}^GB{rw},{BORDER},{BORDER}^FS')
     if tc.get('abajo'):
-        zpl_lines.append(f'^FO{rx},{ry + rh - TC_OFF - 4}^GB{rw},4,4^FS')
+        zpl_lines.append(f'^FO{rx},{ry + rh - TC_OFF - BORDER}^GB{rw},{BORDER},{BORDER}^FS')
     if tc.get('izquierda'):
-        zpl_lines.append(f'^FO{rx + TC_OFF},{ry}^GB4,{rh},4^FS')
+        zpl_lines.append(f'^FO{rx + TC_OFF},{ry}^GB{BORDER},{rh},{BORDER}^FS')
     if tc.get('derecha'):
-        zpl_lines.append(f'^FO{rx + rw - TC_OFF - 4},{ry}^GB4,{rh},4^FS')
+        zpl_lines.append(f'^FO{rx + rw - TC_OFF - BORDER},{ry}^GB{BORDER},{rh},{BORDER}^FS')
 
-    # Nombre dentro del rectángulo (centrado)
-    fn_size = max(25, min(rw, rh) // 3)
-    nx = rx + (rw - len(_z(nombre, 12)) * fn_size // 2) // 2
-    ny = ry + rh // 2 - fn_size // 2
-    zpl_lines.append(f'^FO{nx},{ny}^CF0,{fn_size}^FD{_z(nombre, 12)}^FS')
+    # Nombre dentro del rectángulo (centrado horizontal y vertical)
+    fn_size = max(30, min(rw, rh) // 3)
+    # Centrado horizontal aproximado: ~14 dots por carácter a fn_size
+    chars = len(_z(nombre_label, 14))
+    char_w = int(fn_size * 0.6)
+    nx = rx + max(4, (rw - chars * char_w) // 2)
+    ny = ry + (rh - fn_size) // 2
+    zpl_lines.append(f'^FO{nx},{ny}^CF0,{fn_size}^FD{_z(nombre_label, 14)}^FS')
 
-    # Cota ancho (encima del rect)
-    cota_y = ry - mm2d(7)
-    zpl_lines.append(f'^FO{rx},{cota_y}^CF0,28^FD{pw_mm} mm^FS')
-    # Cota largo (derecha del rect)
+    # ── COTA ANCHO: centrada encima del rectángulo ─────────────────────────────
+    cota_size = 32
+    cota_y = ry - mm2d(9)
+    cota_ancho_str = f'{pw_mm} mm'
+    cota_ancho_x = rx + max(0, (rw - len(cota_ancho_str) * int(cota_size * 0.6)) // 2)
+    zpl_lines.append(f'^FO{cota_ancho_x},{cota_y}^CF0,{cota_size}^FD{cota_ancho_str}^FS')
+
+    # ── COTA LARGO: centrada a la derecha del rectángulo ──────────────────────
     cota_x = rx + rw + mm2d(2)
-    zpl_lines.append(f'^FO{cota_x},{ry + rh//2 - 14}^CF0,28^FD{ph_mm} mm^FS')
+    cota_largo_str = f'{ph_mm} mm'
+    cota_largo_y = ry + max(0, (rh - cota_size) // 2)
+    zpl_lines.append(f'^FO{cota_x},{cota_largo_y}^CF0,{cota_size}^FD{cota_largo_str}^FS')
 
-    # ── Datos textuales ────────────────────────────────────────────────────────
-    INFO_Y = ry + rh + mm2d(12)
-    ROW_H  = mm2d(7)
+    # ── DATOS INFERIORES ───────────────────────────────────────────────────────
+    INFO_Y = DA_TOP + DA_H + mm2d(4)
+    ROW_H  = mm2d(8)
+    DATA_SIZE = 34
+
+    # Línea separadora antes de datos
+    zpl_lines.append(f'^FO{M},{INFO_Y - mm2d(2)}^GB{LW - 2*M},2,2^FS')
+
     zpl_lines += [
-        f'^FO{M},{INFO_Y}^CF0,30^FDAncho: {pw_mm} mm^FS',
-        f'^FO{M},{INFO_Y + ROW_H}^CF0,30^FDLargo: {ph_mm} mm^FS',
-        f'^FO{M},{INFO_Y + 2*ROW_H}^CF0,28^FDTapacanto: {_z(tc_str, 26)}^FS',
+        f'^FO{M},{INFO_Y}^CF0,{DATA_SIZE}^FD{pw_mm} x {ph_mm} mm^FS',
+        f'^FO{M},{INFO_Y + ROW_H}^CF0,{DATA_SIZE}^FDTc: {_z(tc_str, 24)}^FS',
     ]
     if veta_str:
-        zpl_lines.append(f'^FO{M},{INFO_Y + 3*ROW_H}^CF0,28^FDVeta: {_z(veta_str, 18)}^FS')
+        zpl_lines.append(f'^FO{M},{INFO_Y + 2*ROW_H}^CF0,{DATA_SIZE}^FDVeta: {_z(veta_str, 18)}^FS')
 
-    # Material (recuadro al fondo)
-    box_y = LH - mm2d(16)
+    # ── MATERIAL (franja inferior) ─────────────────────────────────────────────
+    box_y = LH - mm2d(14)
     zpl_lines += [
-        f'^FO{M},{box_y}^GB{LW - 2*M},{mm2d(13)},2,W^FS',
-        f'^FO{M + 6},{box_y + mm2d(2)}^CF0,32^FDMaterial: {_z(material_nombre, 22)}^FS',
+        f'^FO0,{box_y}^GB{LW},{mm2d(14)},400^FS',   # fondo negro
+        f'^FO{M},{box_y + mm2d(2)}^CF0,34^FR^FD{_z(material_nombre, 26)}^FS',  # texto blanco (^FR invierte)
         f'^PQ{copias}',
         '^XZ',
     ]
