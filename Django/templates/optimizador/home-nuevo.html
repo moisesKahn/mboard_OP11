@@ -693,16 +693,18 @@ class Tablero {
     encontrarPosicion(pieza){
         if(this.piezas.length===0) return this.piezaCabe(pieza,0,0)?{x:0,y:0}:null;
         let mejor=null, mejorScore=-1e9;
-        const candidatos=[]; for(const p of this.piezas){
-            candidatos.push({x:p.x+p.ancho+this.kerf,y:p.y});
-            candidatos.push({x:p.x,y:p.y+p.alto+this.kerf});
-            candidatos.push({x:p.x+p.ancho+this.kerf,y:p.y+p.alto+this.kerf});
+        const setC=new Set(); const addC=(x,y)=>{ if(x>=0&&y>=0) setC.add(`${x},${y}`); };
+        for(const p of this.piezas){
+            const xDer=p.x+p.ancho+this.kerf, yAbj=p.y+p.alto+this.kerf;
+            // candidatos estándar desde esquinas
+            addC(xDer, p.y); addC(p.x, yAbj); addC(xDer, yAbj);
+            // ← FIX: anclar candidatos al borde superior (y=0) e izquierdo (x=0)
+            // para evitar desalineación entre piezas rotadas y no rotadas
+            addC(xDer, 0); addC(0, yAbj);
         }
         // posiciones de borde útiles
-        candidatos.push({x:0,y:0});
-        candidatos.push({x:this.anchoUtil - pieza.ancho, y:0});
-        candidatos.push({x:0, y:this.altoUtil - pieza.alto});
-        candidatos.push({x:this.anchoUtil - pieza.ancho, y:this.altoUtil - pieza.alto});
+        addC(0,0); addC(this.anchoUtil-pieza.ancho,0); addC(0,this.altoUtil-pieza.alto);
+        const candidatos=[...setC].map(s=>{const[x,y]=s.split(',').map(Number);return{x,y};});
         for(const c of candidatos){ if(this.piezaCabe(pieza,c.x,c.y)){ const s=this.calcularPuntuacionEficiencia(pieza,c.x,c.y); if(s>mejorScore){mejorScore=s; mejor={x:c.x,y:c.y};} } }
         if(!mejor){
             const paso=Math.max(5,this.kerf), maxIter=2000; let it=0;
