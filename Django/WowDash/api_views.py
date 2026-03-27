@@ -1023,63 +1023,62 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
         pieza_count_str = ''
 
     # ── Generar ZPL (nativo Zebra — sin PDF, sin ReportLab) ───────────────────
-    # Etiqueta 100 × 150 mm a 300 dpi → 1181 × 1772 dots
+    # Etiqueta 70 × 50 mm a 300 dpi → 827 × 591 dots
     DPI = 300
     def mm2d(v): return int(v * DPI / 25.4)
     def _z(s, mx=28): return str(s)[:mx].replace('^', '').replace('~', '')
 
-    LW = mm2d(100); LH = mm2d(150)
-    M  = mm2d(4)   # margen lateral
+    LW = mm2d(70); LH = mm2d(50)
+    M  = mm2d(2)   # margen lateral
 
-    # ── Header: 2 columnas ~22mm de alto ──────────────────────────────────────
-    HDR_H = mm2d(22)
-    COL1  = int(LW * 0.35)   # separador vertical al 35% del ancho
+    # ── Header: 2 líneas ~10mm ────────────────────────────────────────────────
+    HDR_H = mm2d(10)
 
-    # ── Zona dibujo pieza ──────────────────────────────────────────────────────
-    DA_TOP = HDR_H + mm2d(2)
+    # Nombre pieza + contador
+    nombre_label = _z(nombre + (' ' + pieza_count_str if pieza_count_str else ''), 30)
+
+    # ── Zona dibujo pieza: ~25mm de alto ──────────────────────────────────────
+    DA_TOP = HDR_H + mm2d(1)
     DA_W   = LW - 2 * M
-    DA_H   = mm2d(76)
-    scale  = min(DA_W / max(pw_mm, 1), DA_H / max(ph_mm, 1)) * 0.78
+    DA_H   = mm2d(25)
+    scale  = min(DA_W / max(pw_mm, 1), DA_H / max(ph_mm, 1)) * 0.75
     rw = int(pw_mm * scale); rh = int(ph_mm * scale)
     rx = M + (DA_W - rw) // 2
     ry = DA_TOP + (DA_H - rh) // 2
 
-    # Tapacantos en texto
+    # Tapacantos en texto ASCII (las Zebra no soportan Unicode en fuentes internas)
     tc_parts = []
-    if tc.get('arriba'):    tc_parts.append('↑Arr')
-    if tc.get('derecha'):   tc_parts.append('→Der')
-    if tc.get('abajo'):     tc_parts.append('↓Aba')
-    if tc.get('izquierda'): tc_parts.append('←Izq')
-    tc_str = ' '.join(tc_parts) if tc_parts else 'Sin tapacanto'
+    if tc.get('arriba'):    tc_parts.append('Arr')
+    if tc.get('derecha'):   tc_parts.append('Der')
+    if tc.get('abajo'):     tc_parts.append('Aba')
+    if tc.get('izquierda'): tc_parts.append('Izq')
+    tc_str = ' '.join(tc_parts) if tc_parts else '-'
 
-    veta_str = {'horizontal': 'Horizontal', 'vertical': 'Vertical'}.get(veta, veta)
-
-    # Nombre pieza + contador
-    nombre_label = _z(nombre + (' ' + pieza_count_str if pieza_count_str else ''), 18)
+    veta_str = {'horizontal': 'H', 'vertical': 'V'}.get(veta, '')
 
     zpl_lines = [
         '^XA',
         '^LH0,0',
         f'^PW{LW}',
         f'^LL{LH}',
-        # ── HEADER izquierda: #ID (fila1) + cliente (fila2) ───────────────────
-        f'^FO{M},{M}^CF0,120^FD#{_z(folio_id, 10)}^FS',
-        f'^FO{M},{mm2d(27)}^CF0,76^FD{_z(cliente_n, 14)}^FS',
-        # ── Separador vertical header ─────────────────────────────────────────
-        f'^FO{COL1},{M}^GB3,{HDR_H - mm2d(2)},3^FS',
-        # ── HEADER derecha: nombre pieza (fila1) + material (fila2) ──────────
-        f'^FO{COL1 + mm2d(2)},{M}^CF0,96^FD{nombre_label}^FS',
-        f'^FO{COL1 + mm2d(2)},{mm2d(27)}^CF0,72^FD{_z(material_nombre, 18)}^FS',
-        # ── Línea separadora horizontal ───────────────────────────────────────
-        f'^FO0,{HDR_H}^GB{LW},3,3^FS',
-        # ── Rectángulo proporcional (relleno blanco + borde 6 dots) ──────────
-        f'^FO{rx},{ry}^GB{rw},{rh},6,W^FS',
-        f'^FO{rx},{ry}^GB{rw},{rh},6^FS',
+        '^MNY',         # media type: non-continuous (etiquetas con gap)
+        '^MTT',         # media tracking: transmissive
+        f'^LL{LH}',     # repetir LL despues de MN para que tome efecto
+        '^CI28',        # codificación UTF-8
+        # ── Línea 1: nombre pieza + contador ──────────────────────────────────
+        f'^FO{M},{M}^CF0,32^FD{nombre_label}^FS',
+        # ── Línea 2: material ─────────────────────────────────────────────────
+        f'^FO{M},{mm2d(5.5)}^CF0,24^FD{_z(material_nombre, 28)}^FS',
+        # ── Separador horizontal ──────────────────────────────────────────────
+        f'^FO0,{HDR_H}^GB{LW},2,2^FS',
+        # ── Rectángulo pieza (fondo blanco + borde) ──────────────────────────
+        f'^FO{rx},{ry}^GB{rw},{rh},2,W^FS',
+        f'^FO{rx},{ry}^GB{rw},{rh},2^FS',
     ]
 
-    # Tapacantos: líneas internas
-    TC_OFF = max(5, int(min(rw, rh) * 0.07))
-    BORDER = 5
+    # Tapacantos: marcas internas
+    TC_OFF = max(3, int(min(rw, rh) * 0.07))
+    BORDER = 3
     if tc.get('arriba'):
         zpl_lines.append(f'^FO{rx},{ry + TC_OFF}^GB{rw},{BORDER},{BORDER}^FS')
     if tc.get('abajo'):
@@ -1089,25 +1088,21 @@ def imprimir_etiqueta_pieza_api(request: HttpRequest, proyecto_id: int, pieza_id
     if tc.get('derecha'):
         zpl_lines.append(f'^FO{rx + rw - TC_OFF - BORDER},{ry}^GB{BORDER},{rh},{BORDER}^FS')
 
-    # ── COTA ANCHO: centrada horizontalmente dentro del rect, fila superior ───
-    cota_size = 72
-    cota_ancho_str = f'{pw_mm} mm'
-    cota_ancho_x = rx + max(4, (rw - len(cota_ancho_str) * int(cota_size * 0.6)) // 2)
-    zpl_lines.append(f'^FO{cota_ancho_x},{ry + mm2d(3)}^CF0,{cota_size}^FD{cota_ancho_str}^FS')
-
-    # ── COTA LARGO: centrada verticalmente, columna derecha dentro del rect ───
-    cota_largo_str = f'{ph_mm} mm'
+    # ── Cotas: ancho arriba del rect, largo a la derecha ─────────────────────
+    cota_size = 22
+    zpl_lines.append(f'^FO{rx},{ry - mm2d(4)}^CF0,{cota_size}^FD{pw_mm}mm^FS')
     cota_largo_y = ry + max(4, (rh - cota_size) // 2)
-    cota_largo_x = rx + rw - len(cota_largo_str) * int(cota_size * 0.6) - mm2d(2)
-    zpl_lines.append(f'^FO{cota_largo_x},{cota_largo_y}^CF0,{cota_size}^FD{cota_largo_str}^FS')
+    zpl_lines.append(f'^FO{rx + rw + mm2d(1)},{cota_largo_y}^CF0,{cota_size}^FD{ph_mm}mm^FS')
 
-    # ── Tc: al pie del área de dibujo ─────────────────────────────────────────
-    tc_y = DA_TOP + DA_H + mm2d(2)
-    zpl_lines.append(f'^FO{M},{tc_y}^CF0,76^FDTc: {_z(tc_str, 22)}^FS')
+    # ── Pie: Tc + Veta en una línea ──────────────────────────────────────────
+    PIE_Y = LH - mm2d(5)
+    pie_text = f'Tc:{tc_str}'
     if veta_str:
-        zpl_lines.append(f'^FO{M},{tc_y + mm2d(12)}^CF0,72^FDVeta: {_z(veta_str, 14)}^FS')
+        pie_text += f'  V:{veta_str}'
+    zpl_lines.append(f'^FO{M},{PIE_Y}^CF0,22^FD{_z(pie_text, 30)}^FS')
 
     zpl_lines += [
+        '^JUS',         # guardar configuración (PW, LL) en NVRAM de la impresora
         f'^PQ{copias}',
         '^XZ',
     ]

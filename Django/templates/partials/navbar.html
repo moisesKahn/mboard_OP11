@@ -220,10 +220,10 @@
                 </div><!-- Notification dropdown end -->
 
                 {% if user.is_authenticated %}
-                    {% if user.usuarioperfiloptimizador.rol == 'autoservicio' or user.usuarioperfiloptimizador.rol == 'enchapador' %}
-                    <!-- Modo restringido: Solo mostrar nombre del usuario -->
+                    {% with rol_perfil=user.usuarioperfiloptimizador.rol %}
+                    {% if rol_perfil == 'autoservicio' or rol_perfil == 'enchapador' and not request.session.impersona_original_id %}
+                    <!-- Modo restringido: enchapador/autoservicio sin impersonación activa -->
                     <div class="d-flex align-items-center gap-3">
-                        <!-- Indicador carga batch resumen -->
                         <div id="prm-batch-indicator" class="d-none align-items-center gap-1" style="font-size:12px;">
                           <span id="prm-batch-spinner" class="spinner-border spinner-border-sm text-warning" style="width:14px;height:14px;border-width:2px;" role="status"></span>
                           <span id="prm-batch-text" class="text-warning fw-semibold" style="font-size:11px;">Cargando info…</span>
@@ -233,21 +233,20 @@
                                 <i class="ri-user-line"></i> <span>{{ user.get_full_name|default:user.username }}</span>
                             </div>
                             <div class="text-xs text-secondary-light">
-                                {% if user.usuarioperfiloptimizador.rol == 'enchapador' %}Enchapador{% else %}Autoservicio{% endif %}
+                                {% if rol_perfil == 'enchapador' %}Enchapador{% else %}Autoservicio{% endif %}
                             </div>
                         </div>
                     </div>
                     {% else %}
-                    <!-- Modo Normal: Dropdown de usuario -->
+                    <!-- Dropdown de usuario -->
                     <div class="dropdown d-flex align-items-center gap-2">
-                        <!-- Indicador carga batch resumen -->
                         <div id="prm-batch-indicator" class="d-none align-items-center gap-1">
                           <span id="prm-batch-spinner" class="spinner-border spinner-border-sm text-warning" style="width:14px;height:14px;border-width:2px;" role="status"></span>
                           <span id="prm-batch-text" class="text-warning fw-semibold" style="font-size:11px;white-space:nowrap;">Cargando info…</span>
                         </div>
                         <button class="d-flex justify-content-center align-items-center rounded-circle" type="button" data-bs-toggle="dropdown">
                             <div class="w-40-px h-40-px rounded-circle d-flex align-items-center justify-content-center fw-bold text-white"
-                                 style="background-color:#6c5ce7;">
+                                 style="background-color:{% if request.session.impersona_original_id %}#e17055{% else %}#6c5ce7{% endif %};">
                                 {{ user|user_initials }}
                             </div>
                         </button>
@@ -258,19 +257,22 @@
                                         {{ user.get_full_name|default:user.username }}
                                     </h6>
                                     <span class="text-secondary-light fw-medium text-sm">
-                                        {% if user.usuarioperfiloptimizador.rol == 'super_admin' %}
-                                            Super Administrador
-                                        {% elif user.usuarioperfiloptimizador.rol == 'org_admin' %}
-                                            Admin de Organización
-                                        {% elif user.usuarioperfiloptimizador.rol == 'agente' %}
-                                            Agente
-                                        {% else %}
-                                            Usuario
-                                        {% endif %}
+                                        {% if rol_perfil == 'super_admin' %}Super Administrador
+                                        {% elif rol_perfil == 'org_admin' %}Admin de Organización
+                                        {% elif rol_perfil == 'vendedor' %}Vendedor
+                                        {% elif rol_perfil == 'operador' %}Operador
+                                        {% elif rol_perfil == 'enchapador' %}Enchapador
+                                        {% else %}Usuario{% endif %}
                                         {% if user.usuarioperfiloptimizador.organizacion %}
                                             - {{ user.usuarioperfiloptimizador.organizacion.nombre }}
                                         {% endif %}
                                     </span>
+                                    {% if request.session.impersona_original_id %}
+                                    <span class="badge bg-warning text-dark mt-1 d-block" style="font-size:10px;">
+                                        <iconify-icon icon="lucide:eye" class="me-1"></iconify-icon>
+                                        Actuando como {{ user.get_full_name|default:user.username }}
+                                    </span>
+                                    {% endif %}
                                 </div>
                                 <button type="button" class="hover-text-danger">
                                     <iconify-icon icon="radix-icons:cross-1" class="icon text-xl"></iconify-icon>
@@ -287,6 +289,25 @@
                                         <iconify-icon icon="solar:user-linear" class="icon text-xl"></iconify-icon> Editar Perfil
                                     </a>
                                 </li>
+                                {% if rol_perfil == 'super_admin' %}
+                                <li><hr class="dropdown-divider my-4"></li>
+                                <li>
+                                    <button type="button" onclick="toggleImpDrawer()"
+                                        class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-primary d-flex align-items-center gap-3"
+                                        style="background:none;border:none;width:100%;text-align:left;cursor:pointer;">
+                                        <iconify-icon icon="lucide:users" class="icon text-xl"></iconify-icon> Usuarios de la org.
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider my-4"></li>
+                                {% endif %}
+                                {% if request.session.impersona_original_id %}
+                                <li>
+                                    <a class="dropdown-item text-warning px-0 py-8 hover-bg-transparent hover-text-warning d-flex align-items-center gap-3 fw-semibold"
+                                       href="{% url 'superadmin_restaurar' %}">
+                                        <iconify-icon icon="lucide:shield-check" class="icon text-xl"></iconify-icon> ↩ Volver a mi cuenta
+                                    </a>
+                                </li>
+                                {% endif %}
                                 <li>
                                     <a class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-danger d-flex align-items-center gap-3" href="{% url 'logout' %}">
                                         <iconify-icon icon="lucide:power" class="icon text-xl"></iconify-icon> Cerrar Sesión
@@ -296,6 +317,7 @@
                         </div>
                     </div><!-- Profile dropdown end -->
                     {% endif %}
+                    {% endwith %}
                 {% endif %}
             </div>
         </div>

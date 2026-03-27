@@ -1,0 +1,566 @@
+{% extends '../layout/layout.html' %}
+
+{% block content %}
+<style>
+  .label-preview-wrap {
+    display:flex; justify-content:center; align-items:center;
+    background:#f8f9fa; border:2px dashed #dee2e6; border-radius:12px;
+    padding:32px; min-height:480px;
+  }
+  .label-preview {
+    background:#fff; border:2px solid #222; position:relative; overflow:hidden;
+    font-family:'Courier New',monospace;
+    box-shadow:0 4px 24px rgba(0,0,0,.15);
+    cursor:default;
+  }
+  .lp-drag {
+    position:absolute; cursor:grab; user-select:none;
+    border:1px dashed transparent; border-radius:3px;
+    transition: border-color .15s, background .15s;
+    z-index:10; padding:1px 3px;
+  }
+  .lp-drag:hover { border-color:#4f46e5; background:rgba(79,70,229,.06); }
+  .lp-drag.dragging { border-color:#4f46e5; background:rgba(79,70,229,.1); cursor:grabbing; z-index:20; }
+  .lp-drag .drag-handle {
+    position:absolute; top:-6px; left:-6px;
+    width:14px; height:14px; background:#4f46e5; border-radius:50%;
+    display:none; align-items:center; justify-content:center;
+    font-size:7px; color:#fff; line-height:1; cursor:grab;
+  }
+  .lp-drag:hover .drag-handle, .lp-drag.dragging .drag-handle { display:flex; }
+  .lp-nombre { font-weight:700; white-space:nowrap; }
+  .lp-material { color:#555; white-space:nowrap; }
+  .lp-cliente { color:#888; white-space:nowrap; }
+  .lp-proyid { color:#888; white-space:nowrap; }
+  .lp-rect { border:1.5px solid #333; background:#fafafa; }
+  .lp-tc-mark { position:absolute; background:#333; }
+  .lp-cota { position:absolute; color:#555; white-space:nowrap; }
+  .scale-indicator { font-size:11px; color:#999; text-align:center; margin-top:8px; }
+
+  .cfg-section { padding:14px 20px; border-bottom:1px solid #f0f0f0; }
+  .cfg-section:last-child { border-bottom:none; }
+  .cfg-section h6 { margin-bottom:10px; color:#374151; font-weight:600; font-size:15px; }
+
+  .field-row {
+    display:flex; align-items:center; gap:8px; padding:7px 0;
+    border-bottom:1px solid #f5f5f5;
+  }
+  .field-row:last-child { border-bottom:none; }
+  .field-row .field-name { flex:0 0 120px; font-size:13px; color:#555; margin:0; }
+  .field-row .form-check { flex:0 0 auto; margin:0; }
+  .field-row .font-slider { flex:1; display:flex; align-items:center; gap:6px; min-width:0; }
+  .field-row .font-slider input[type=range] { flex:1; min-width:50px; }
+
+  .range-val {
+    display:inline-block; min-width:30px; text-align:center;
+    font-weight:600; font-size:12px; color:#4f46e5; background:#eef2ff;
+    border-radius:4px; padding:1px 5px;
+  }
+  .cfg-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; }
+  .cfg-row label { font-size:14px; color:#555; margin:0; }
+  input[type="range"] { width:120px; }
+  .form-check-input:checked { background-color:#4f46e5; border-color:#4f46e5; }
+
+  .btn-save-label { background:#4f46e5; color:#fff; border:none; padding:10px 28px; border-radius:8px; font-weight:600; font-size:14px; }
+  .btn-save-label:hover { background:#4338ca; color:#fff; }
+  .btn-test-print { background:#fd7e14; color:#fff; border:none; padding:10px 20px; border-radius:8px; font-weight:600; font-size:14px; }
+  .btn-test-print:hover { background:#e8590c; color:#fff; }
+  .btn-reset-pos { background:#6c757d; color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:500; font-size:13px; }
+  .btn-reset-pos:hover { background:#5a6268; color:#fff; }
+</style>
+
+<div class="row gy-4">
+  <!-- Preview GRANDE -->
+  <div class="col-xl-7 col-lg-6">
+    <div class="card h-100 p-0 radius-12">
+      <div class="card-header py-16 px-24 d-flex align-items-center justify-content-between">
+        <h5 class="card-title mb-0">Previsualización de Etiqueta</h5>
+        <span class="badge bg-info-100 text-info-600" id="labelSizeDisplay">70 × 50 mm</span>
+      </div>
+      <div class="card-body p-24">
+        <div class="label-preview-wrap">
+          <div class="label-preview" id="labelPreview"></div>
+        </div>
+        <div class="scale-indicator" id="scaleIndicator"></div>
+        <div class="d-flex gap-2 mt-16 justify-content-center flex-wrap">
+          <button type="button" class="btn-reset-pos" id="btnResetPos" title="Restaurar posiciones">↻ Resetear posiciones</button>
+          <button type="button" class="btn-test-print" id="btnTestPrint" title="Imprimir prueba">🖨 Imprimir prueba</button>
+        </div>
+        <div class="text-center mt-2" style="font-size:11px;color:#aaa;">💡 Arrastrá los campos dentro de la etiqueta para moverlos</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Config -->
+  <div class="col-xl-5 col-lg-6">
+    <div class="card h-100 p-0 radius-12">
+      <div class="card-header py-16 px-24">
+        <h5 class="card-title mb-0">Diseño de Etiqueta</h5>
+      </div>
+      <div class="card-body p-0">
+        <form id="labelConfigForm">
+          {% csrf_token %}
+
+          <div class="cfg-section">
+            <h6>📐 Tamaño de etiqueta</h6>
+            <div class="cfg-row">
+              <label>Ancho (mm)</label>
+              <div class="d-flex align-items-center gap-2">
+                <input type="range" id="cfgAncho" min="30" max="120" value="{{ config.ancho_mm }}">
+                <span class="range-val" id="valAncho">{{ config.ancho_mm }}</span>
+              </div>
+            </div>
+            <div class="cfg-row">
+              <label>Alto (mm)</label>
+              <div class="d-flex align-items-center gap-2">
+                <input type="range" id="cfgAlto" min="20" max="120" value="{{ config.alto_mm }}">
+                <span class="range-val" id="valAlto">{{ config.alto_mm }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-section">
+            <h6>👁 Campos y tamaño de fuente</h6>
+
+            <div class="field-row">
+              <span class="field-name">Nombre pieza</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input cfg-toggle" type="checkbox" id="cfgNombre" data-font="cfgFNombre" {% if config.mostrar_nombre %}checked{% endif %}>
+              </div>
+              <div class="font-slider" id="sliderFNombre">
+                <input type="range" id="cfgFNombre" min="16" max="80" value="{{ config.fuente_nombre }}">
+                <span class="range-val" id="valFNombre">{{ config.fuente_nombre }}</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-name">Material</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input cfg-toggle" type="checkbox" id="cfgMaterial" data-font="cfgFMaterial" {% if config.mostrar_material %}checked{% endif %}>
+              </div>
+              <div class="font-slider" id="sliderFMaterial">
+                <input type="range" id="cfgFMaterial" min="16" max="64" value="{{ config.fuente_material }}">
+                <span class="range-val" id="valFMaterial">{{ config.fuente_material }}</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-name">Cliente</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input cfg-toggle" type="checkbox" id="cfgCliente" data-font="cfgFCliente" {% if config.mostrar_cliente %}checked{% endif %}>
+              </div>
+              <div class="font-slider" id="sliderFCliente">
+                <input type="range" id="cfgFCliente" min="14" max="48" value="{{ config.fuente_cliente }}">
+                <span class="range-val" id="valFCliente">{{ config.fuente_cliente }}</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-name">ID proyecto</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input cfg-toggle" type="checkbox" id="cfgProyectoId" data-font="cfgFProyId" {% if config.mostrar_proyecto_id %}checked{% endif %}>
+              </div>
+              <div class="font-slider" id="sliderFProyId">
+                <input type="range" id="cfgFProyId" min="14" max="48" value="{{ config.fuente_proyecto_id }}">
+                <span class="range-val" id="valFProyId">{{ config.fuente_proyecto_id }}</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-name">Dibujo pieza</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input cfg-toggle" type="checkbox" id="cfgDibujo" {% if config.mostrar_dibujo %}checked{% endif %}>
+              </div>
+              <div class="font-slider">
+                <span style="font-size:11px;color:#999;">Escala</span>
+                <input type="range" id="cfgEscala" min="30" max="100" value="{{ escala_pct }}">
+                <span class="range-val" id="valEscala">{{ escala_pct }}%</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-name">Grosor borde</span>
+              <div class="form-check form-switch mb-0" style="visibility:hidden;width:40px;"></div>
+              <div class="font-slider">
+                <span style="font-size:11px;color:#999;">Línea</span>
+                <input type="range" id="cfgGrosor" min="1" max="8" value="{{ config.grosor_borde }}">
+                <span class="range-val" id="valGrosor">{{ config.grosor_borde }}</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-name">Cotas</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input cfg-toggle" type="checkbox" id="cfgCotas" data-font="cfgFCotas" {% if config.mostrar_cotas %}checked{% endif %}>
+              </div>
+              <div class="font-slider" id="sliderFCotas">
+                <input type="range" id="cfgFCotas" min="14" max="48" value="{{ config.fuente_cotas }}">
+                <span class="range-val" id="valFCotas">{{ config.fuente_cotas }}</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-name">Tapacantos</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input cfg-toggle" type="checkbox" id="cfgTapacantos" data-font="cfgFPie" {% if config.mostrar_tapacantos %}checked{% endif %}>
+              </div>
+              <div class="font-slider" id="sliderFPie">
+                <input type="range" id="cfgFPie" min="14" max="48" value="{{ config.fuente_pie }}">
+                <span class="range-val" id="valFPie">{{ config.fuente_pie }}</span>
+              </div>
+            </div>
+
+            <div class="field-row">
+              <span class="field-name">Veta</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input cfg-toggle" type="checkbox" id="cfgVeta" {% if config.mostrar_veta %}checked{% endif %}>
+              </div>
+              <div class="font-slider">
+                <span style="font-size:11px;color:#aaa;">(usa fuente Tc)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-section d-flex justify-content-end gap-2">
+            <button type="submit" class="btn-save-label">💾 Guardar configuración</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+$(document).ready(function(){
+
+  var savedPos = {{ posiciones_json|safe }};
+  if(!savedPos || typeof savedPos !== 'object') savedPos = {};
+
+  var DEFAULT_POS = {
+    proyid:   { x:3, y:2 },
+    nombre:   { x:3, y:14 },
+    material: { x:3, y:30 },
+    cliente:  { x:3, y:44 },
+    dibujo:   { x:10, y:48 },
+    pie:      { x:3, y:88 }
+  };
+
+  function getPositions(){
+    var p = {};
+    for(var k in DEFAULT_POS){
+      p[k] = savedPos[k] || { x:DEFAULT_POS[k].x, y:DEFAULT_POS[k].y };
+    }
+    return p;
+  }
+
+  function getConfig(){
+    return {
+      ancho_mm:          +document.getElementById('cfgAncho').value,
+      alto_mm:           +document.getElementById('cfgAlto').value,
+      mostrar_nombre:    document.getElementById('cfgNombre').checked,
+      mostrar_material:  document.getElementById('cfgMaterial').checked,
+      mostrar_cliente:   document.getElementById('cfgCliente').checked,
+      mostrar_proyecto_id: document.getElementById('cfgProyectoId').checked,
+      mostrar_dibujo:    document.getElementById('cfgDibujo').checked,
+      mostrar_cotas:     document.getElementById('cfgCotas').checked,
+      mostrar_tapacantos:document.getElementById('cfgTapacantos').checked,
+      mostrar_veta:      document.getElementById('cfgVeta').checked,
+      fuente_nombre:     +document.getElementById('cfgFNombre').value,
+      fuente_material:   +document.getElementById('cfgFMaterial').value,
+      fuente_cotas:      +document.getElementById('cfgFCotas').value,
+      fuente_pie:        +document.getElementById('cfgFPie').value,
+      fuente_cliente:    +document.getElementById('cfgFCliente').value,
+      fuente_proyecto_id:+document.getElementById('cfgFProyId').value,
+      escala_dibujo:     +document.getElementById('cfgEscala').value / 100,
+      grosor_borde:      +document.getElementById('cfgGrosor').value,
+    };
+  }
+
+  // ═══ Preview ═══
+  function renderPreview(){
+    var c = getConfig();
+    var el = document.getElementById('labelPreview');
+    if(!el) return;
+
+    var wrap = el.parentElement;
+    var wrapW = wrap.offsetWidth - 64;
+    var maxPx = Math.max(500, Math.min(wrapW, 800));
+    var scale = Math.min(maxPx / c.ancho_mm, (maxPx * 0.9) / c.alto_mm);
+
+    var W = Math.round(c.ancho_mm * scale);
+    var H = Math.round(c.alto_mm * scale);
+
+    el.style.width  = W + 'px';
+    el.style.height = H + 'px';
+
+    function d2px(d){ return Math.max(9, Math.round((d / 300 * 25.4) * scale)); }
+    function pxX(pct){ return Math.round(pct / 100 * W); }
+    function pxY(pct){ return Math.round(pct / 100 * H); }
+
+    var pos = getPositions();
+    var html = '';
+
+    // ID Proyecto
+    if(c.mostrar_proyecto_id){
+      var fp = d2px(+(document.getElementById('cfgFProyId').value));
+      var p = pos.proyid;
+      html += '<div class="lp-drag lp-proyid" data-field="proyid" style="left:'+pxX(p.x)+'px;top:'+pxY(p.y)+'px;font-size:'+fp+'px;color:#888;">'
+            + '<span class="drag-handle">✥</span>#PRJ-2026032314</div>';
+    }
+
+    // Nombre
+    if(c.mostrar_nombre){
+      var fn = d2px(c.fuente_nombre);
+      var p = pos.nombre;
+      html += '<div class="lp-drag lp-nombre" data-field="nombre" style="left:'+pxX(p.x)+'px;top:'+pxY(p.y)+'px;font-size:'+fn+'px;">'
+            + '<span class="drag-handle">✥</span>Puerta Sup (3/8)</div>';
+    }
+
+    // Material
+    if(c.mostrar_material){
+      var fm = d2px(c.fuente_material);
+      var p = pos.material;
+      html += '<div class="lp-drag lp-material" data-field="material" style="left:'+pxX(p.x)+'px;top:'+pxY(p.y)+'px;font-size:'+fm+'px;">'
+            + '<span class="drag-handle">✥</span>Melamina Blanco</div>';
+    }
+
+    // Cliente
+    if(c.mostrar_cliente){
+      var fc = d2px(+(document.getElementById('cfgFCliente').value));
+      var p = pos.cliente;
+      html += '<div class="lp-drag lp-cliente" data-field="cliente" style="left:'+pxX(p.x)+'px;top:'+pxY(p.y)+'px;font-size:'+fc+'px;">'
+            + '<span class="drag-handle">✥</span>Cliente: Demo S.A.</div>';
+    }
+
+    // Dibujo
+    if(c.mostrar_dibujo){
+      var pd = pos.dibujo;
+      var drawW = W * 0.65;
+      var drawH = H * 0.38;
+      var pw=600, ph=400;
+      var sc2 = Math.min(drawW/pw, drawH/ph) * c.escala_dibujo;
+      var rw = Math.round(pw*sc2), rh = Math.round(ph*sc2);
+      var dx = pxX(pd.x), dy = pxY(pd.y);
+
+      var grosor = c.grosor_borde || 2;
+      html += '<div class="lp-drag" data-field="dibujo" style="left:'+dx+'px;top:'+dy+'px;width:'+(rw+8)+'px;height:'+(rh+8)+'px;padding:0;">'
+            + '<span class="drag-handle">✥</span>'
+            + '<div class="lp-rect" style="position:relative;width:'+rw+'px;height:'+rh+'px;top:4px;left:4px;border-width:'+Math.max(1,Math.round(grosor*0.7))+'px;"></div>';
+
+      if(c.mostrar_tapacantos){
+        var off = Math.max(2, Math.round(Math.min(rw,rh)*0.07));
+        html += '<div class="lp-tc-mark" style="position:absolute;top:'+(4+off)+'px;left:4px;width:'+rw+'px;height:2px;"></div>';
+        html += '<div class="lp-tc-mark" style="position:absolute;top:4px;left:'+(4+rw-off-2)+'px;width:2px;height:'+rh+'px;"></div>';
+      }
+
+      if(c.mostrar_cotas){
+        var cfz = d2px(c.fuente_cotas);
+        html += '<div class="lp-cota" style="position:absolute;top:'+(4-cfz-2)+'px;left:4px;font-size:'+cfz+'px;">600mm</div>';
+        html += '<div class="lp-cota" style="position:absolute;top:'+(4+Math.round(rh/2)-Math.round(cfz/2))+'px;left:'+(rw+8)+'px;font-size:'+cfz+'px;">400mm</div>';
+      }
+      html += '</div>';
+    }
+
+    // Pie (Tc + Veta)
+    if(c.mostrar_tapacantos || c.mostrar_veta){
+      var fpie = d2px(c.fuente_pie);
+      var ppie = pos.pie;
+      var pieText = '';
+      if(c.mostrar_tapacantos) pieText += 'Tc:Arr Der';
+      if(c.mostrar_veta) pieText += (pieText?'  ':'') + 'V:V';
+      html += '<div class="lp-drag" data-field="pie" style="left:'+pxX(ppie.x)+'px;top:'+pxY(ppie.y)+'px;font-size:'+fpie+'px;color:#444;">'
+            + '<span class="drag-handle">✥</span>'+pieText+'</div>';
+    }
+
+    el.innerHTML = html;
+
+    // Attach drag
+    var drags = el.querySelectorAll('.lp-drag');
+    for(var i=0; i<drags.length; i++) attachDrag(drags[i], el, W, H);
+
+    document.getElementById('labelSizeDisplay').textContent = c.ancho_mm + ' \u00d7 ' + c.alto_mm + ' mm';
+    document.getElementById('scaleIndicator').textContent = 'Escala: ' + scale.toFixed(1) + 'x  \u2014  Arrastr\u00e1 los campos para moverlos';
+  }
+
+  // ═══ Drag ═══
+  function attachDrag(dragEl, container, cW, cH){
+    var startX, startY, origLeft, origTop;
+
+    dragEl.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      dragEl.classList.add('dragging');
+      startX = e.clientX; startY = e.clientY;
+      origLeft = dragEl.offsetLeft; origTop = dragEl.offsetTop;
+
+      function onMove(e2){
+        var nl = Math.max(0, Math.min(cW - 20, origLeft + e2.clientX - startX));
+        var nt = Math.max(0, Math.min(cH - 10, origTop + e2.clientY - startY));
+        dragEl.style.left = nl + 'px';
+        dragEl.style.top  = nt + 'px';
+      }
+      function onUp(){
+        dragEl.classList.remove('dragging');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        var field = dragEl.getAttribute('data-field');
+        if(field){
+          savedPos[field] = {
+            x: Math.round(dragEl.offsetLeft / cW * 1000) / 10,
+            y: Math.round(dragEl.offsetTop / cH * 1000) / 10
+          };
+        }
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    dragEl.addEventListener('touchstart', function(e){
+      var t0 = e.touches[0];
+      dragEl.classList.add('dragging');
+      startX = t0.clientX; startY = t0.clientY;
+      origLeft = dragEl.offsetLeft; origTop = dragEl.offsetTop;
+
+      function onTM(e2){
+        e2.preventDefault();
+        var t = e2.touches[0];
+        var nl = Math.max(0, Math.min(cW - 20, origLeft + t.clientX - startX));
+        var nt = Math.max(0, Math.min(cH - 10, origTop + t.clientY - startY));
+        dragEl.style.left = nl + 'px';
+        dragEl.style.top  = nt + 'px';
+      }
+      function onTE(){
+        dragEl.classList.remove('dragging');
+        document.removeEventListener('touchmove', onTM);
+        document.removeEventListener('touchend', onTE);
+        var field = dragEl.getAttribute('data-field');
+        if(field){
+          savedPos[field] = {
+            x: Math.round(dragEl.offsetLeft / cW * 1000) / 10,
+            y: Math.round(dragEl.offsetTop / cH * 1000) / 10
+          };
+        }
+      }
+      document.addEventListener('touchmove', onTM, {passive:false});
+      document.addEventListener('touchend', onTE);
+    }, {passive:false});
+  }
+
+  // ═══ Toggle slider visibility ═══
+  function updateSliders(){
+    var toggles = document.querySelectorAll('.cfg-toggle');
+    for(var i=0; i<toggles.length; i++){
+      var fid = toggles[i].getAttribute('data-font');
+      if(fid){
+        var sl = document.getElementById(fid);
+        if(sl){
+          var w = sl.closest('.font-slider');
+          if(w) w.style.opacity = toggles[i].checked ? '1' : '0.3';
+        }
+      }
+    }
+  }
+
+  // ═══ Bind ═══
+  var allIn = document.querySelectorAll('#labelConfigForm input[type=range], #labelConfigForm input[type=checkbox]');
+  for(var i=0; i<allIn.length; i++){
+    allIn[i].addEventListener('input', onAny);
+    allIn[i].addEventListener('change', onAny);
+  }
+
+  function onAny(){
+    var pairs = [
+      ['cfgAncho','valAncho',''],['cfgAlto','valAlto',''],
+      ['cfgFNombre','valFNombre',''],['cfgFMaterial','valFMaterial',''],
+      ['cfgFCliente','valFCliente',''],['cfgFProyId','valFProyId',''],
+      ['cfgFCotas','valFCotas',''],['cfgFPie','valFPie',''],
+      ['cfgEscala','valEscala','%'],['cfgGrosor','valGrosor','']
+    ];
+    for(var i=0;i<pairs.length;i++){
+      var inp = document.getElementById(pairs[i][0]);
+      var lbl = document.getElementById(pairs[i][1]);
+      if(inp && lbl) lbl.textContent = inp.value + pairs[i][2];
+    }
+    updateSliders();
+    renderPreview();
+  }
+
+  // ═══ Reset ═══
+  document.getElementById('btnResetPos').addEventListener('click', function(){
+    savedPos = {};
+    renderPreview();
+  });
+
+  // ═══ Save ═══
+  document.getElementById('labelConfigForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var c = getConfig();
+    c.posiciones = savedPos;
+    fetch('{% url "api_label_config_save" %}', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
+      credentials:'same-origin',
+      body: JSON.stringify(c)
+    }).then(function(r){
+      if(r.ok){
+        var t=document.createElement('div');
+        t.className='position-fixed top-0 end-0 p-3'; t.style.zIndex='9999';
+        t.innerHTML='<div class="toast show bg-success text-white"><div class="toast-body fw-semibold">\u2705 Configuraci\u00f3n guardada</div></div>';
+        document.body.appendChild(t);
+        setTimeout(function(){ t.remove(); }, 2500);
+      } else { alert('Error al guardar'); }
+    }).catch(function(){ alert('Error al guardar'); });
+  });
+
+  // ═══ Test print ═══
+  var ZBP = 'http://localhost:9100';
+  document.getElementById('btnTestPrint').addEventListener('click', function(){
+    var c = getConfig();
+    c.posiciones = savedPos;
+    var DPI=300;
+    function mm2d(v){ return Math.round(v*DPI/25.4); }
+
+    fetch(ZBP+'/available')
+    .then(function(r){ return r.json(); })
+    .then(function(av){
+      var ps = av.printer || [];
+      var dev = null;
+      for(var i=0;i<ps.length;i++){ if(ps[i].connection==='usb'){ dev=ps[i]; break; } }
+      if(!dev){ for(var i=0;i<ps.length;i++){ if(ps[i].connection==='driver'){ dev=ps[i]; break; } } }
+      if(!dev && ps.length>0) dev=ps[0];
+      if(!dev){ alert('No se encontr\u00f3 impresora Zebra.'); return; }
+
+      return fetch('{% url "api_label_test_zpl" %}', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
+        credentials:'same-origin',
+        body: JSON.stringify(c)
+      })
+      .then(function(r){ return r.text(); })
+      .then(function(zpl){
+        console.log('[label] ZPL:', zpl);
+        var cal='^XA^LH0,0^PW'+mm2d(c.ancho_mm)+'^LL'+mm2d(c.alto_mm)+'^MNY^MTT^LL'+mm2d(c.alto_mm)+'^JUS^XZ';
+        return fetch(ZBP+'/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device:dev,data:cal})})
+        .then(function(){ return new Promise(function(r){ setTimeout(r,500); }); })
+        .then(function(){
+          return fetch(ZBP+'/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device:dev,data:zpl})});
+        })
+        .then(function(){
+          var t=document.createElement('div');
+          t.className='position-fixed top-0 end-0 p-3'; t.style.zIndex='9999';
+          t.innerHTML='<div class="toast show bg-info text-white"><div class="toast-body fw-semibold">\ud83d\udda8 Etiqueta enviada</div></div>';
+          document.body.appendChild(t);
+          setTimeout(function(){ t.remove(); }, 2500);
+        });
+      });
+    })
+    .catch(function(e){ alert('Zebra Browser Print no disponible: '+e.message); });
+  });
+
+  // Init
+  updateSliders();
+  renderPreview();
+});
+</script>
+{% endblock %}

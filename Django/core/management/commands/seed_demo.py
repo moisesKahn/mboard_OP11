@@ -97,7 +97,7 @@ class Command(BaseCommand):
                     first_name=f"Agente{a}",
                     last_name=f"Org{idx}",
                     email=f"agente{a}.{idx}@demo.local",
-                    rol='agente'
+                    rol='vendedor'
                 )
 
             # Operarios (3)

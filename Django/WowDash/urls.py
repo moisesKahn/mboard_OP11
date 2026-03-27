@@ -46,6 +46,7 @@ from WowDash import operator_views
 from WowDash import api_views
 from WowDash import autoservicio_views
 from WowDash import enchapador_views
+from WowDash import superadmin_views
 
 urlpatterns = [
     # API (mínima)
@@ -162,6 +163,11 @@ urlpatterns = [
     path('enchapador/', enchapador_views.enchapador_home, name='enchapador_home'),
     path('enchapador/historial/', enchapador_views.enchapador_historial, name='enchapador_historial'),
     path('enchapador/proyecto/<int:proyecto_id>/', enchapador_views.enchapador_proyecto, name='enchapador_proyecto'),
+
+# super admin – impersonación de usuarios
+    path('superadmin/usuarios/', superadmin_views.usuarios_impersonables, name='superadmin_usuarios'),
+    path('superadmin/impersonar/<int:user_id>/', superadmin_views.impersonar, name='superadmin_impersonar'),
+    path('superadmin/restaurar/', superadmin_views.restaurar_impersonacion, name='superadmin_restaurar'),
 
 # chat routes (real functionality)
     path('chat/', chat_views.chat_lista, name='chat'),
@@ -330,6 +336,10 @@ urlpatterns = [
     path('settings/notification-alert', settings_views.notificationAlert, name='notificationAlert'),
     path('settings/payment-getway', settings_views.paymentGetway, name='paymentGetway'),
     path('settings/theme', settings_views.theme, name='theme'),
+    path('settings/etiqueta', settings_views.etiqueta_config, name='etiqueta_config'),
+    path('api/label-config/', settings_views.api_label_config_get, name='api_label_config_get'),
+    path('api/label-config/save/', settings_views.api_label_config_save, name='api_label_config_save'),
+    path('api/label-config/test-zpl/', settings_views.api_label_test_zpl, name='api_label_test_zpl'),
 
 # tables routes
 

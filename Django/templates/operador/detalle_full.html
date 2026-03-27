@@ -8,7 +8,7 @@
     html, body { height: 100%; }
     body { overflow: hidden; }
     .op-wrapper { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 360px; grid-template-rows: auto 1fr; grid-template-areas: 'toolbar toolbar' 'canvas sidebar'; }
-    .op-toolbar { grid-area: toolbar; display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #fff; border-bottom: 1px solid #eee; flex-wrap: nowrap; min-width: 0; }
+    .op-toolbar { grid-area: toolbar; display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #fff; border-bottom: 1px solid #eee; flex-wrap: nowrap; min-width: 0; overflow-x: auto; }
     .op-canvas { grid-area: canvas; position: relative; background: #fafafa; overflow: hidden; min-width: 0; }
   .op-sidebar { grid-area: sidebar; display: flex; flex-direction: column; border-left: 1px solid #eee; background: #fff; min-height: 0; overflow: hidden; }
   .op-stats { padding: 10px 12px; border-bottom: 1px solid #eee; }
@@ -156,6 +156,7 @@
       <span id="autoLabelIcon">🏷️</span>
       <span id="autoLabelTxt">Etiqueta: OFF</span>
     </button>
+    <button id="btnTestLabel" class="op-btn" type="button" title="Imprimir etiqueta de prueba (70×50mm)" style="white-space:nowrap;background:#fd7e14;color:#fff;border-color:#fd7e14;font-weight:600;">🖨 Test</button>
     <div class="vr mx-1"></div>
     <button id="btnPausar" class="op-btn text-nowrap" type="button" title="Pausar proyecto">⏸ Pausar</button>
     <button id="btnContinuar" class="op-btn text-nowrap" type="button" title="Continuar proyecto pausado" style="display:none;">▶ Continuar</button>
@@ -705,13 +706,10 @@
       }
 
       // ── Auto-etiqueta (Zebra Browser Print) ───────────────────────────────────────
-      // Requiere Zebra Browser Print instalado en el PC del usuario.
-      // Descarga: https://www.zebra.com/us/en/support-downloads/printer-software/by-request-software.html
       const LABEL_STORAGE_KEY = `op_autoLabel_${proyectoId}`;
       let autoLabelActive = localStorage.getItem(LABEL_STORAGE_KEY) === '1';
-      const ZBP_URL = 'http://localhost:9100'; // Zebra Browser Print escucha aquí
+      const ZBP_URL = 'http://localhost:9100';
 
-      // Cache del device ZBP: se resuelve una sola vez y se reutiliza en impresiones posteriores
       let _zbpDevicePromise = null;
       function _getZbpDevice(){
         if(!_zbpDevicePromise){
@@ -741,85 +739,112 @@
         }
       }
       _updateAutoLabelBtn();
-      // Precalentar: resolver el device ZBP en background al cargar la página
-      // para que la primera impresión no tenga latencia adicional
       _getZbpDevice();
+
+      // ── Cargar configuración de etiqueta del servidor ──
+      let _labelCfg = null;
+      fetch('/api/label-config/', {credentials:'same-origin'})
+        .then(r=>r.json()).then(c=>{ _labelCfg = c; console.log('[label-cfg]', c); })
+        .catch(()=>{ _labelCfg = null; });
+
       document.getElementById('btnAutoLabel')?.addEventListener('click', ()=>{
         autoLabelActive = !autoLabelActive;
         localStorage.setItem(LABEL_STORAGE_KEY, autoLabelActive ? '1' : '0');
         _updateAutoLabelBtn();
+        if(autoLabelActive){
+          const cfg = _labelCfg || {ancho_mm:70,alto_mm:50};
+          const mm2d = v => Math.round(v * 300 / 25.4);
+          const calibZPL = `^XA^LH0,0^PW${mm2d(cfg.ancho_mm)}^LL${mm2d(cfg.alto_mm)}^MNY^MTT^LL${mm2d(cfg.alto_mm)}^JUS^XZ`;
+          _getZbpDevice().then(dev => {
+            if(dev) fetch(`${ZBP_URL}/write`, {method:'POST', body: JSON.stringify({device:dev, data:calibZPL})});
+          });
+        }
       });
 
       /**
-       * Genera ZPL localmente (sin fetch al servidor) con los datos que ya están en memoria.
-       * Replica exactamente la lógica de imprimir_etiqueta_pieza_api en Python.
+       * Genera ZPL usando la configuración dinámica cargada del servidor.
        */
       function _generarZPL(p){
         const DPI = 300;
         const mm2d = v => Math.round(v * DPI / 25.4);
         const _z = (s, mx) => String(s||'').slice(0, mx).replace(/\^/g,'').replace(/~/g,'');
+        const cfg = _labelCfg || {};
 
-        const LW = mm2d(100), LH = mm2d(150), M = mm2d(5);
+        const LW = mm2d(cfg.ancho_mm||70), LH = mm2d(cfg.alto_mm||50);
+        const fNombre=cfg.fuente_nombre||32, fMat=cfg.fuente_material||24, fCotas=cfg.fuente_cotas||22, fPie=cfg.fuente_pie||22;
+        const fCliente=cfg.fuente_cliente||20, fProyId=cfg.fuente_proyecto_id||20, grosor=cfg.grosor_borde||2;
+        const escDibujo=cfg.escala_dibujo||0.75;
+        const pos = cfg.posiciones || {};
+        function posX(f,d){ return Math.round((pos[f]?pos[f].x:d)/100*LW); }
+        function posY(f,d){ return Math.round((pos[f]?pos[f].y:d)/100*LH); }
+
         const pw_mm = parseInt(p.ancho)||0, ph_mm = parseInt(p.largo)||0;
         const nombre = p.nombre || p.pieza_id || '';
         const tc = p.tapacantos || {};
         const veta = p.veta || '';
-
-        // Material del tablero actual
-        const matNombre = _z((materiales[matIdx]||{}).nombre || meta.material || '—', 22);
-
-        // Rectángulo proporcional
-        const DA_W = LW - 2*M, DA_H = mm2d(70), DA_TOP = mm2d(16);
-        const scale = Math.min(DA_W / Math.max(pw_mm,1), DA_H / Math.max(ph_mm,1)) * 0.85;
-        const rw = Math.round(pw_mm * scale), rh = Math.round(ph_mm * scale);
-        const rx = Math.round((LW - rw) / 2), ry = DA_TOP;
+        const pIdx = p.pieza_idx || '', pCount = p.pieza_count || '';
+        const countStr = pCount ? ` (${pIdx}/${pCount})` : '';
+        const matNombre = _z((materiales[matIdx]||{}).nombre || meta.material || '—', 28);
 
         const tcParts = [];
-        if(tc.arriba)    tcParts.push('Arr');
-        if(tc.derecha)   tcParts.push('Der');
-        if(tc.abajo)     tcParts.push('Aba');
-        if(tc.izquierda) tcParts.push('Izq');
-        const tc_str = tcParts.length ? tcParts.join(' | ') : 'Sin tapacanto';
-        const veta_str = veta === 'horizontal' ? 'Horizontal' : veta === 'vertical' ? 'Vertical' : veta;
+        if(tc.arriba) tcParts.push('Arr'); if(tc.derecha) tcParts.push('Der');
+        if(tc.abajo) tcParts.push('Aba');  if(tc.izquierda) tcParts.push('Izq');
+        const tc_str2 = tcParts.join(' ')||'-';
+        const veta_str = veta==='horizontal'?'H':veta==='vertical'?'V':'';
 
-        const lines = [
-          '^XA', '^LH0,0', `^PW${LW}`, `^LL${LH}`,
-          `^FO${M},${M}^CF0,45^FD${_z(nombre,22)}^FS`,
-          `^FO${M},${mm2d(14)}^GB${LW-2*M},2,2^FS`,
-          `^FO${rx},${ry}^GB${rw},${rh},3,W^FS`,
-          `^FO${rx},${ry}^GB${rw},${rh},3^FS`,
-        ];
+        const lines = ['^XA','^LH0,0',`^PW${LW}`,`^LL${LH}`,'^MNY','^MTT',`^LL${LH}`,'^CI28'];
 
-        const TC_OFF = Math.max(4, Math.round(Math.min(rw,rh)*0.06));
-        if(tc.arriba)    lines.push(`^FO${rx},${ry+TC_OFF}^GB${rw},4,4^FS`);
-        if(tc.abajo)     lines.push(`^FO${rx},${ry+rh-TC_OFF-4}^GB${rw},4,4^FS`);
-        if(tc.izquierda) lines.push(`^FO${rx+TC_OFF},${ry}^GB4,${rh},4^FS`);
-        if(tc.derecha)   lines.push(`^FO${rx+rw-TC_OFF-4},${ry}^GB4,${rh},4^FS`);
+        if(cfg.mostrar_proyecto_id){
+          lines.push(`^FO${posX('proyid',3)},${posY('proyid',2)}^CF0,${fProyId}^FD#${_z(meta.public_id||'',20)}^FS`);
+        }
+        if(cfg.mostrar_nombre !== false){
+          lines.push(`^FO${posX('nombre',3)},${posY('nombre',14)}^CF0,${fNombre}^FD${_z(nombre+countStr,30)}^FS`);
+        }
+        if(cfg.mostrar_material !== false){
+          lines.push(`^FO${posX('material',3)},${posY('material',30)}^CF0,${fMat}^FD${_z(matNombre,30)}^FS`);
+        }
+        if(cfg.mostrar_cliente){
+          lines.push(`^FO${posX('cliente',3)},${posY('cliente',44)}^CF0,${fCliente}^FD${_z('Cli: '+(meta.cliente||''),28)}^FS`);
+        }
 
-        const fn_size = Math.max(25, Math.round(Math.min(rw,rh)/3));
-        const nx = rx + Math.round((rw - _z(nombre,12).length * fn_size/2)/2);
-        const ny = ry + Math.round(rh/2 - fn_size/2);
-        lines.push(`^FO${nx},${ny}^CF0,${fn_size}^FD${_z(nombre,12)}^FS`);
+        const showTc = cfg.mostrar_tapacantos !== false;
+        const showVeta = cfg.mostrar_veta !== false;
 
-        const cota_y = ry - mm2d(7);
-        lines.push(`^FO${rx},${cota_y}^CF0,28^FD${pw_mm} mm^FS`);
-        const cota_x = rx + rw + mm2d(2);
-        lines.push(`^FO${cota_x},${ry+Math.round(rh/2)-14}^CF0,28^FD${ph_mm} mm^FS`);
+        if(cfg.mostrar_dibujo !== false){
+          const dx = posX('dibujo',10), dy = posY('dibujo',48);
+          const daW = LW - dx - mm2d(2);
+          const pieH = (showTc||showVeta) ? fPie+mm2d(3) : mm2d(2);
+          const daH = LH - dy - pieH;
+          const sc = Math.min(daW/Math.max(pw_mm,1), daH/Math.max(ph_mm,1)) * escDibujo;
+          const rw = Math.round(pw_mm*sc), rh = Math.round(ph_mm*sc);
+          const rx = dx, ry = dy;
 
-        const INFO_Y = ry + rh + mm2d(12), ROW_H = mm2d(7);
-        lines.push(
-          `^FO${M},${INFO_Y}^CF0,30^FDAncho: ${pw_mm} mm^FS`,
-          `^FO${M},${INFO_Y+ROW_H}^CF0,30^FDLargo: ${ph_mm} mm^FS`,
-          `^FO${M},${INFO_Y+2*ROW_H}^CF0,28^FDTapacanto: ${_z(tc_str,26)}^FS`,
-        );
-        if(veta_str) lines.push(`^FO${M},${INFO_Y+3*ROW_H}^CF0,28^FDVeta: ${_z(veta_str,18)}^FS`);
+          lines.push(`^FO${rx},${ry}^GB${rw},${rh},${grosor},W^FS`);
+          lines.push(`^FO${rx},${ry}^GB${rw},${rh},${grosor}^FS`);
 
-        const box_y = LH - mm2d(16);
-        lines.push(
-          `^FO${M},${box_y}^GB${LW-2*M},${mm2d(13)},2,W^FS`,
-          `^FO${M+6},${box_y+mm2d(2)}^CF0,32^FDMaterial: ${matNombre}^FS`,
-          '^PQ1', '^XZ',
-        );
+          if(showTc){
+            const tcOff = Math.max(3, Math.round(Math.min(rw,rh)*0.07));
+            const tcT = Math.max(2, grosor + 1);
+            if(tc.arriba)    lines.push(`^FO${rx},${ry+tcOff}^GB${rw},${tcT},${tcT}^FS`);
+            if(tc.abajo)     lines.push(`^FO${rx},${ry+rh-tcOff-tcT}^GB${rw},${tcT},${tcT}^FS`);
+            if(tc.izquierda) lines.push(`^FO${rx+tcOff},${ry}^GB${tcT},${rh},${tcT}^FS`);
+            if(tc.derecha)   lines.push(`^FO${rx+rw-tcOff-tcT},${ry}^GB${tcT},${rh},${tcT}^FS`);
+          }
+
+          if(cfg.mostrar_cotas !== false){
+            lines.push(`^FO${rx},${Math.max(0,ry-mm2d(4))}^CF0,${fCotas}^FD${pw_mm}mm^FS`);
+            lines.push(`^FO${rx+rw+mm2d(1)},${ry+Math.round(rh/2)-Math.round(fCotas/2)}^CF0,${fCotas}^FD${ph_mm}mm^FS`);
+          }
+        }
+
+        if(showTc || showVeta){
+          let pie = '';
+          if(showTc) pie += 'Tc:'+tc_str2;
+          if(showVeta && veta_str) pie += (pie?'  ':'')+'V:'+veta_str;
+          lines.push(`^FO${posX('pie',3)},${posY('pie',88)}^CF0,${fPie}^FD${_z(pie,30)}^FS`);
+        }
+
+        lines.push('^JUS','^PQ1','^XZ');
         return lines.join('\n');
       }
 
@@ -849,6 +874,37 @@
         if(!autoLabelActive) return;
         imprimirEtiquetaPieza(p);
       }
+
+      /** Imprime una etiqueta de prueba con datos ficticios */
+      document.getElementById('btnTestLabel')?.addEventListener('click', async () => {
+        const pTest = {
+          nombre: 'Puerta Test',
+          pieza_id: 'test-01',
+          ancho: 600,
+          largo: 900,
+          pieza_idx: 1,
+          pieza_count: 4,
+          tapacantos: { arriba: true, derecha: true, abajo: false, izquierda: false },
+          veta: 'vertical',
+        };
+        try {
+          const device = await _getZbpDevice();
+          if (!device) {
+            alert('No se encontró impresora Zebra en ZBP (localhost:9100).');
+            return;
+          }
+          const cfg = _labelCfg || {ancho_mm:70,alto_mm:50};
+          const mm2d = v => Math.round(v * 300 / 25.4);
+          const calibZPL = `^XA^LH0,0^PW${mm2d(cfg.ancho_mm)}^LL${mm2d(cfg.alto_mm)}^MNY^MTT^LL${mm2d(cfg.alto_mm)}^JUS^XZ`;
+          await fetch(`${ZBP_URL}/write`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({device, data:calibZPL})});
+          await new Promise(r => setTimeout(r, 400));
+          const zpl = _generarZPL(pTest);
+          console.log('[test-label] ZPL:\n', zpl);
+          await fetch(`${ZBP_URL}/write`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({device, data:zpl})});
+        } catch(err) {
+          alert('ZBP no disponible: ' + err.message);
+        }
+      });
       // ── Fin auto-etiqueta ────────────────────────────────────────────────────────────────────
 
       // Dibuja líneas de tapacanto en los bordes indicados

@@ -13,7 +13,8 @@
     </div>
     <div class="sidebar-menu-area">
         <ul class="sidebar-menu" id="sidebar-menu">
-            {% with rol=user.usuarioperfiloptimizador.rol %}
+            {# rol_activo: si el super_admin activó un rol en sesión, usarlo; sino, el rol real del perfil #}
+            {% with rol=request.session.superadmin_rol_activo|default:user.usuarioperfiloptimizador.rol %}
             {% if rol == 'operador' %}
               <!-- Menú exclusivo para Operador: solo sus proyectos, historial y salir -->
               <li>
@@ -96,7 +97,7 @@
                       <span>Optimizador</span>
                   </a>
               </li>
-              {% if user.is_superuser or user.usuarioperfiloptimizador.rol == 'super_admin' or user.usuarioperfiloptimizador.rol == 'org_admin' %}
+              {% if user.is_superuser or rol == 'super_admin' or rol == 'org_admin' %}
               <li>
                   <a href="{% url 'configurador_3d' %}">
                       <iconify-icon icon="mdi:cube-outline" class="menu-icon"></iconify-icon>
@@ -138,6 +139,12 @@
                       <li><a href="{% url 'tapacantos' %}"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Tapacantos</a></li>
                   </ul>
               </li>
+              <li>
+                  <a href="{% url 'etiqueta_config' %}">
+                      <iconify-icon icon="mdi:label-outline" class="menu-icon"></iconify-icon>
+                      <span>Diseño Etiqueta</span>
+                  </a>
+              </li>
               <li class="sidebar-logout-item">
                   <a href="{% url 'logout' %}">
                       <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
@@ -149,6 +156,233 @@
         </ul>
     </div>
 </aside>
+
+<!-- DRAWER DE IMPERSONACIÓN — solo para super_admin. Se activa con el botón flotante en el borde del sidebar -->
+{% if user.is_authenticated and user.usuarioperfiloptimizador.rol == 'super_admin' %}
+
+{# Tab de apertura — siempre visible en el borde derecho del sidebar #}
+<button id="impDrawerTab" title="Usuarios de la organización"
+        onclick="toggleImpDrawer()"
+        style="
+          position:fixed; left:260px; top:50%; transform:translateY(-50%);
+          z-index:1100; width:22px; height:64px;
+          background:#6c5ce7; color:#fff; border:none; border-radius:0 8px 8px 0;
+          cursor:pointer; display:flex; align-items:center; justify-content:center;
+          box-shadow:2px 0 8px rgba(0,0,0,.18); transition:left .3s;
+          padding:0; font-size:13px;">
+  <iconify-icon id="impDrawerTabIcon" icon="lucide:chevron-right"></iconify-icon>
+</button>
+
+{# Panel drawer #}
+<div id="impDrawer"
+     style="
+       position:fixed; left:-320px; top:0; width:300px; height:100vh;
+       background:#fff; z-index:1099; box-shadow:4px 0 24px rgba(0,0,0,.15);
+       display:flex; flex-direction:column;
+       transition:left .3s cubic-bezier(.4,0,.2,1);
+       font-family:inherit;">
+
+  {# Cabecera del drawer #}
+  <div style="padding:18px 16px 14px; border-bottom:1px solid #f0f0f0; background:#6c5ce7; color:#fff;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px;">
+          <iconify-icon icon="lucide:users"></iconify-icon> Usuarios de la org.
+        </div>
+        <div style="font-size:11px; opacity:.8; margin-top:2px;">
+          {{ user.usuarioperfiloptimizador.organizacion.nombre|default:"—" }}
+        </div>
+      </div>
+      <button onclick="toggleImpDrawer()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:2px;">✕</button>
+    </div>
+    <input id="impSearch" type="text" placeholder="Buscar usuario…"
+           oninput="filtrarUsuarios(this.value)"
+           style="margin-top:10px; width:100%; padding:7px 10px; border-radius:6px;
+                  border:none; font-size:13px; background:rgba(255,255,255,.2);
+                  color:#fff; outline:none; box-sizing:border-box;"
+           ::placeholder="color:rgba(255,255,255,.6)">
+  </div>
+
+  {# Lista de usuarios — se llena via JS #}
+  <div id="impUserList" style="flex:1; overflow-y:auto; padding:8px 0;">
+    <div style="text-align:center; padding:24px; color:#aaa; font-size:13px;">
+      <iconify-icon icon="lucide:loader-2" style="animation:spin 1s linear infinite;"></iconify-icon>
+      Cargando…
+    </div>
+  </div>
+
+  {# Footer con indicador de sesión actual #}
+  <div style="padding:12px 16px; border-top:1px solid #f0f0f0; background:#f8f7ff; font-size:12px; color:#6c5ce7;">
+    <iconify-icon icon="lucide:shield-check"></iconify-icon>
+    Conectado como <strong>{{ user.get_full_name|default:user.username }}</strong>
+  </div>
+</div>
+
+{# Barra flotante — solo cuando se está impersonando #}
+{% if request.session.impersona_original_id %}
+<div id="impersonaBar" style="
+     position:fixed; bottom:0; left:0; right:0; z-index:9999;
+     background:#e17055; color:#fff;
+     padding:10px 20px; display:flex; align-items:center; justify-content:space-between;
+     box-shadow:0 -2px 12px rgba(0,0,0,.2); font-size:13px;">
+  <div style="display:flex; align-items:center; gap:10px;">
+    <iconify-icon icon="lucide:eye" style="font-size:18px;"></iconify-icon>
+    <span>Actuando como <strong>{{ user.get_full_name|default:user.username }}</strong>
+    ({{ user.usuarioperfiloptimizador.rol }})</span>
+  </div>
+  <a href="{% url 'superadmin_restaurar' %}"
+     style="background:#fff; color:#e17055; padding:6px 16px; border-radius:6px;
+            font-weight:700; text-decoration:none; font-size:12px; white-space:nowrap;">
+    ↩ Volver a mi cuenta
+  </a>
+</div>
+{% endif %}
+
+<style>
+@keyframes spin { to { transform:rotate(360deg); } }
+#impDrawer { margin-left: var(--sidebar-width, 0px); }
+
+/* Ajustar tab cuando el sidebar está colapsado */
+.sidebar-collapsed #impDrawerTab { left: 76px; }
+
+/* Scrollbar fino en la lista */
+#impUserList::-webkit-scrollbar { width:4px; }
+#impUserList::-webkit-scrollbar-thumb { background:#ddd; border-radius:2px; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  const DRAWER_OPEN_KEY = 'imp_drawer_open';
+  let _usuarios = [];
+  let _drawerOpen = false;
+
+  /* ── Abrir / cerrar ── */
+  window.toggleImpDrawer = function () {
+    _drawerOpen = !_drawerOpen;
+    applyDrawerState();
+    if (_drawerOpen && _usuarios.length === 0) cargarUsuarios();
+    sessionStorage.setItem(DRAWER_OPEN_KEY, _drawerOpen ? '1' : '0');
+  };
+
+  function applyDrawerState() {
+    const drawer  = document.getElementById('impDrawer');
+    const tab     = document.getElementById('impDrawerTab');
+    const tabIcon = document.getElementById('impDrawerTabIcon');
+    if (!drawer) return;
+    if (_drawerOpen) {
+      drawer.style.left = '0';
+      tab.style.left = '300px';
+      tabIcon.setAttribute('icon', 'lucide:chevron-left');
+    } else {
+      drawer.style.left = '-320px';
+      // Posición tab: sigue al sidebar principal (260px normal, 76px colapsado)
+      const sidebarCollapsed = document.body.classList.contains('sidebar-collapsed');
+      tab.style.left = (sidebarCollapsed ? 76 : 260) + 'px';
+      tabIcon.setAttribute('icon', 'lucide:chevron-right');
+    }
+  }
+
+  /* ── Cargar usuarios vía API ── */
+  function cargarUsuarios() {
+    const list = document.getElementById('impUserList');
+    if (!list) return;
+    fetch('{% url "superadmin_usuarios" %}', { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        _usuarios = data.usuarios || [];
+        renderUsuarios(_usuarios);
+      })
+      .catch(() => {
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:#e17055;font-size:13px;">Error al cargar usuarios</div>';
+      });
+  }
+
+  /* ── Renderizar lista ── */
+  function renderUsuarios(lista) {
+    const list = document.getElementById('impUserList');
+    if (!list) return;
+    if (!lista.length) {
+      list.innerHTML = '<div style="padding:24px;text-align:center;color:#aaa;font-size:13px;">No hay usuarios disponibles</div>';
+      return;
+    }
+
+    // Agrupar por rol
+    const grupos = {};
+    lista.forEach(u => {
+      if (!grupos[u.etiqueta]) grupos[u.etiqueta] = [];
+      grupos[u.etiqueta].push(u);
+    });
+
+    let html = '';
+    for (const [etiqueta, users] of Object.entries(grupos)) {
+      html += `<div style="padding:8px 14px 4px; font-size:10px; font-weight:700;
+                           text-transform:uppercase; color:#aaa; letter-spacing:.06em;">
+                 ${etiqueta}
+               </div>`;
+      users.forEach(u => {
+        html += `
+          <form method="post" action="/superadmin/impersonar/${u.id}/" style="margin:0;">
+            <input type="hidden" name="csrfmiddlewaretoken" value="${getCsrf()}">
+            <button type="submit" title="Entrar como ${u.nombre}"
+                    style="width:100%; background:none; border:none; cursor:pointer;
+                           padding:8px 14px; display:flex; align-items:center; gap:10px;
+                           text-align:left; transition:background .15s; border-radius:0;">
+              <div style="width:34px; height:34px; border-radius:50%; background:#6c5ce7;
+                          color:#fff; display:flex; align-items:center; justify-content:center;
+                          font-weight:700; font-size:12px; flex-shrink:0;">
+                ${u.iniciales}
+              </div>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:13px; font-weight:600; color:#2d3436;
+                             white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${u.nombre}
+                </div>
+                <div style="font-size:11px; color:#636e72;">@${u.username}</div>
+              </div>
+              <iconify-icon icon="${u.icono}" style="color:#aaa; font-size:16px; flex-shrink:0;"></iconify-icon>
+            </button>
+          </form>`;
+      });
+    }
+    list.innerHTML = html;
+
+    /* Hover effect */
+    list.querySelectorAll('button[type=submit]').forEach(btn => {
+      btn.addEventListener('mouseenter', () => btn.style.background = '#f8f7ff');
+      btn.addEventListener('mouseleave', () => btn.style.background = 'none');
+    });
+  }
+
+  /* ── Filtro búsqueda ── */
+  window.filtrarUsuarios = function (q) {
+    const lower = q.toLowerCase().trim();
+    if (!lower) { renderUsuarios(_usuarios); return; }
+    renderUsuarios(_usuarios.filter(u =>
+      u.nombre.toLowerCase().includes(lower) ||
+      u.username.toLowerCase().includes(lower) ||
+      u.etiqueta.toLowerCase().includes(lower)
+    ));
+  };
+
+  /* ── CSRF helper ── */
+  function getCsrf() {
+    const m = document.cookie.match(/csrftoken=([^;]+)/);
+    return m ? m[1] : '';
+  }
+
+  /* ── Init al cargar DOM ── */
+  document.addEventListener('DOMContentLoaded', function () {
+    applyDrawerState();
+    // Ajustar tab cuando el sidebar se colapsa/expande
+    const observer = new MutationObserver(() => { if (!_drawerOpen) applyDrawerState(); });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  });
+}());
+</script>
+
+{% endif %}{# fin bloque super_admin #}
 
 <style>
 /* Posicionar botón de cerrar sesión al final del sidebar */
@@ -162,7 +396,8 @@
 }
 </style>
 
-{% if user.usuarioperfiloptimizador.rol == 'operador' %}
+{% with rol_sidebar=request.session.superadmin_rol_activo|default:user.usuarioperfiloptimizador.rol %}
+{% if rol_sidebar == 'operador' %}
 <style>
 #cgOpNotifContainer {
   position: fixed;
@@ -404,7 +639,7 @@
 </script>
 {% endif %}
 
-{% if user.usuarioperfiloptimizador.rol == 'enchapador' %}
+{% if rol_sidebar == 'enchapador' %}
 <style>
 #cgEnchNotifContainer { position:fixed; top:18px; right:18px; z-index:99999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
 .cg-ench-notif {
@@ -481,3 +716,4 @@
 }());
 </script>
 {% endif %}
+{% endwith %}

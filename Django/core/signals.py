@@ -11,6 +11,9 @@ from .models import (
     Material,
     Tapacanto,
     MaterialProyecto,
+    UsuarioPerfilOptimizador,
+    SuperAdminSatelite,
+    SATELITE_ROLES,
 )
 from .middleware import get_current_user
 
@@ -123,3 +126,54 @@ def materialproyecto_saved(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=MaterialProyecto)
 def materialproyecto_deleted(sender, instance, **kwargs):
     _log('DELETE', instance)
+
+
+# ── Señal: auto-crear satélites cuando se guarda un perfil super_admin ────────
+@receiver(post_save, sender=UsuarioPerfilOptimizador)
+def crear_satelites_super_admin(sender, instance, created, **kwargs):
+    """Al guardar un perfil super_admin crea (o asegura existencia de)
+    usuarios satélite USERNAME_ROL con contraseña inutilizable."""
+    if instance.rol != 'super_admin':
+        return
+
+    from django.contrib.auth import get_user_model
+    from django.db import transaction
+    User = get_user_model()
+
+    super_user = instance.user
+    # Org especial: la organización general (is_general=True) del sistema
+    from .models import Organizacion
+    org_general = Organizacion.objects.filter(is_general=True).first()
+
+    for rol in SATELITE_ROLES:
+        sat_username = f"{super_user.username}_{rol}"
+        with transaction.atomic():
+            sat_user, sat_created = User.objects.get_or_create(
+                username=sat_username,
+                defaults={
+                    'first_name': super_user.first_name,
+                    'last_name': super_user.last_name,
+                    'email': super_user.email,
+                    'is_active': True,
+                }
+            )
+            if sat_created:
+                sat_user.set_unusable_password()
+                sat_user.save()
+
+            # Crear o actualizar perfil del satélite
+            sat_perfil, _ = UsuarioPerfilOptimizador.objects.update_or_create(
+                user=sat_user,
+                defaults={
+                    'rol': rol,
+                    'organizacion': org_general,
+                    'activo': True,
+                }
+            )
+
+            # Registrar el vínculo
+            SuperAdminSatelite.objects.get_or_create(
+                super_admin=super_user,
+                rol=rol,
+                defaults={'satelite': sat_user}
+            )

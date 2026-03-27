@@ -112,13 +112,20 @@ def get_auth_context(request) -> Dict[str, Any]:
             is_general = bool(org.is_general) if org else False
         except Exception:
             perfil = None
+
+    # Si el super_admin tiene un rol activo en sesión, usarlo
+    if role == 'super_admin' and hasattr(request, 'session'):
+        rol_activo = request.session.get('superadmin_rol_activo')
+        if rol_activo:
+            role = rol_activo
+
     return {
         'user_id': getattr(user, 'id', None),
         'username': getattr(user, 'username', None),
         'organization_id': getattr(org, 'id', None),
         'organization_is_general': is_general,
         'role': role,
-        'is_support': bool(role == 'super_admin' or is_general),
+        'is_support': bool(perfil and perfil.rol == 'super_admin'),
         'organization': org,
         'perfil': perfil,
     }
@@ -133,7 +140,7 @@ def is_org_admin(ctx: Dict[str, Any]) -> bool:
 
 
 def is_agent(ctx: Dict[str, Any]) -> bool:
-    return ctx.get('role') == 'agente'
+    return ctx.get('role') == 'vendedor'
 
 
 def is_subordinador(ctx: Dict[str, Any]) -> bool:

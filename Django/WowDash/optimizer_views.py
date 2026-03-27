@@ -214,14 +214,10 @@ class OptimizationEngine:
     def _posicion_libre(self, tablero, x, y, ancho, largo):
         if (x < 0 or y < 0 or x + ancho > self.tablero_ancho or y + largo > self.tablero_largo):
             return False
+        kerf = self.desperdicio_sierra
         for p in tablero['piezas']:
-            nuevo_x1, nuevo_y1 = x, y
-            nuevo_x2, nuevo_y2 = x + ancho, y + largo
-            exist_x1, exist_y1 = p['x'], p['y']
-            exist_x2, exist_y2 = p['x'] + p['ancho'], p['y'] + p['largo']
-            margen = self.desperdicio_sierra
-            overlap_x = not (nuevo_x2 + margen <= exist_x1 or exist_x2 + margen <= nuevo_x1)
-            overlap_y = not (nuevo_y2 + margen <= exist_y1 or exist_y2 + margen <= nuevo_y1)
+            overlap_x = not (x + ancho + kerf <= p['x'] or p['x'] + p['ancho'] + kerf <= x)
+            overlap_y = not (y + largo + kerf <= p['y'] or p['y'] + p['largo'] + kerf <= y)
             if overlap_x and overlap_y:
                 return False
         return True
@@ -1155,16 +1151,20 @@ def _pdf_from_result(proyecto, resultado, opts: Optional[dict] = None):
                 total_tipo = pieza.get('totalUnidades') or totales_global_por_tipo.get(kN, 1)
 
                 # Normalización de coordenadas a relativas al área útil.
-                # El backend SIEMPRE suma margen_x/margen_y antes de guardar (ver optimizacion(),
-                # líneas pieza['x'] += self.margen_x / pieza['y'] += self.margen_y).
-                # Por tanto restar siempre el margen para obtener coords relativas al área útil.
+                # El backend suma margen_x/margen_y (pieza['x'] += self.margen_x),
+                # pero el frontend envía coords YA relativas al área útil (0-based).
                 px_mm = float(pieza.get('x',0)); py_mm = float(pieza.get('y',0))
                 pa0 = float(aN); pl0 = float(lN)
                 pw_mm = pa0
                 ph_mm = pl0
                 mx_val = float(margen_x); my_val = float(margen_y)
-                px_rel_mm = px_mm - mx_val
-                py_rel_mm = py_mm - my_val
+                _origen_mat = mat.get('origen') or resultado.get('origen') or 'backend'
+                if _origen_mat == 'frontend':
+                    px_rel_mm = px_mm
+                    py_rel_mm = py_mm
+                else:
+                    px_rel_mm = px_mm - mx_val
+                    py_rel_mm = py_mm - my_val
                 # Clip de seguridad: nunca salir del área útil
                 px_rel_mm = max(0.0, min(px_rel_mm, max(effW_mm - pw_mm, 0.0)))
                 py_rel_mm = max(0.0, min(py_rel_mm, max(effH_mm - ph_mm, 0.0)))

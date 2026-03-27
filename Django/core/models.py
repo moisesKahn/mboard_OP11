@@ -254,7 +254,7 @@ class UsuarioPerfilOptimizador(models.Model):
     ROLES = [
         ('super_admin', 'Super Administrador'),  # Soporte / Organización General
         ('org_admin', 'Administrador de Organización'),  # ADMIN_ORG
-        ('agente', 'Agente'),  # AGENTE
+        ('vendedor', 'Vendedor'),  # VENDEDOR
         ('subordinador', 'Subordinador'),  # SUBORDINADOR (solo lectura en materiales)
         ('operador', 'Operador'),  # OPERADOR (nuevo)
         ('enchapador', 'Enchapador'),  # ENCHAPADOR (proceso de tapacanto)
@@ -262,7 +262,7 @@ class UsuarioPerfilOptimizador(models.Model):
         ('autoservicio', 'Autoservicio'),  # AUTOSERVICIO (portal restringido de cliente)
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name="Usuario")
-    rol = models.CharField(max_length=20, choices=ROLES, default='agente', verbose_name="Rol")
+    rol = models.CharField(max_length=20, choices=ROLES, default='vendedor', verbose_name="Rol")
     telefono = models.CharField(max_length=15, blank=True, null=True, verbose_name="Teléfono")
     organizacion = models.ForeignKey(Organizacion, on_delete=models.SET_NULL, blank=True, null=True, verbose_name="Organización")
     activo = models.BooleanField(default=True, verbose_name="Activo")
@@ -275,6 +275,36 @@ class UsuarioPerfilOptimizador(models.Model):
     
     def __str__(self):
         return f"{self.user.get_full_name()} ({self.rol})"
+
+
+# Roles satélite que se auto-crean para cada super_admin
+SATELITE_ROLES = ['operador', 'enchapador', 'vendedor', 'org_admin']
+
+
+class SuperAdminSatelite(models.Model):
+    """Vincula un super_admin con sus usuarios satélite por rol.
+    Los satélites son usuarios reales pero sin contraseña usable:
+    solo se accede a ellos via cambio de rol desde el super_admin original.
+    """
+    super_admin = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='satelites_propios',
+        verbose_name="Super Admin"
+    )
+    satelite = models.OneToOneField(
+        User, on_delete=models.CASCADE,
+        related_name='satelite_de',
+        verbose_name="Usuario Satélite"
+    )
+    rol = models.CharField(max_length=20, verbose_name="Rol del Satélite")
+
+    class Meta:
+        verbose_name = "Satélite Super Admin"
+        verbose_name_plural = "Satélites Super Admin"
+        unique_together = [('super_admin', 'rol')]
+
+    def __str__(self):
+        return f"{self.super_admin.username} → {self.rol}"
 
 
 class Conversacion(models.Model):
@@ -490,3 +520,102 @@ class NotificacionEnchapador(models.Model):
 
     def __str__(self):
         return f"NotifEnch → {self.destinatario_id} | {self.proyecto_nombre} | leida={self.leida}"
+
+
+class ConfiguracionEtiqueta(models.Model):
+    """Configuración del diseño de etiqueta ZPL para impresoras Zebra.
+    Singleton por organización — solo existe una fila por org (o global si org=null).
+    """
+    organizacion = models.OneToOneField(
+        Organizacion, on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='config_etiqueta',
+        verbose_name="Organización",
+        help_text="Dejar vacío para configuración global por defecto"
+    )
+    # Dimensiones de la etiqueta en mm
+    ancho_mm = models.PositiveIntegerField(default=70, verbose_name="Ancho etiqueta (mm)")
+    alto_mm = models.PositiveIntegerField(default=50, verbose_name="Alto etiqueta (mm)")
+
+    # Campos a mostrar
+    mostrar_nombre = models.BooleanField(default=True, verbose_name="Mostrar nombre de pieza")
+    mostrar_material = models.BooleanField(default=True, verbose_name="Mostrar material")
+    mostrar_cliente = models.BooleanField(default=False, verbose_name="Mostrar cliente")
+    mostrar_proyecto_id = models.BooleanField(default=False, verbose_name="Mostrar ID proyecto")
+    mostrar_dibujo = models.BooleanField(default=True, verbose_name="Mostrar dibujo de pieza")
+    mostrar_cotas = models.BooleanField(default=True, verbose_name="Mostrar cotas (medidas)")
+    mostrar_tapacantos = models.BooleanField(default=True, verbose_name="Mostrar tapacantos")
+    mostrar_veta = models.BooleanField(default=True, verbose_name="Mostrar dirección de veta")
+
+    # Tamaños de fuente (en dots a 300 DPI; 24 dots ≈ 2mm)
+    fuente_nombre = models.PositiveIntegerField(default=32, verbose_name="Fuente nombre (dots)",
+        help_text="Tamaño de fuente del nombre. 24=pequeño, 32=medio, 48=grande, 64=muy grande")
+    fuente_material = models.PositiveIntegerField(default=24, verbose_name="Fuente material (dots)")
+    fuente_cotas = models.PositiveIntegerField(default=22, verbose_name="Fuente cotas (dots)")
+    fuente_pie = models.PositiveIntegerField(default=22, verbose_name="Fuente pie (dots)",
+        help_text="Fuente para la línea de tapacantos y veta")
+    fuente_cliente = models.PositiveIntegerField(default=20, verbose_name="Fuente cliente (dots)")
+    fuente_proyecto_id = models.PositiveIntegerField(default=20, verbose_name="Fuente ID proyecto (dots)")
+
+    # Proporción del dibujo de pieza (0.5 = 50% del espacio disponible, 1.0 = 100%)
+    escala_dibujo = models.FloatField(default=0.75, verbose_name="Escala del dibujo",
+        help_text="0.5 = pequeño, 0.75 = medio, 1.0 = grande")
+
+    # Grosor del borde de la figura (en dots)
+    grosor_borde = models.PositiveIntegerField(default=2, verbose_name="Grosor borde figura (dots)",
+        help_text="Grosor de la línea del rectángulo de la pieza. 1=fino, 2=normal, 4=grueso, 6=muy grueso")
+
+    # Posiciones de los elementos en la etiqueta (porcentajes x,y relativos)
+    posiciones = models.JSONField(default=dict, blank=True,
+        verbose_name="Posiciones de elementos",
+        help_text="JSON con las posiciones x,y de cada campo en la etiqueta (en % relativo)")
+
+    fecha_modificacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuración de etiqueta"
+        verbose_name_plural = "Configuraciones de etiqueta"
+
+    def __str__(self):
+        org = self.organizacion.nombre if self.organizacion else 'Global'
+        return f"Etiqueta {self.ancho_mm}×{self.alto_mm}mm — {org}"
+
+    @classmethod
+    def get_config(cls, organizacion=None):
+        """Obtiene la configuración de etiqueta para una organización,
+        o la global si no tiene una propia."""
+        if organizacion:
+            try:
+                return cls.objects.get(organizacion=organizacion)
+            except cls.DoesNotExist:
+                pass
+        # Fallback: configuración global (org=null)
+        try:
+            return cls.objects.get(organizacion__isnull=True)
+        except cls.DoesNotExist:
+            # Crear una por defecto
+            return cls.objects.create(organizacion=None)
+
+    def to_dict(self):
+        """Serializa la configuración para enviarla como JSON al frontend."""
+        return {
+            'ancho_mm': self.ancho_mm,
+            'alto_mm': self.alto_mm,
+            'mostrar_nombre': self.mostrar_nombre,
+            'mostrar_material': self.mostrar_material,
+            'mostrar_cliente': self.mostrar_cliente,
+            'mostrar_proyecto_id': self.mostrar_proyecto_id,
+            'mostrar_dibujo': self.mostrar_dibujo,
+            'mostrar_cotas': self.mostrar_cotas,
+            'mostrar_tapacantos': self.mostrar_tapacantos,
+            'mostrar_veta': self.mostrar_veta,
+            'fuente_nombre': self.fuente_nombre,
+            'fuente_material': self.fuente_material,
+            'fuente_cotas': self.fuente_cotas,
+            'fuente_pie': self.fuente_pie,
+            'fuente_cliente': self.fuente_cliente,
+            'fuente_proyecto_id': self.fuente_proyecto_id,
+            'escala_dibujo': self.escala_dibujo,
+            'grosor_borde': self.grosor_borde,
+            'posiciones': self.posiciones or {},
+        }

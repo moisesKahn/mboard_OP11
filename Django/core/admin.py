@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Organizacion, Cliente, Material, Tapacanto, Proyecto, MaterialProyecto, UsuarioPerfilOptimizador
+from .models import Organizacion, Cliente, Material, Tapacanto, Proyecto, MaterialProyecto, UsuarioPerfilOptimizador, ConfiguracionEtiqueta
 
 @admin.register(Organizacion)
 class OrganizacionAdmin(admin.ModelAdmin):
@@ -51,3 +51,8 @@ class UsuarioPerfilOptimizadorAdmin(admin.ModelAdmin):
     list_display = ('user', 'rol', 'organizacion', 'telefono', 'activo', 'fecha_ultimo_acceso')
     list_filter = ('rol', 'activo', 'organizacion')
     search_fields = ('user__username', 'user__first_name', 'user__last_name', 'organizacion__nombre')
+
+@admin.register(ConfiguracionEtiqueta)
+class ConfiguracionEtiquetaAdmin(admin.ModelAdmin):
+    list_display = ('organizacion', 'ancho_mm', 'alto_mm', 'fuente_nombre', 'fecha_modificacion')
+    list_filter = ('organizacion',)
