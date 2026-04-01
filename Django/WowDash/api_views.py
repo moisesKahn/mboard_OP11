@@ -1301,7 +1301,9 @@ def proyectos_resumen_batch_api(request):
     if not ids:
         return JsonResponse({'resumenes': {}})
 
-    qs = Proyecto.objects.select_related('cliente', 'operador').filter(id__in=ids)
+    qs = Proyecto.objects.select_related('cliente', 'operador').filter(id__in=ids).defer(
+        'configuracion', 'descripcion'
+    )
     if not (ctx.get('organization_is_general') or ctx.get('is_support')):
         qs = qs.filter(organizacion_id=ctx.get('organization_id'))
 

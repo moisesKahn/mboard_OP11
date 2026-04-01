@@ -135,6 +135,8 @@ window.addEventListener('load', function () {
 
   if (_pendingIds.length > 0) {
     _setBatchIndicator(true);
+    // Retrasar el batch para que la página termine de pintar primero
+    setTimeout(function() {
     fetch('/api/proyectos/resumen-batch?ids=' + _pendingIds.join(','), { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function(data) {
@@ -146,6 +148,7 @@ window.addEventListener('load', function () {
       .catch(function() {
         _setBatchIndicator(false);
       });
+    }, 1500); // fin setTimeout
   }
 
   function estadoBadge(estado, display) {
