@@ -5531,11 +5531,20 @@
                     if (p){
                         const rn = document.getElementById('resNombre'); if (rn) rn.textContent = p.nombre || '';
                         const rc = document.getElementById('resCliente'); if (rc) rc.textContent = p.cliente || '';
-                        // Rellenar inputs visibles
+                        // Rellenar inputs visibles + simular selección de cliente
                         try{
-                            const inCliente = document.getElementById('clienteInput'); if (inCliente) inCliente.value = p.cliente || '';
-                            const inNombre = document.getElementById('nombreProyecto'); if (inNombre && (inNombre.value==='' || inNombre.value===inNombre.placeholder)) inNombre.value = p.nombre || '';
-                            // El RUT no viene en este endpoint; se mantendrá vacío si no está cacheado
+                            const inNombre = document.getElementById('nombreProyecto');
+                            if (inNombre && (inNombre.value==='' || inNombre.value===inNombre.placeholder)) inNombre.value = p.nombre || '';
+                            // Simular selección de cliente con RUT para que quede bloqueado y Optimizar se active
+                            if (p.rut && p.cliente && typeof seleccionarCliente === 'function'){
+                                seleccionarCliente({ id: p.cliente_id||null, nombre: p.cliente, rut: p.rut });
+                                // El RUT del campo se bloquea readonly (ya lo hace seleccionarCliente → nomIn.readOnly=true)
+                                // Adicionalmente bloqueamos el campo RUT igual que al cargar desde proyMeta
+                                const inRut = document.getElementById('rutCliente');
+                                if (inRut) inRut.disabled = true;
+                            } else {
+                                const inCliente = document.getElementById('clienteInput'); if (inCliente) inCliente.value = p.cliente || '';
+                            }
                         }catch(__e){}
                     }
                 }
@@ -6481,11 +6490,19 @@
             // Setear proyecto id en resultados
             const resDiv = document.getElementById('resultadosOptimizacion');
             if (resDiv) resDiv.setAttribute('data-proyecto-id', meta.id);
-            // Setear encabezado proyecto/cliente
+            // Setear encabezado proyecto/cliente + simular selección de cliente
             setIf(document.getElementById('nombreProyecto'), meta.nombre||'');
-            setIf(document.getElementById('clienteInput'), meta.cliente||'');
-            setIf(document.getElementById('rutCliente'), meta.rut||'');
-            if (meta.rut) { const rut = document.getElementById('rutCliente'); if(rut) rut.disabled = true; }
+            // Simular seleccionarCliente para que checkOptimizarBtn pueda activarse
+            if (meta.rut && meta.cliente && typeof seleccionarCliente === 'function'){
+                seleccionarCliente({ id: null, nombre: meta.cliente, rut: meta.rut });
+                // Bloquear RUT (proyecto guardado: no debe cambiarse)
+                const rutEl = document.getElementById('rutCliente');
+                if (rutEl) rutEl.disabled = true;
+            } else {
+                setIf(document.getElementById('clienteInput'), meta.cliente||'');
+                setIf(document.getElementById('rutCliente'), meta.rut||'');
+                if (meta.rut) { const rut = document.getElementById('rutCliente'); if(rut) rut.disabled = true; }
+            }
             // Materiales
             const materiales = (resultado && resultado.materiales) ? resultado.materiales : (resultado? [resultado] : []);
             if (!materiales.length) return;

@@ -443,11 +443,14 @@ def proyectos_list(request):
     for p in proyectos:
         setattr(p, 'available_operadores', operadores_by_org.get(getattr(p, 'organizacion_id', None), []))
     
-    # ── Separar proyectos: con operador asignado o en estado de producción → Aprobados
-    ESTADOS_APROBADOS = {'aprobado', 'asignado', 'produccion', 'enchapado_pendiente', 'completado'}
-    proyectos_aprobados  = [p for p in proyectos if p.operador_id or p.estado in ESTADOS_APROBADOS]
-    ids_aprobados        = {p.id for p in proyectos_aprobados}
-    proyectos_borradores = [p for p in proyectos if p.id not in ids_aprobados]
+    # ── Separar proyectos por grupos
+    ESTADOS_COMPLETADOS = {'completado', 'cancelado', 'pausado'}
+    ESTADOS_APROBADOS   = {'aprobado', 'asignado', 'produccion', 'enchapado_pendiente'}
+    proyectos_completados = [p for p in proyectos if p.estado in ESTADOS_COMPLETADOS]
+    ids_completados       = {p.id for p in proyectos_completados}
+    proyectos_aprobados   = [p for p in proyectos if (p.operador_id or p.estado in ESTADOS_APROBADOS) and p.id not in ids_completados]
+    ids_aprobados         = {p.id for p in proyectos_aprobados}
+    proyectos_borradores  = [p for p in proyectos if p.id not in ids_aprobados and p.id not in ids_completados]
 
     # ── Permisos por rol
     can_asignar        = can_approve_projects(ctx)
@@ -460,6 +463,7 @@ def proyectos_list(request):
         "proyectos": proyectos,
         "proyectos_borradores": proyectos_borradores,
         "proyectos_aprobados": proyectos_aprobados,
+        "proyectos_completados": proyectos_completados,
         "estados": estados,
         "clientes": clientes,
         "operadores_by_org": operadores_by_org,

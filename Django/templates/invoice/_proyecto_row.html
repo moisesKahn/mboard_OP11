@@ -9,15 +9,8 @@
         {% endif %}
     </td>
     <td>
-        <div class="d-flex align-items-center">
-            <div class="w-32-px h-32-px bg-primary-50 text-primary-600 rounded-circle d-flex align-items-center justify-content-center me-12">
-                <iconify-icon icon="solar:document-text-outline" class="text-lg"></iconify-icon>
-            </div>
-            <div>
-                <h6 class="text-md mb-0 fw-medium">{{ proyecto.nombre }}</h6>
-                <span class="text-sm text-secondary-light">#{{ proyecto.codigo }}</span>
-            </div>
-        </div>
+        <h6 class="text-md mb-0 fw-medium">{{ proyecto.nombre }}</h6>
+        <span class="text-xs text-secondary-light">#{{ proyecto.codigo }}</span>
     </td>
     <td>
         <div>
@@ -45,13 +38,24 @@
     {% if not rol == 'autoservicio' %}
     <td>
         {% if can_cambiar_estado %}
-            <select class="form-select form-select-sm status-select" data-project-id="{{ proyecto.id }}" onchange="updateProjectStatus(this)" style="max-width: 130px;">
+            <select class="form-select form-select-sm status-select" data-project-id="{{ proyecto.id }}" onchange="updateProjectStatus(this)" style="max-width: 150px; font-size: 0.78rem; font-weight: 600;">
                 {% for value, label in estados %}
                     <option value="{{ value }}" {% if proyecto.estado == value %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             </select>
         {% else %}
-            <span class="badge {% if proyecto.estado == 'borrador' %}bg-warning-100 text-warning-700{% elif proyecto.estado == 'optimizado' %}bg-info-100 text-info-700{% elif proyecto.estado == 'aprobado' %}bg-success-100 text-success-700{% elif proyecto.estado == 'asignado' %}bg-success-200 text-success-800{% elif proyecto.estado == 'completado' %}bg-success-600 text-white{% elif proyecto.estado == 'cancelado' %}bg-danger-100 text-danger-700{% else %}bg-secondary-100 text-secondary-700{% endif %} px-2 py-1">{{ proyecto.get_estado_display }}</span>
+            <span class="badge px-2 py-1
+                {% if proyecto.estado == 'borrador' %}bg-secondary-100 text-secondary-700
+                {% elif proyecto.estado == 'en_proceso' %}bg-info-50 text-info-600
+                {% elif proyecto.estado == 'optimizado' %}bg-primary-50 text-primary-700
+                {% elif proyecto.estado == 'aprobado' %}bg-success-100 text-success-700
+                {% elif proyecto.estado == 'asignado' %}bg-success-200 text-success-800
+                {% elif proyecto.estado == 'produccion' %}bg-warning-100 text-warning-700
+                {% elif proyecto.estado == 'enchapado_pendiente' %}bg-warning-200 text-warning-800
+                {% elif proyecto.estado == 'completado' %}bg-info-100 text-info-700
+                {% elif proyecto.estado == 'pausado' %}bg-violet-100 text-violet-700
+                {% elif proyecto.estado == 'cancelado' %}bg-danger-100 text-danger-700
+                {% else %}bg-secondary-100 text-secondary-700{% endif %}">{{ proyecto.get_estado_display }}</span>
         {% endif %}
     </td>
     {% endif %}

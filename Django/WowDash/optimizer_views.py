@@ -1778,6 +1778,8 @@ def preview_proyecto_json(request, proyecto_id:int):
                 'codigo': proyecto.codigo,
                 'nombre': proyecto.nombre,
                 'cliente': (proyecto.cliente.nombre if proyecto.cliente_id else '-'),
+                'cliente_id': proyecto.cliente_id or None,
+                'rut': (proyecto.cliente.rut if proyecto.cliente_id else ''),
                 'estado': proyecto.estado,
                 'fecha': proyecto.fecha_creacion.strftime('%d-%m-%Y %H:%M') if proyecto.fecha_creacion else ''
             }

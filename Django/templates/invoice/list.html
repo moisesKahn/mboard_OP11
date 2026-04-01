@@ -53,14 +53,18 @@
                 <button class="nav-link active" id="tab-borradores-btn" data-bs-toggle="tab" data-bs-target="#tab-borradores" type="button" role="tab">
                     <iconify-icon icon="solar:pen-new-square-outline" class="me-1"></iconify-icon>
                     Borradores / Optimizados
-                    {% if proyectos_borradores %}<span class="badge bg-secondary ms-1">{{ proyectos_borradores|length }}</span>{% endif %}
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="tab-aprobados-btn" data-bs-toggle="tab" data-bs-target="#tab-aprobados" type="button" role="tab">
                     <iconify-icon icon="solar:check-circle-outline" class="me-1"></iconify-icon>
                     Aprobados / Autorizados
-                    {% if proyectos_aprobados %}<span class="badge bg-success ms-1">{{ proyectos_aprobados|length }}</span>{% endif %}
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-completados-btn" data-bs-toggle="tab" data-bs-target="#tab-completados" type="button" role="tab">
+                    <iconify-icon icon="solar:flag-bold" class="me-1"></iconify-icon>
+                    Completados
                 </button>
             </li>
         </ul>
@@ -71,20 +75,20 @@
             <!-- Pestaña 1: Borradores / Optimizados -->
             <div class="tab-pane fade show active" id="tab-borradores" role="tabpanel">
                 <div class="table-responsive" style="overflow-x: auto;">
-                    <table class="table bordered-table mb-0" style="min-width: 1200px;">
+                    <table class="table bordered-table mb-0" style="min-width: 900px;">
                         <thead>
                             <tr>
-                                <th scope="col" style="width: 140px;">ID del proyecto</th>
-                                <th scope="col" style="width: 280px;">Nombre del Proyecto</th>
+                                <th scope="col" style="width: 80px;">ID</th>
+                                <th scope="col">Nombre del Proyecto</th>
                                 <th scope="col" style="width: 200px;">Cliente</th>
                                 {% if not rol == 'autoservicio' %}
                                 <th scope="col" style="width: 200px;">Operador</th>
                                 {% endif %}
-                                <th scope="col" style="width: 120px;">Fecha de Creación</th>
+                                <th scope="col" style="width: 110px;">Fecha</th>
                                 {% if not rol == 'autoservicio' %}
-                                <th scope="col" style="width: 120px;">Estado</th>
+                                <th scope="col" style="width: 150px;">Estado</th>
                                 {% endif %}
-                                <th scope="col" style="width: 160px;">Acción</th>
+                                <th scope="col" style="width: 140px;">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -110,20 +114,46 @@
             {% if not rol == 'autoservicio' %}
             <div class="tab-pane fade" id="tab-aprobados" role="tabpanel">
                 <div class="table-responsive" style="overflow-x: auto;">
-                    <table class="table bordered-table mb-0" style="min-width: 1200px;">
+                    <table class="table bordered-table mb-0" style="min-width: 900px;">
                         <thead>
                             <tr>
-                                <th scope="col" style="width: 140px;">ID del proyecto</th>
-                                <th scope="col" style="width: 280px;">Nombre del Proyecto</th>
+                                <th scope="col" style="width: 80px;">ID</th>
+                                <th scope="col">Nombre del Proyecto</th>
                                 <th scope="col" style="width: 200px;">Cliente</th>
                                 <th scope="col" style="width: 200px;">Operador</th>
-                                <th scope="col" style="width: 120px;">Fecha de Creación</th>
-                                <th scope="col" style="width: 120px;">Estado</th>
-                                <th scope="col" style="width: 160px;">Acción</th>
+                                <th scope="col" style="width: 110px;">Fecha</th>
+                                <th scope="col" style="width: 150px;">Estado</th>
+                                <th scope="col" style="width: 140px;">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for proyecto in proyectos_aprobados %}
+                                {% include 'invoice/_proyecto_row.html' with proyecto=proyecto rol=rol can_asignar=can_asignar can_cambiar_estado=can_cambiar_estado can_eliminar=can_eliminar %}
+                            {% empty %}
+                                {% include 'invoice/_tabla_vacia.html' %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pestaña 3: Completados / Cancelados -->
+            <div class="tab-pane fade" id="tab-completados" role="tabpanel">
+                <div class="table-responsive" style="overflow-x: auto;">
+                    <table class="table bordered-table mb-0" style="min-width: 900px;">
+                        <thead>
+                            <tr>
+                                <th scope="col" style="width: 80px;">ID</th>
+                                <th scope="col">Nombre del Proyecto</th>
+                                <th scope="col" style="width: 200px;">Cliente</th>
+                                <th scope="col" style="width: 200px;">Operador</th>
+                                <th scope="col" style="width: 110px;">Fecha</th>
+                                <th scope="col" style="width: 150px;">Estado</th>
+                                <th scope="col" style="width: 140px;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for proyecto in proyectos_completados %}
                                 {% include 'invoice/_proyecto_row.html' with proyecto=proyecto rol=rol can_asignar=can_asignar can_cambiar_estado=can_cambiar_estado can_eliminar=can_eliminar %}
                             {% empty %}
                                 {% include 'invoice/_tabla_vacia.html' %}
@@ -179,6 +209,8 @@
 function updateProjectStatus(selectElement) {
     const projectId = selectElement.getAttribute('data-project-id');
     const newStatus = selectElement.value;
+    const ESTADOS_COMPLETADOS = new Set(['completado','cancelado','pausado']);
+    const ESTADOS_APROBADOS   = new Set(['aprobado','asignado','produccion','enchapado_pendiente']);
     
     // Crear FormData
     const formData = new FormData();
@@ -197,8 +229,30 @@ function updateProjectStatus(selectElement) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Mostrar mensaje de éxito
             showNotification('success', data.message);
+            // Mover la fila a la pestaña correcta según el nuevo estado
+            const row = selectElement.closest('tr');
+            let targetTbody = null, targetTab = null;
+            if (ESTADOS_COMPLETADOS.has(newStatus)) {
+                targetTbody = document.querySelector('#tab-completados tbody');
+                targetTab   = document.getElementById('tab-completados-btn');
+            } else if (ESTADOS_APROBADOS.has(newStatus)) {
+                targetTbody = document.querySelector('#tab-aprobados tbody');
+                targetTab   = document.getElementById('tab-aprobados-btn');
+            } else {
+                targetTbody = document.querySelector('#tab-borradores tbody');
+                targetTab   = document.getElementById('tab-borradores-btn');
+            }
+            if (row && targetTbody && row.closest('tbody') !== targetTbody) {
+                row.style.transition = 'opacity 0.3s';
+                row.style.opacity = '0';
+                setTimeout(() => {
+                    targetTbody.prepend(row);
+                    row.style.opacity = '1';
+                    targetTbody.querySelectorAll('td[colspan]').forEach(td => td.closest('tr').remove());
+                    if (targetTab) targetTab.click();
+                }, 300);
+            }
         } else {
             // Mostrar error y revertir el cambio
             showNotification('error', data.message);
@@ -334,26 +388,46 @@ function assignOperador(selectElement) {
     });
 }
 
-// Actualiza los badges numéricos de las pestañas
-function _actualizarBadgesTabs() {
-    const tabBorradores = document.getElementById('tab-borradores-btn');
-    const tabAprobados  = document.getElementById('tab-aprobados-btn');
-    if (!tabBorradores || !tabAprobados) return;
+// Actualiza los badges numéricos de las pestañas (no-op: badges removidos)
+function _actualizarBadgesTabs() {}
 
-    const cntB = document.querySelectorAll('#tab-borradores tbody tr:not(:has(td[colspan]))').length;
-    const cntA = document.querySelectorAll('#tab-aprobados tbody tr:not(:has(td[colspan]))').length;
-
-    [tabBorradores, cntB].concat([[tabAprobados, cntA]]).forEach(([btn, cnt]) => {
-        if (!(btn instanceof Element)) return;
-        let badge = btn.querySelector('.badge');
-        if (cnt > 0) {
-            if (!badge) { badge = document.createElement('span'); badge.className = 'badge bg-secondary ms-1'; btn.appendChild(badge); }
-            badge.textContent = cnt;
-        } else if (badge) {
-            badge.remove();
-        }
-    });
+// ── Colores en select de estado ─────────────────────────────────────────────
+const ESTADO_COLORS = {
+    'borrador':            { bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1' },
+    'en_proceso':          { bg: '#eff6ff', color: '#3b82f6', border: '#bfdbfe' },
+    'optimizado':          { bg: '#f0f9ff', color: '#0ea5e9', border: '#bae6fd' },
+    'aprobado':            { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+    'asignado':            { bg: '#ecfdf5', color: '#059669', border: '#6ee7b7' },
+    'produccion':          { bg: '#fff7ed', color: '#ea580c', border: '#fed7aa' },
+    'enchapado_pendiente': { bg: '#fefce8', color: '#ca8a04', border: '#fde68a' },
+    'completado':          { bg: '#e0f2fe', color: '#0284c7', border: '#7dd3fc' },
+    'pausado':             { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
+    'cancelado':           { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+};
+function _colorearSelect(sel) {
+    const c = ESTADO_COLORS[sel.value];
+    if (c) {
+        sel.style.background    = c.bg;
+        sel.style.color         = c.color;
+        sel.style.borderColor   = c.border;
+        sel.style.fontWeight    = '600';
+    } else {
+        sel.style.background = sel.style.color = sel.style.borderColor = sel.style.fontWeight = '';
+    }
 }
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('select.status-select').forEach(sel => {
+        _colorearSelect(sel);
+        sel.addEventListener('change', () => _colorearSelect(sel));
+    });
+});
+// Parchar updateProjectStatus para re-colorear tras cambio exitoso
+const _origUpdateStatus = updateProjectStatus;
+window.updateProjectStatus = function(selectElement) {
+    _origUpdateStatus(selectElement);
+    // Re-colorear de inmediato (el color cambia antes de que llegue la respuesta del servidor)
+    _colorearSelect(selectElement);
+};
 
 // Función para duplicar proyecto (autoservicio)
 function duplicateProject(projectId) {
