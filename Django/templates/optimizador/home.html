@@ -244,15 +244,22 @@
   window.OptimizerAnim = {
     start(selector, mode){
       const el = typeof selector==='string' ? document.querySelector(selector) : selector;
-      if(!el) return { finish(){} };
+      if(!el) return { finish(){}, setLabel(){} };
       const lbl = document.getElementById('oaLabel') || el.querySelector('.oa-label');
-      if(lbl) lbl.textContent = mode==='pdf' ? 'Generando PDF\u2026' : 'Optimizando\u2026';
+      if(lbl){
+        if(mode==='pdf') lbl.textContent = 'Generando PDF\u2026';
+        else if(mode==='cargar') lbl.textContent = 'Cargando proyecto\u2026';
+        else lbl.textContent = 'Optimizando\u2026';
+      }
       el.classList.add('oa-visible');
       const cv = document.getElementById('oaCanvas') || el.querySelector('canvas');
-      if(!cv) return { finish(){ el.classList.remove('oa-visible'); } };
+      if(!cv) return { finish(){ el.classList.remove('oa-visible'); }, setLabel(t){ if(lbl) lbl.textContent=t; } };
       cv.width = 288; cv.height = 192;
       const anim = new Anim(cv);
-      return { finish(){ anim.stop(); el.classList.remove('oa-visible'); } };
+      return {
+        finish(){ anim.stop(); el.classList.remove('oa-visible'); },
+        setLabel(t){ if(lbl) lbl.textContent=t; }
+      };
     }
   };
 })();
@@ -2743,7 +2750,7 @@
     // Helpers de overlay para la llegada desde Configurador 3D
     let __cfg3dTimer = null;
     function cfg3dOverlayShow(txt){ try{ const ov=document.getElementById('cfg3dOverlay'); const t=document.getElementById('cfg3dOverlayText'); const e=document.getElementById('cfg3dOverlayError'); const a=document.getElementById('cfg3dOverlayActions'); if (ov) ov.classList.add('show'); if (t && txt) t.textContent = txt; if (e) e.style.display='none'; if (a) a.style.display='none'; clearTimeout(__cfg3dTimer); __cfg3dTimer=setTimeout(()=>{ cfg3dOverlayError('Se está demorando más de lo esperado…'); }, 15000); }catch(_e){} }
-    function cfg3dOverlayText(txt){ try{ const t=document.getElementById('cfg3dOverlayText'); if (t) t.textContent = txt; }catch(_e){} }
+    function cfg3dOverlayText(txt){ try{ const t=document.getElementById('cfg3dOverlayText'); if (t) t.textContent = txt; } catch(_e){} try{ const lbl=document.getElementById('oaLabel'); if(lbl && lbl.closest('#optimizerAnimOverlay.oa-visible')) lbl.textContent = txt; }catch(_e2){} }
     function cfg3dOverlayError(msg){ try{ const e=document.getElementById('cfg3dOverlayError'); const a=document.getElementById('cfg3dOverlayActions'); if (e){ e.textContent = msg || 'Hubo un problema al cargar.'; e.style.display='block'; } if (a){ a.style.display='block'; } }catch(_e){} }
     function cfg3dShowReadyToast(msg){ try{ const t=document.getElementById('toastCfg3dReady'); if (t){ const m=t.querySelector('.msg'); if (m && msg) m.textContent=msg; t.style.display='block'; clearTimeout(window.__toastCfg3dTimer); window.__toastCfg3dTimer=setTimeout(()=>{ try{ t.style.display='none'; }catch(_e){} }, 3000); } }catch(_e){} }
     function cfg3dOverlayHide(){ try{ const ov=document.getElementById('cfg3dOverlay'); if (ov) ov.classList.remove('show'); sessionStorage.removeItem('cfg3d_loading_pid'); clearTimeout(__cfg3dTimer); cfg3dShowReadyToast('Listo: proyecto cargado y optimizado.'); }catch(_e){} }
@@ -5489,13 +5496,18 @@
 
     // Precarga desde parámetro ?proyecto_id= para abrir en modo edición
     document.addEventListener('DOMContentLoaded', async function(){
-        // Si venimos desde Configurador 3D con el mismo proyecto_id, mostrar overlay hasta terminar precarga
+        // Mostrar overlay animado al cargar un proyecto existente (desde lista o desde Configurador 3D)
+        let __loadAnim = null;
         try{
             const params = new URLSearchParams(window.location.search);
             const pid = params.get('proyecto_id');
+            if (pid && window.OptimizerAnim){
+                __loadAnim = OptimizerAnim.start('#optimizerAnimOverlay', 'cargar');
+            }
+            // Compatibilidad cfg3d: si viene con la key legacy, no duplicar
             const key = sessionStorage.getItem('cfg3d_loading_pid');
             if (pid && key && key === String(pid)){
-                cfg3dOverlayShow('Cargando proyecto desde Configurador 3D…');
+                cfg3dOverlayShow('Cargando proyecto…');
             }
         }catch(_e){}
         try{
@@ -5649,15 +5661,20 @@
                     resultadoCargado = true;
                 }
             }catch(_e){}
-            // Señal de listo: ocultar overlay si venimos del configurador
+            // Señal de listo: ocultar overlays de carga
             try{
+                if (__loadAnim){ __loadAnim.finish(); __loadAnim = null; }
                 const key = sessionStorage.getItem('cfg3d_loading_pid');
                 const pidNow = new URLSearchParams(window.location.search).get('proyecto_id');
                 if (key && pidNow && key === String(pidNow)){
+                    sessionStorage.removeItem('cfg3d_loading_pid');
                     cfg3dOverlayHide();
                 }
             }catch(__e){}
-        }catch(_e){}
+        }catch(_e){
+            // Fallback: asegurarse de ocultar el overlay si ocurrió un error inesperado
+            try{ if(__loadAnim){ __loadAnim.finish(); __loadAnim=null; } }catch(_e2){}
+        }
     });
 
     // Permitir re-render manual: restaura y desbloquea visualización
