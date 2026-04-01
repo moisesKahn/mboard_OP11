@@ -1881,13 +1881,11 @@
         try{ checkOptimizarBtn(); }catch(_){}
     }
 
-    /** Limpia la selección actual de cliente */
+    /** Limpia la selección actual de cliente (sin borrar el campo RUT) */
     function limpiarCliente(){
         clienteSeleccionado = null;
-        const rutIn = document.getElementById('rutCliente');
         const nomIn = document.getElementById('clienteInput');
         const badge = document.getElementById('clienteNuevoBadge');
-        if(rutIn){ rutIn.value = ''; rutIn.disabled = false; rutIn.readOnly = false; }
         if(nomIn){ nomIn.value = ''; nomIn.readOnly = false; }
         if(badge) badge.style.display = 'none';
         try{ checkOptimizarBtn(); }catch(_){}
