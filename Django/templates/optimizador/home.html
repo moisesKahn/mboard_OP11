@@ -1621,48 +1621,32 @@
     }
 
     /** Finaliza el proyecto (estado → completado) desde el modal de guardar */
-    async function finalizarProyectoDesdeModal(){
-        const cont = document.getElementById('resultadosOptimizacion');
-        const proyectoId = cont ? cont.getAttribute('data-proyecto-id') : null;
-        if(!proyectoId){ alert('No hay proyecto guardado.'); return; }
+    function finalizarProyectoDesdeModal(){
+        // Solo cierra el modal y limpia el optimizador para empezar un nuevo proyecto.
+        // El estado del proyecto NO se modifica aquí — queda en 'borrador' u 'optimizado'
+        // según lo que haya hecho el optimizador. El cambio a 'completado' lo realiza
+        // el supervisor/operador desde la lista de proyectos.
 
-        const btn = document.getElementById('mgp-btn-finalizar');
-        const textoOrig = btn ? btn.innerHTML : '';
-        if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Finalizando…'; }
-
+        // Cerrar modal
         try{
-            const fd = new FormData();
-            fd.append('proyecto_id', proyectoId);
-            fd.append('estado', 'completado');
-            fd.append('csrfmiddlewaretoken', getCsrfToken());
-            const resp = await fetch('{% url "update_project_status" %}', { method:'POST', body: fd, credentials:'same-origin' });
-            const data = await resp.json();
-            if(data.success){
-                // Cerrar modal
-                const modalEl = document.getElementById('modalGuardarProyecto');
-                if(modalEl){ const m = bootstrap.Modal.getInstance(modalEl); if(m) m.hide(); }
-                // Toast de éxito
-                const toast = document.createElement('div');
-                toast.className = 'alert alert-success position-fixed shadow';
-                toast.style.cssText = 'right:16px;bottom:16px;z-index:9999;min-width:260px;font-size:14px;';
-                toast.innerHTML = '<i class="ri-checkbox-circle-line me-2"></i><strong>Proyecto finalizado</strong> correctamente.';
-                document.body.appendChild(toast);
-                setTimeout(()=>{ toast.remove(); }, 3000);
-                // Resetear a estado de nuevo proyecto después de un pequeño delay
-                setTimeout(()=>{
-                    try{ limpiarProyectoCompleto(); }catch(_){}
-                    try{ nuevoProyecto(); }catch(_){}
-                    try{ checkOptimizarBtn(); }catch(_){}
-                }, 600);
-            } else {
-                alert(data.message || 'Error al finalizar el proyecto');
-                if(btn){ btn.disabled = false; btn.innerHTML = textoOrig; }
-            }
-        } catch(e){
-            console.error('Error finalizando proyecto:', e);
-            alert('Error de red al finalizar el proyecto.');
-            if(btn){ btn.disabled = false; btn.innerHTML = textoOrig; }
-        }
+            const modalEl = document.getElementById('modalGuardarProyecto');
+            if(modalEl){ const m = bootstrap.Modal.getInstance(modalEl); if(m) m.hide(); }
+        }catch(_){}
+
+        // Toast de confirmación
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-success position-fixed shadow';
+        toast.style.cssText = 'right:16px;bottom:16px;z-index:9999;min-width:260px;font-size:14px;';
+        toast.innerHTML = '<i class="ri-checkbox-circle-line me-2"></i><strong>Proyecto guardado.</strong> Listo para nuevo proyecto.';
+        document.body.appendChild(toast);
+        setTimeout(()=>{ try{ toast.remove(); }catch(_){} }, 3000);
+
+        // Limpiar optimizador para nuevo proyecto
+        setTimeout(()=>{
+            try{ limpiarProyectoCompleto(); }catch(_){}
+            try{ nuevoProyecto(); }catch(_){}
+            try{ checkOptimizarBtn(); }catch(_){}
+        }, 400);
     }
 
     function limpiarProyectoCompleto(){
