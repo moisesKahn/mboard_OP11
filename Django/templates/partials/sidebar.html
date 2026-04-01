@@ -224,13 +224,8 @@
   function mostrarNotifsPendientes(){try{const l=JSON.parse(localStorage.getItem('cg_op_notifs_pendientes')||'[]');if(!l.length)return;localStorage.removeItem('cg_op_notifs_pendientes');setTimeout(function(){l.forEach(function(i){mostrarNotifProyecto(i.nombre||'');});},400);}catch(_){}}
   mostrarNotifsPendientes();
   function _fetchNotifs(){fetch('/api/operador/notificaciones/',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(!d||!d.notificaciones||!d.notificaciones.length)return;d.notificaciones.forEach(function(n){sumarBadge(1);mostrarNotifProyecto(n.proyecto_nombre||'');});}).catch(function(){});}
-  _fetchNotifs();setInterval(_fetchNotifs,5000);
+  setTimeout(_fetchNotifs,1200);setInterval(_fetchNotifs,5000);
   if(window.BroadcastChannel){try{const bc=new BroadcastChannel('cg_op_{{ user.id }}');bc.onmessage=function(ev){if(ev.data&&ev.data.tipo==='nuevo_proyecto')_fetchNotifs();};}catch(_){}}
-  if(!window.EventSource)return;
-  let _es=null;
-  function conectarSSE(){if(_es)return;_es=new EventSource('{% url "operador_proyectos_sse" %}');_es.addEventListener('cambio',function(e){try{const d=JSON.parse(e.data);if(d.nuevos>0)_fetchNotifs();}catch(_){}});}
-  if(document.visibilityState!=='hidden')conectarSSE();
-  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')conectarSSE();});
 }());
 </script>
 {% endif %}

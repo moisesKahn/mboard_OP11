@@ -1,0 +1,80 @@
+<!-- Layout ligero para operador/enchapador — carga solo lo esencial -->
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+  {% load static %}
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimizador - Panel de Control de Optimización de Materiales</title>
+    <link rel="icon" type="image/png" sizes="144x144" href="{% static 'images/home-eight/icono (144 x 144 px).png' %}">
+    <link rel="shortcut icon" href="{% static 'images/home-eight/icono (144 x 144 px).png' %}">
+    <!-- Solo CSS esenciales -->
+    <link rel="stylesheet" href="/static/css/remixicon.css">
+    <link rel="stylesheet" href="/static/css/lib/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body>
+    {% include "../partials/sidebar.html" %}
+
+    <main class="dashboard-main">
+      {% include "../partials/navbar.html" %}
+        <div class="dashboard-main-body">
+                {% block content %}
+                {% endblock %}
+        </div>
+
+      {% include "../partials/footer.html" %}
+    </main>
+
+    <!-- Solo JS esenciales -->
+    <script src="/static/js/lib/jquery-3.7.1.min.js"></script>
+    <script src="/static/js/lib/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/lib/iconify-icon.min.js"></script>
+    <script src="/static/js/app.js"></script>
+
+    <!-- Chat polling (ligero) -->
+    <script>
+    (function(){
+      const badge = document.getElementById('messagesBadge');
+      const list = document.getElementById('messagesList');
+      const empty = document.getElementById('noMessages');
+      if (!badge || !list) return;
+      let lastTotal = 0, intervalId = null;
+      const pollMs = 4000;
+
+      async function refreshUnread(){
+        try {
+          const res = await fetch('/chat/unread-summary/');
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!data.success) return;
+          const total = data.total_unread || 0;
+          if (total > 0){ badge.classList.remove('d-none'); badge.textContent = total; }
+          else { badge.classList.add('d-none'); badge.textContent = '0'; }
+          lastTotal = total;
+          if (Array.isArray(data.conversaciones)){
+            if (!data.conversaciones.length){ if(empty) empty.style.display=''; return; }
+            if(empty) empty.style.display='none';
+            list.innerHTML='';
+            data.conversaciones.slice(0,10).forEach(item => {
+              const a=document.createElement('a');
+              a.href=`/chat/conversacion/${item.conversacion_id}/`;
+              a.className='px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between';
+              a.innerHTML=`<div class="d-flex align-items-center gap-3"><span class="w-32-px h-32-px bg-primary-subtle text-primary-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0">${item.unread}</span><div><h6 class="text-sm fw-semibold mb-2">${item.nombre||'Conversación'}</h6><p class="mb-0 text-xs text-secondary-light">${item.unread} mensaje(s) sin leer</p></div></div>`;
+              list.appendChild(a);
+            });
+          }
+        } catch(e){}
+      }
+      function start(){ if(!intervalId) intervalId=setInterval(refreshUnread,pollMs); }
+      function stop(){ if(intervalId){clearInterval(intervalId);intervalId=null;} }
+      setTimeout(refreshUnread, 1500);
+      start();
+      document.addEventListener('visibilitychange',()=>{ if(document.hidden) stop(); else { refreshUnread(); start(); } });
+    })();
+    </script>
+
+    {% block script %}{% endblock %}
+  </body>
+</html>

@@ -108,7 +108,10 @@ window.addEventListener('load', function () {
   // Eliminar duplicados
   _pendingIds = _pendingIds.filter(function(v, i, a) { return a.indexOf(v) === i; });
 
-  // Precarga batch: una sola petición con todos los IDs
+  // Precarga batch: una sola petición con todos los IDs — bajo demanda
+  var _batchLoading = false;
+  var _batchLoaded  = false;
+
   function _setBatchIndicator(loading) {
     var el = document.getElementById('prm-batch-indicator');
     var sp = document.getElementById('prm-batch-spinner');
@@ -133,23 +136,39 @@ window.addEventListener('load', function () {
     }
   }
 
-  if (_pendingIds.length > 0) {
+  // Función que carga el batch — se llama solo cuando se necesita (popup o vista resumen)
+  function _loadBatchIfNeeded(callback) {
+    if (_batchLoaded) { if (callback) callback(); return; }
+    if (_batchLoading) {
+      // Ya está cargando — esperar
+      var t = setInterval(function() {
+        if (_batchLoaded) { clearInterval(t); if (callback) callback(); }
+      }, 100);
+      return;
+    }
+    if (_pendingIds.length === 0) { _batchLoaded = true; if (callback) callback(); return; }
+    _batchLoading = true;
     _setBatchIndicator(true);
-    // Retrasar el batch para que la página termine de pintar primero
-    setTimeout(function() {
     fetch('/api/proyectos/resumen-batch?ids=' + _pendingIds.join(','), { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function(data) {
         var res = data.resumenes || {};
         Object.keys(res).forEach(function(id) { if (res[id]) _cache[id] = res[id]; });
-        window._prmCache = _cache;  // exponer para vista resumen en tabla
+        window._prmCache = _cache;
+        _batchLoaded = true;
+        _batchLoading = false;
         _setBatchIndicator(false);
+        if (callback) callback();
       })
       .catch(function() {
+        _batchLoading = false;
         _setBatchIndicator(false);
+        if (callback) callback();
       });
-    }, 1500); // fin setTimeout
   }
+
+  // Exponer para que la vista resumen pueda disparar la carga
+  window._prmLoadBatch = _loadBatchIfNeeded;
 
   function estadoBadge(estado, display) {
     var MAP = {
@@ -211,19 +230,21 @@ window.addEventListener('load', function () {
     document.getElementById('prm-content').style.display = 'none';
     bsModal.show();
 
-    if (_cache[id]) {
-      // Datos ya precargados → mostrar instantáneo
-      render(_cache[id]);
-    } else {
-      // Fallback: petición individual
-      fetch('/api/proyectos/' + id + '/resumen', { credentials: 'same-origin' })
-        .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
-        .then(function(d) { _cache[id] = d; window._prmCache = _cache; render(d); })
-        .catch(function() {
-          document.getElementById('prm-loading').innerHTML =
-            '<span class="text-danger">Error al cargar el resumen.</span>';
-        });
-    }
+    // Intentar cargar batch bajo demanda si no se ha cargado
+    _loadBatchIfNeeded(function() {
+      if (_cache[id]) {
+        render(_cache[id]);
+      } else {
+        // Fallback: petición individual
+        fetch('/api/proyectos/' + id + '/resumen', { credentials: 'same-origin' })
+          .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(d) { _cache[id] = d; window._prmCache = _cache; render(d); })
+          .catch(function() {
+            document.getElementById('prm-loading').innerHTML =
+              '<span class="text-danger">Error al cargar el resumen.</span>';
+          });
+      }
+    });
   }
 
   // Solo clic — sin hover

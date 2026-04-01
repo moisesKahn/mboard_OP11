@@ -1,4 +1,4 @@
-{% extends 'layout/layout.html' %}
+{% extends 'layout/layout_lean.html' %}
 {% load static %}
 {% load ui_extras %}
 
@@ -211,14 +211,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!resumenRelleno && window._prmCache) {
           rellenarFilasResumen(window._prmCache);
         } else if (!resumenRelleno) {
-          // Esperar a que el batch termine (máx 3s)
-          var intentos = 0;
-          var t = setInterval(function() {
-            if (window._prmCache || ++intentos > 30) {
-              clearInterval(t);
+          // Disparar carga batch bajo demanda
+          if (window._prmLoadBatch) {
+            window._prmLoadBatch(function() {
               if (window._prmCache) rellenarFilasResumen(window._prmCache);
-            }
-          }, 100);
+            });
+          }
         }
       } else {
         tablaNormal.style.display  = '';
