@@ -242,11 +242,11 @@ def buscar_cliente_por_rut(request):
     import re as _re
 
     def _normalize(rut: str) -> str:
-        """Normaliza RUT: quita puntos y espacios, pasa a mayúsculas."""
+        """Normaliza RUT: quita puntos, guiones y espacios, pasa a mayúsculas."""
         if not rut:
             return ''
         s = str(rut).upper().strip()
-        s = s.replace('.', '').replace(' ', '')
+        s = s.replace('.', '').replace('-', '').replace(' ', '')
         return s
 
     ctx = get_auth_context(request)
@@ -269,12 +269,13 @@ def buscar_cliente_por_rut(request):
         if not (ctx.get('organization_is_general') or ctx.get('is_support')):
             clientes_qs = clientes_qs.filter(organizacion_id=org_id)
 
-        # Buscar por RUT normalizado (sin puntos) o tal como está en BD
+        # Buscar por RUT: exacto (raw o normalizado) o por fragmento numérico
         from django.db.models import Q as _Q
         matches = clientes_qs.filter(
             _Q(rut__iexact=rut_raw) |
-            _Q(rut__iexact=rut_norm)
-        )[:5]
+            _Q(rut__iexact=rut_norm) |
+            _Q(rut__icontains=rut_norm)
+        ).distinct()[:5]
 
         if matches.exists():
             data = [

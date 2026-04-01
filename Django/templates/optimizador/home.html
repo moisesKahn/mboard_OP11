@@ -1853,8 +1853,8 @@
     let rutSearchTimeout = null;
     let _rutFetchSeq = 0;   // contador de secuencia para descartar respuestas obsoletas
 
-    /** Normaliza RUT: quita puntos y espacios, mayúsculas */
-    function _normRut(r){ return String(r||'').toUpperCase().trim().replace(/\./g,'').replace(/ /g,''); }
+    /** Normaliza RUT: quita puntos, guiones y espacios, mayúsculas */
+    function _normRut(r){ return String(r||'').toUpperCase().trim().replace(/[.\-\s]/g,''); }
 
     /** Selecciona un cliente del dropdown y actualiza el estado global */
     function seleccionarCliente(c){
