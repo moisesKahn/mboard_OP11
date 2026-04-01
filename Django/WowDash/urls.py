@@ -223,6 +223,9 @@ urlpatterns = [
     path('view-details', home_views.viewDetails, name='viewDetails'),
     path('widgets', home_views.widgets, name='widgets'),
     path('public', home_views.public, name='public'),
+    # ── Visor público (sin login) ──
+    path('visor/', core_views.visor_publico, name='visor_publico'),
+    path('visor/api/', core_views.visor_api, name='visor_api'),
     # operador web
     path('operador/', operator_views.operador_home, name='operador_home'),
     path('operador/historial/', operator_views.operador_historial, name='operador_historial'),

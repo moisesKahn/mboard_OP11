@@ -254,12 +254,12 @@ class UsuarioPerfilOptimizador(models.Model):
     ROLES = [
         ('super_admin', 'Super Administrador'),  # Soporte / Organización General
         ('org_admin', 'Administrador de Organización'),  # ADMIN_ORG
-        ('vendedor', 'Vendedor'),  # VENDEDOR
-        ('subordinador', 'Subordinador'),  # SUBORDINADOR (solo lectura en materiales)
-        ('operador', 'Operador'),  # OPERADOR (nuevo)
-        ('enchapador', 'Enchapador'),  # ENCHAPADOR (proceso de tapacanto)
-        ('supervisor', 'Supervisor'),  # SUPERVISOR (ver proyectos y métricas, sin administración global)
-        ('autoservicio', 'Autoservicio'),  # AUTOSERVICIO (portal restringido de cliente)
+        ('vendedor', 'Vendedor'),  # Crea/edita proyectos, ve clientes
+        ('subordinado', 'Subordinado'),  # Gestiona organizaciones y usuarios, depende del superusuario
+        ('operador', 'Operador'),  # Vista de corte guiado
+        ('enchapador', 'Enchapador'),  # Proceso de tapacanto
+        ('supervisor', 'Supervisor'),  # Asigna operadores, cambia estados
+        ('autoservicio', 'Autoservicio'),  # Portal restringido de cliente
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name="Usuario")
     rol = models.CharField(max_length=20, choices=ROLES, default='vendedor', verbose_name="Rol")
@@ -278,7 +278,7 @@ class UsuarioPerfilOptimizador(models.Model):
 
 
 # Roles satélite que se auto-crean para cada super_admin
-SATELITE_ROLES = ['operador', 'enchapador', 'vendedor', 'org_admin']
+SATELITE_ROLES = ['operador', 'enchapador', 'vendedor', 'supervisor', 'org_admin']
 
 
 class SuperAdminSatelite(models.Model):

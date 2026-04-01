@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.db.models import Q, Count
 from django.db.models.functions import TruncMonth, TruncWeek
 from core.models import Cliente, Proyecto, Organizacion, NotificacionOperador, NotificacionEnchapador
-from core.auth_utils import get_auth_context
+from core.auth_utils import get_auth_context, can_approve_projects, can_delete_projects
 from core.models import UsuarioPerfilOptimizador
 from core.forms import ClienteForm, ProyectoForm
 
@@ -443,10 +443,23 @@ def proyectos_list(request):
     for p in proyectos:
         setattr(p, 'available_operadores', operadores_by_org.get(getattr(p, 'organizacion_id', None), []))
     
+    # ── Separar proyectos: con operador asignado o en estado de producción → Aprobados
+    ESTADOS_APROBADOS = {'aprobado', 'asignado', 'produccion', 'enchapado_pendiente', 'completado'}
+    proyectos_aprobados  = [p for p in proyectos if p.operador_id or p.estado in ESTADOS_APROBADOS]
+    ids_aprobados        = {p.id for p in proyectos_aprobados}
+    proyectos_borradores = [p for p in proyectos if p.id not in ids_aprobados]
+
+    # ── Permisos por rol
+    can_asignar        = can_approve_projects(ctx)
+    can_cambiar_estado = can_approve_projects(ctx)
+    can_eliminar       = can_delete_projects(ctx)
+
     context = {
         "title": "Lista de Proyectos",
         "subTitle": "Proyectos",
         "proyectos": proyectos,
+        "proyectos_borradores": proyectos_borradores,
+        "proyectos_aprobados": proyectos_aprobados,
         "estados": estados,
         "clientes": clientes,
         "operadores_by_org": operadores_by_org,
@@ -457,6 +470,9 @@ def proyectos_list(request):
         "page_size": page_size,
         "total": total,
         "total_pages": total_pages,
+        "can_asignar": can_asignar,
+        "can_cambiar_estado": can_cambiar_estado,
+        "can_eliminar": can_eliminar,
     }
     return render(request, 'invoice/list.html', context)  # Usar el template existente
 
@@ -527,10 +543,11 @@ def update_project_status(request):
     """Actualizar estado del proyecto vía AJAX"""
     if request.method == 'POST':
         try:
+            ctx = get_auth_context(request)
+            if not can_approve_projects(ctx):
+                return JsonResponse({'success': False, 'message': 'No tiene permiso para cambiar el estado del proyecto.'}, status=403)
             proyecto_id = request.POST.get('proyecto_id')
             nuevo_estado = request.POST.get('estado')
-            
-            ctx = get_auth_context(request)
             base_qs = Proyecto.objects
             if not (ctx.get('organization_is_general') or ctx.get('is_support')):
                 base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
@@ -556,6 +573,9 @@ def asignar_operador(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Método no permitido'})
     try:
+        ctx = get_auth_context(request)
+        if not can_approve_projects(ctx):
+            return JsonResponse({'success': False, 'message': 'No tiene permiso para asignar operadores.'}, status=403)
         proyecto_id = request.POST.get('proyecto_id')
         operador_id = request.POST.get('operador_id') or None
         ctx = get_auth_context(request)
@@ -615,20 +635,16 @@ def delete_proyecto(request, proyecto_id):
     if request.method == 'POST':
         try:
             ctx = get_auth_context(request)
+            if not can_delete_projects(ctx):
+                return JsonResponse({'success': False, 'message': 'No tiene permiso para eliminar proyectos.'}, status=403)
             base_qs = Proyecto.objects
             if not (ctx.get('organization_is_general') or ctx.get('is_support')):
                 base_qs = base_qs.filter(organizacion_id=ctx.get('organization_id'))
             proyecto = get_object_or_404(base_qs, pk=proyecto_id)
             proyecto.delete()
-            return JsonResponse({
-                'success': True,
-                'message': 'Proyecto eliminado exitosamente.'
-            })
+            return JsonResponse({'success': True, 'message': 'Proyecto eliminado exitosamente.'})
         except Exception as e:
-            return JsonResponse({
-                'success': False,
-                'message': f'Error al eliminar proyecto: {str(e)}'
-            })
+            return JsonResponse({'success': False, 'message': f'Error al eliminar proyecto: {str(e)}'})
     return JsonResponse({'success': False, 'message': 'Método no permitido'})
 
 @login_required
@@ -884,3 +900,114 @@ def enchapador_notificaciones_api(request):
     ]
     notifs.update(leida=True)
     return JsonResponse({'notificaciones': data})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VISOR PÚBLICO — Sin login requerido
+# ─────────────────────────────────────────────────────────────────────────────
+
+def visor_publico(request):
+    """Página pública del visor de proyectos (sin autenticación)."""
+    return render(request, 'visor/visor.html')
+
+
+def visor_api(request):
+    """API JSON pública: devuelve datos de un proyecto por su public_id."""
+    proyecto_id = request.GET.get('id', '').strip()
+    if not proyecto_id:
+        return JsonResponse({'ok': False, 'error': 'Debes ingresar un ID de proyecto.'})
+    try:
+        proyecto_id_int = int(proyecto_id)
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': 'El ID debe ser un número entero.'})
+
+    from core.models import MaterialProyecto
+    import json as _json
+    try:
+        proyecto = (
+            Proyecto.objects
+            .select_related('cliente', 'organizacion', 'operador')
+            .get(public_id=proyecto_id_int)
+        )
+    except Proyecto.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': f'No se encontró ningún proyecto con ID #{proyecto_id_int}.'})
+
+    # ── Materiales desde MaterialProyecto (tabla relacional) ──
+    mp_qs = (
+        MaterialProyecto.objects
+        .filter(proyecto=proyecto)
+        .select_related('material', 'tapacanto')
+    )
+    materiales = [
+        {
+            'material':          mp.material.nombre,
+            'tapacanto':         mp.tapacanto.nombre if mp.tapacanto else None,
+            'cantidad_tableros': mp.cantidad_tableros,
+            'eficiencia':        float(mp.eficiencia),
+            'piezas':            [],
+        }
+        for mp in mp_qs
+    ]
+
+    # ── Fallback: leer del JSON de configuración si no hay registros relacionales ──
+    if not materiales and proyecto.configuracion:
+        cfg = proyecto.configuracion if isinstance(proyecto.configuracion, dict) else _json.loads(proyecto.configuracion)
+        res = proyecto.resultado_optimizacion if isinstance(proyecto.resultado_optimizacion, dict) else (_json.loads(proyecto.resultado_optimizacion) if proyecto.resultado_optimizacion else {})
+        mats_cfg = cfg.get('materiales', [])
+        mats_res = res.get('materiales', [])
+
+        for i, mat_cfg in enumerate(mats_cfg):
+            conf  = mat_cfg.get('configuracion_material', {})
+            mat_nombre = conf.get('material_nombre') or conf.get('nombre', f'Material {i+1}')
+            tap_nombre = conf.get('tapacanto_nombre') or conf.get('tapacanto_codigo')
+
+            # Piezas de la configuración
+            piezas_raw = mat_cfg.get('piezas', [])
+            piezas = [
+                {
+                    'nombre':   p.get('nombre', '—'),
+                    'ancho':    p.get('ancho', 0),
+                    'largo':    p.get('largo', 0),
+                    'cantidad': p.get('cantidad', 1),
+                }
+                for p in piezas_raw
+            ]
+
+            # Eficiencia y tableros del resultado
+            tableros_cnt = 0
+            eficiencia   = 0.0
+            if i < len(mats_res):
+                mat_res = mats_res[i]
+                tableros_cnt = len(mat_res.get('tableros', []))
+                eficiencia   = round(float(mat_res.get('eficiencia', 0)), 2)
+                # Si no encontramos nombre del material en cfg, buscar en resultado
+                if mat_nombre == f'Material {i+1}':
+                    mat_nombre = mat_res.get('material', {}).get('nombre', mat_nombre)
+                if not tap_nombre:
+                    tap_nombre = mat_res.get('tapacanto', {}).get('nombre')
+
+            materiales.append({
+                'material':          mat_nombre,
+                'tapacanto':         tap_nombre,
+                'cantidad_tableros': tableros_cnt,
+                'eficiencia':        eficiencia,
+                'piezas':            piezas,
+            })
+
+    data = {
+        'ok': True,
+        'public_id':      proyecto.public_id,
+        'nombre':         proyecto.nombre,
+        'estado':         proyecto.estado,
+        'cliente_nombre': proyecto.cliente.nombre if proyecto.cliente else '—',
+        'cliente_rut':    proyecto.cliente.rut    if proyecto.cliente else '—',
+        'organizacion':   proyecto.organizacion.nombre if proyecto.organizacion else '—',
+        'total_piezas':   proyecto.total_piezas,
+        'total_tableros': proyecto.total_tableros,
+        'fecha_creacion': proyecto.fecha_creacion.strftime('%d %b %Y') if proyecto.fecha_creacion else '—',
+        'operador': (
+            proyecto.operador.get_full_name() or proyecto.operador.username
+        ) if proyecto.operador else None,
+        'materiales': materiales,
+    }
+    return JsonResponse(data)

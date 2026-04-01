@@ -7,712 +7,258 @@
         <a href="{% url 'index' %}" class="sidebar-logo">
             <img src="{% static 'images/logo.png' %}" alt="site logo" class="light-logo">
             <img src="{% static 'images/logo.png' %}" alt="site logo" class="dark-logo">
-            <!-- Usar el mismo icono que el favicon / cabecera para el estado colapsado -->
             <img src="{% static 'images/home-eight/icono (144 x 144 px).png' %}" alt="site logo" class="logo-icon">
         </a>
     </div>
     <div class="sidebar-menu-area">
         <ul class="sidebar-menu" id="sidebar-menu">
-            {# rol_activo: si el super_admin activó un rol en sesión, usarlo; sino, el rol real del perfil #}
             {% with rol=request.session.superadmin_rol_activo|default:user.usuarioperfiloptimizador.rol %}
+
+            {# ═══ OPERADOR ═══ #}
             {% if rol == 'operador' %}
-              <!-- Menú exclusivo para Operador: solo sus proyectos, historial y salir -->
               <li>
                   <a href="{% url 'operador_home' %}" id="cgMisProyectosLink" style="position:relative;">
                       <iconify-icon icon="solar:scissors-outline" class="menu-icon"></iconify-icon>
                       <span>Mis Proyectos</span>
-                      <span id="cgNavBadge" style="
-                        display:none; position:absolute; top:6px; right:10px;
-                        background:#dc3545; color:#fff; font-size:10px; font-weight:700;
-                        min-width:17px; height:17px; border-radius:9px;
-                        padding:0 4px; line-height:17px; text-align:center;
-                        box-shadow:0 1px 4px rgba(0,0,0,.25);
-                      "></span>
+                      <span id="cgNavBadge" style="display:none;position:absolute;top:6px;right:10px;background:#dc3545;color:#fff;font-size:10px;font-weight:700;min-width:17px;height:17px;border-radius:9px;padding:0 4px;line-height:17px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.25);"></span>
                   </a>
               </li>
-              <li>
-                  <a href="{% url 'operador_historial' %}">
-                      <iconify-icon icon="mdi:history" class="menu-icon"></iconify-icon>
-                      <span>Historial</span>
-                  </a>
-              </li>
-              <li class="sidebar-logout-item">
-                  <a href="{% url 'logout' %}">
-                      <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
-                      <span>Cerrar Sesión</span>
-                  </a>
-              </li>
+              <li><a href="{% url 'operador_historial' %}"><iconify-icon icon="mdi:history" class="menu-icon"></iconify-icon><span>Historial</span></a></li>
+              <li class="sidebar-logout-item"><a href="{% url 'logout' %}"><iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon><span>Cerrar Sesión</span></a></li>
+
+            {# ═══ ENCHAPADOR ═══ #}
             {% elif rol == 'enchapador' %}
-              <!-- Menú exclusivo para Enchapador: solo bandeja y historial -->
-              <li>
-                  <a href="{% url 'enchapador_home' %}">
-                      <iconify-icon icon="mdi:tape-measure" class="menu-icon"></iconify-icon>
-                      <span>Pendientes</span>
-                  </a>
-              </li>
-              <li>
-                  <a href="{% url 'enchapador_historial' %}">
-                      <iconify-icon icon="mdi:history" class="menu-icon"></iconify-icon>
-                      <span>Historial</span>
-                  </a>
-              </li>
-              <li class="sidebar-logout-item">
-                  <a href="{% url 'logout' %}">
-                      <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
-                      <span>Cerrar Sesión</span>
-                  </a>
-              </li>
+              <li><a href="{% url 'enchapador_home' %}"><iconify-icon icon="mdi:tape-measure" class="menu-icon"></iconify-icon><span>Pendientes</span></a></li>
+              <li><a href="{% url 'enchapador_historial' %}"><iconify-icon icon="mdi:history" class="menu-icon"></iconify-icon><span>Historial</span></a></li>
+              <li class="sidebar-logout-item"><a href="{% url 'logout' %}"><iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon><span>Cerrar Sesión</span></a></li>
+
+            {# ═══ AUTOSERVICIO ═══ #}
             {% elif rol == 'autoservicio' %}
-              <!-- Menú reducido para Autoservicio -->
-              <li>
-                  <a href="{% url 'proyectos' %}">
-                      <iconify-icon icon="hugeicons:invoice-03" class="menu-icon"></iconify-icon>
-                      <span>Proyectos</span>
-                  </a>
-              </li>
-              <li>
-                  <a href="{% url 'optimizador_home' %}">
-                      <iconify-icon icon="solar:widget-2-outline" class="menu-icon"></iconify-icon>
-                      <span>Optimizador</span>
-                  </a>
-              </li>
-              <li>
-                  <a href="{% url 'configurador_3d' %}">
-                      <iconify-icon icon="mdi:cube-outline" class="menu-icon"></iconify-icon>
-                      <span>Configurador 3D</span>
-                  </a>
-              </li>
-              <li class="sidebar-logout-item">
-                  <a href="{% url 'logout' %}">
-                      <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
-                      <span>Cerrar Sesión</span>
-                  </a>
-              </li>
-            {% else %}
-              <!-- Menú completo para otros roles -->
-              <!-- Reordenado: Optimizador primero -->
-              <li>
-                  <a href="{% url 'optimizador_home' %}">
-                      <iconify-icon icon="solar:widget-2-outline" class="menu-icon"></iconify-icon>
-                      <span>Optimizador</span>
-                  </a>
-              </li>
-              {% if user.is_superuser or rol == 'super_admin' or rol == 'org_admin' %}
-              <li>
-                  <a href="{% url 'configurador_3d' %}">
-                      <iconify-icon icon="mdi:cube-outline" class="menu-icon"></iconify-icon>
-                      <span>Configurador 3D</span>
-                  </a>
-              </li>
-              {% endif %}
-              <li>
-                  <a href="{% url 'proyectos' %}">
-                      <iconify-icon icon="hugeicons:invoice-03" class="menu-icon"></iconify-icon>
-                      <span>Proyectos</span>
-                  </a>
-              </li>
-              <li>
-                  <a href="{% url 'usersList' %}">
-                      <iconify-icon icon="solar:users-group-two-rounded-outline" class="menu-icon"></iconify-icon>
-                      <span>Usuarios</span>
-                  </a>
-              </li>
-              <li>
-                  <a href="{% url 'clientes_lista' %}">
-                      <iconify-icon icon="solar:users-group-rounded-outline" class="menu-icon"></iconify-icon>
-                      <span>Clientes</span>
-                  </a>
-              </li>
-              <li>
-                  <a href="{% url 'organizaciones_lista' %}">
-                      <iconify-icon icon="solar:buildings-outline" class="menu-icon"></iconify-icon>
-                      <span>Organizaciones</span>
-                  </a>
-              </li>
+              <li><a href="{% url 'proyectos' %}"><iconify-icon icon="hugeicons:invoice-03" class="menu-icon"></iconify-icon><span>Proyectos</span></a></li>
+              <li><a href="{% url 'optimizador_home' %}"><iconify-icon icon="solar:widget-2-outline" class="menu-icon"></iconify-icon><span>Optimizador</span></a></li>
+              <li><a href="{% url 'configurador_3d' %}"><iconify-icon icon="mdi:cube-outline" class="menu-icon"></iconify-icon><span>Configurador 3D</span></a></li>
+              <li class="sidebar-logout-item"><a href="{% url 'logout' %}"><iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon><span>Cerrar Sesión</span></a></li>
+
+            {# ═══ VENDEDOR: Optimizador + Proyectos + Clientes ═══ #}
+            {% elif rol == 'vendedor' %}
+              <li><a href="{% url 'optimizador_home' %}"><iconify-icon icon="solar:widget-2-outline" class="menu-icon"></iconify-icon><span>Optimizador</span></a></li>
+              <li><a href="{% url 'proyectos' %}"><iconify-icon icon="hugeicons:invoice-03" class="menu-icon"></iconify-icon><span>Proyectos</span></a></li>
+              <li><a href="{% url 'clientes_lista' %}"><iconify-icon icon="solar:users-group-rounded-outline" class="menu-icon"></iconify-icon><span>Clientes</span></a></li>
+              <li class="sidebar-logout-item"><a href="{% url 'logout' %}"><iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon><span>Cerrar Sesión</span></a></li>
+
+            {# ═══ SUPERVISOR: Optimizador + Proyectos + Clientes + Materiales ═══ #}
+            {% elif rol == 'supervisor' %}
+              <li><a href="{% url 'optimizador_home' %}"><iconify-icon icon="solar:widget-2-outline" class="menu-icon"></iconify-icon><span>Optimizador</span></a></li>
+              <li><a href="{% url 'proyectos' %}"><iconify-icon icon="hugeicons:invoice-03" class="menu-icon"></iconify-icon><span>Proyectos</span></a></li>
+              <li><a href="{% url 'clientes_lista' %}"><iconify-icon icon="solar:users-group-rounded-outline" class="menu-icon"></iconify-icon><span>Clientes</span></a></li>
               <li class="dropdown">
-                  <a href="javascript:void(0)" class="has-arrow">
-                      <iconify-icon icon="solar:widget-4-outline" class="menu-icon"></iconify-icon>
-                      <span>Materiales</span>
-                  </a>
+                  <a href="javascript:void(0)" class="has-arrow"><iconify-icon icon="solar:widget-4-outline" class="menu-icon"></iconify-icon><span>Materiales</span></a>
                   <ul class="sidebar-submenu">
                       <li><a href="{% url 'tableros' %}"><i class="ri-circle-fill circle-icon text-primary-600 w-auto"></i> Tableros</a></li>
                       <li><a href="{% url 'tapacantos' %}"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Tapacantos</a></li>
                   </ul>
               </li>
-              <li>
-                  <a href="{% url 'etiqueta_config' %}">
-                      <iconify-icon icon="mdi:label-outline" class="menu-icon"></iconify-icon>
-                      <span>Diseño Etiqueta</span>
-                  </a>
+              <li class="sidebar-logout-item"><a href="{% url 'logout' %}"><iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon><span>Cerrar Sesión</span></a></li>
+
+            {# ═══ super_admin / org_admin / subordinado: menú completo ═══ #}
+            {% else %}
+              <li><a href="{% url 'optimizador_home' %}"><iconify-icon icon="solar:widget-2-outline" class="menu-icon"></iconify-icon><span>Optimizador</span></a></li>
+              <li><a href="{% url 'proyectos' %}"><iconify-icon icon="hugeicons:invoice-03" class="menu-icon"></iconify-icon><span>Proyectos</span></a></li>
+              <li><a href="{% url 'usersList' %}"><iconify-icon icon="solar:users-group-two-rounded-outline" class="menu-icon"></iconify-icon><span>Usuarios</span></a></li>
+              <li><a href="{% url 'clientes_lista' %}"><iconify-icon icon="solar:users-group-rounded-outline" class="menu-icon"></iconify-icon><span>Clientes</span></a></li>
+              {# Organizaciones: solo super_admin y subordinado (no org_admin) #}
+              {% if user.is_superuser or rol == 'super_admin' or rol == 'subordinado' or rol == 'subordinador' %}
+              <li><a href="{% url 'organizaciones_lista' %}"><iconify-icon icon="solar:buildings-outline" class="menu-icon"></iconify-icon><span>Organizaciones</span></a></li>
+              {% endif %}
+              <li class="dropdown">
+                  <a href="javascript:void(0)" class="has-arrow"><iconify-icon icon="solar:widget-4-outline" class="menu-icon"></iconify-icon><span>Materiales</span></a>
+                  <ul class="sidebar-submenu">
+                      <li><a href="{% url 'tableros' %}"><i class="ri-circle-fill circle-icon text-primary-600 w-auto"></i> Tableros</a></li>
+                      <li><a href="{% url 'tapacantos' %}"><i class="ri-circle-fill circle-icon text-warning-main w-auto"></i> Tapacantos</a></li>
+                  </ul>
               </li>
-              <li class="sidebar-logout-item">
-                  <a href="{% url 'logout' %}">
-                      <iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon>
-                      <span>Cerrar Sesión</span>
-                  </a>
-              </li>
+              {# Diseño Etiqueta y Configurador 3D: solo super_admin y org_admin #}
+              {% if user.is_superuser or rol == 'super_admin' or rol == 'org_admin' %}
+              <li><a href="{% url 'configurador_3d' %}"><iconify-icon icon="mdi:cube-outline" class="menu-icon"></iconify-icon><span>Configurador 3D</span></a></li>
+              <li><a href="{% url 'etiqueta_config' %}"><iconify-icon icon="mdi:label-outline" class="menu-icon"></iconify-icon><span>Diseño Etiqueta</span></a></li>
+              {% endif %}
+              <li class="sidebar-logout-item"><a href="{% url 'logout' %}"><iconify-icon icon="solar:logout-2-outline" class="menu-icon"></iconify-icon><span>Cerrar Sesión</span></a></li>
             {% endif %}
+
             {% endwith %}
         </ul>
     </div>
 </aside>
 
-<!-- DRAWER DE IMPERSONACIÓN — solo para super_admin. Se activa con el botón flotante en el borde del sidebar -->
+<!-- DRAWER DE IMPERSONACIÓN — solo para super_admin -->
 {% if user.is_authenticated and user.usuarioperfiloptimizador.rol == 'super_admin' %}
-
-{# Tab de apertura — siempre visible en el borde derecho del sidebar #}
-<button id="impDrawerTab" title="Usuarios de la organización"
-        onclick="toggleImpDrawer()"
-        style="
-          position:fixed; left:260px; top:50%; transform:translateY(-50%);
-          z-index:1100; width:22px; height:64px;
-          background:#6c5ce7; color:#fff; border:none; border-radius:0 8px 8px 0;
-          cursor:pointer; display:flex; align-items:center; justify-content:center;
-          box-shadow:2px 0 8px rgba(0,0,0,.18); transition:left .3s;
-          padding:0; font-size:13px;">
+<button id="impDrawerTab" title="Usuarios de la organización" onclick="toggleImpDrawer()"
+        style="position:fixed;left:260px;top:50%;transform:translateY(-50%);z-index:1100;width:22px;height:64px;background:#6c5ce7;color:#fff;border:none;border-radius:0 8px 8px 0;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:2px 0 8px rgba(0,0,0,.18);transition:left .3s;padding:0;font-size:13px;">
   <iconify-icon id="impDrawerTabIcon" icon="lucide:chevron-right"></iconify-icon>
 </button>
-
-{# Panel drawer #}
-<div id="impDrawer"
-     style="
-       position:fixed; left:-320px; top:0; width:300px; height:100vh;
-       background:#fff; z-index:1099; box-shadow:4px 0 24px rgba(0,0,0,.15);
-       display:flex; flex-direction:column;
-       transition:left .3s cubic-bezier(.4,0,.2,1);
-       font-family:inherit;">
-
-  {# Cabecera del drawer #}
-  <div style="padding:18px 16px 14px; border-bottom:1px solid #f0f0f0; background:#6c5ce7; color:#fff;">
-    <div style="display:flex; align-items:center; justify-content:space-between;">
+<div id="impDrawer" style="position:fixed;left:-320px;top:0;width:300px;height:100vh;background:#fff;z-index:1099;box-shadow:4px 0 24px rgba(0,0,0,.15);display:flex;flex-direction:column;transition:left .3s cubic-bezier(.4,0,.2,1);font-family:inherit;">
+  <div style="padding:18px 16px 14px;border-bottom:1px solid #f0f0f0;background:#6c5ce7;color:#fff;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
       <div>
-        <div style="font-weight:700; font-size:14px; display:flex; align-items:center; gap:6px;">
-          <iconify-icon icon="lucide:users"></iconify-icon> Usuarios de la org.
-        </div>
-        <div style="font-size:11px; opacity:.8; margin-top:2px;">
-          {{ user.usuarioperfiloptimizador.organizacion.nombre|default:"—" }}
-        </div>
+        <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;"><iconify-icon icon="lucide:users"></iconify-icon> Usuarios de la org.</div>
+        <div style="font-size:11px;opacity:.8;margin-top:2px;">{{ user.usuarioperfiloptimizador.organizacion.nombre|default:"—" }}</div>
       </div>
       <button onclick="toggleImpDrawer()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:2px;">✕</button>
     </div>
-    <input id="impSearch" type="text" placeholder="Buscar usuario…"
-           oninput="filtrarUsuarios(this.value)"
-           style="margin-top:10px; width:100%; padding:7px 10px; border-radius:6px;
-                  border:none; font-size:13px; background:rgba(255,255,255,.2);
-                  color:#fff; outline:none; box-sizing:border-box;"
-           ::placeholder="color:rgba(255,255,255,.6)">
+    <input id="impSearch" type="text" placeholder="Buscar usuario…" oninput="filtrarUsuarios(this.value)"
+           style="margin-top:10px;width:100%;padding:7px 10px;border-radius:6px;border:none;font-size:13px;background:rgba(255,255,255,.2);color:#fff;outline:none;box-sizing:border-box;">
   </div>
-
-  {# Lista de usuarios — se llena via JS #}
-  <div id="impUserList" style="flex:1; overflow-y:auto; padding:8px 0;">
-    <div style="text-align:center; padding:24px; color:#aaa; font-size:13px;">
-      <iconify-icon icon="lucide:loader-2" style="animation:spin 1s linear infinite;"></iconify-icon>
-      Cargando…
-    </div>
+  <div id="impUserList" style="flex:1;overflow-y:auto;padding:8px 0;">
+    <div style="text-align:center;padding:24px;color:#aaa;font-size:13px;"><iconify-icon icon="lucide:loader-2" style="animation:spin 1s linear infinite;"></iconify-icon> Cargando…</div>
   </div>
-
-  {# Footer con indicador de sesión actual #}
-  <div style="padding:12px 16px; border-top:1px solid #f0f0f0; background:#f8f7ff; font-size:12px; color:#6c5ce7;">
-    <iconify-icon icon="lucide:shield-check"></iconify-icon>
-    Conectado como <strong>{{ user.get_full_name|default:user.username }}</strong>
+  <div style="padding:12px 16px;border-top:1px solid #f0f0f0;background:#f8f7ff;font-size:12px;color:#6c5ce7;">
+    <iconify-icon icon="lucide:shield-check"></iconify-icon> Conectado como <strong>{{ user.get_full_name|default:user.username }}</strong>
   </div>
 </div>
 
-{# Barra flotante — solo cuando se está impersonando #}
 {% if request.session.impersona_original_id %}
-<div id="impersonaBar" style="
-     position:fixed; bottom:0; left:0; right:0; z-index:9999;
-     background:#e17055; color:#fff;
-     padding:10px 20px; display:flex; align-items:center; justify-content:space-between;
-     box-shadow:0 -2px 12px rgba(0,0,0,.2); font-size:13px;">
-  <div style="display:flex; align-items:center; gap:10px;">
+<div id="impersonaBar" style="position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#e17055;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 -2px 12px rgba(0,0,0,.2);font-size:13px;">
+  <div style="display:flex;align-items:center;gap:10px;">
     <iconify-icon icon="lucide:eye" style="font-size:18px;"></iconify-icon>
-    <span>Actuando como <strong>{{ user.get_full_name|default:user.username }}</strong>
-    ({{ user.usuarioperfiloptimizador.rol }})</span>
+    <span>Actuando como <strong>{{ user.get_full_name|default:user.username }}</strong> ({{ user.usuarioperfiloptimizador.rol }})</span>
   </div>
-  <a href="{% url 'superadmin_restaurar' %}"
-     style="background:#fff; color:#e17055; padding:6px 16px; border-radius:6px;
-            font-weight:700; text-decoration:none; font-size:12px; white-space:nowrap;">
-    ↩ Volver a mi cuenta
-  </a>
+  <a href="{% url 'superadmin_restaurar' %}" style="background:#fff;color:#e17055;padding:6px 16px;border-radius:6px;font-weight:700;text-decoration:none;font-size:12px;white-space:nowrap;">↩ Volver a mi cuenta</a>
 </div>
 {% endif %}
 
 <style>
 @keyframes spin { to { transform:rotate(360deg); } }
-#impDrawer { margin-left: var(--sidebar-width, 0px); }
-
-/* Ajustar tab cuando el sidebar está colapsado */
 .sidebar-collapsed #impDrawerTab { left: 76px; }
-
-/* Scrollbar fino en la lista */
 #impUserList::-webkit-scrollbar { width:4px; }
 #impUserList::-webkit-scrollbar-thumb { background:#ddd; border-radius:2px; }
 </style>
-
 <script>
-(function () {
+(function(){
   'use strict';
-
-  const DRAWER_OPEN_KEY = 'imp_drawer_open';
-  let _usuarios = [];
-  let _drawerOpen = false;
-
-  /* ── Abrir / cerrar ── */
-  window.toggleImpDrawer = function () {
-    _drawerOpen = !_drawerOpen;
-    applyDrawerState();
-    if (_drawerOpen && _usuarios.length === 0) cargarUsuarios();
-    sessionStorage.setItem(DRAWER_OPEN_KEY, _drawerOpen ? '1' : '0');
+  let _usuarios=[], _drawerOpen=false;
+  window.toggleImpDrawer=function(){
+    _drawerOpen=!_drawerOpen; applyDrawerState();
+    if(_drawerOpen&&_usuarios.length===0) cargarUsuarios();
+    sessionStorage.setItem('imp_drawer_open',_drawerOpen?'1':'0');
   };
-
-  function applyDrawerState() {
-    const drawer  = document.getElementById('impDrawer');
-    const tab     = document.getElementById('impDrawerTab');
-    const tabIcon = document.getElementById('impDrawerTabIcon');
-    if (!drawer) return;
-    if (_drawerOpen) {
-      drawer.style.left = '0';
-      tab.style.left = '300px';
-      tabIcon.setAttribute('icon', 'lucide:chevron-left');
-    } else {
-      drawer.style.left = '-320px';
-      // Posición tab: sigue al sidebar principal (260px normal, 76px colapsado)
-      const sidebarCollapsed = document.body.classList.contains('sidebar-collapsed');
-      tab.style.left = (sidebarCollapsed ? 76 : 260) + 'px';
-      tabIcon.setAttribute('icon', 'lucide:chevron-right');
-    }
+  function applyDrawerState(){
+    const drawer=document.getElementById('impDrawer');
+    const tab=document.getElementById('impDrawerTab');
+    const tabIcon=document.getElementById('impDrawerTabIcon');
+    if(!drawer) return;
+    if(_drawerOpen){ drawer.style.left='0'; tab.style.left='300px'; tabIcon.setAttribute('icon','lucide:chevron-left'); }
+    else{ drawer.style.left='-320px'; tab.style.left=(document.body.classList.contains('sidebar-collapsed')?76:260)+'px'; tabIcon.setAttribute('icon','lucide:chevron-right'); }
   }
-
-  /* ── Cargar usuarios vía API ── */
-  function cargarUsuarios() {
-    const list = document.getElementById('impUserList');
-    if (!list) return;
-    fetch('{% url "superadmin_usuarios" %}', { credentials: 'same-origin' })
-      .then(r => r.json())
-      .then(data => {
-        _usuarios = data.usuarios || [];
-        renderUsuarios(_usuarios);
-      })
-      .catch(() => {
-        list.innerHTML = '<div style="padding:20px;text-align:center;color:#e17055;font-size:13px;">Error al cargar usuarios</div>';
-      });
+  function cargarUsuarios(){
+    fetch('{% url "superadmin_usuarios" %}',{credentials:'same-origin'})
+      .then(r=>r.json()).then(data=>{ _usuarios=data.usuarios||[]; renderUsuarios(_usuarios); })
+      .catch(()=>{ document.getElementById('impUserList').innerHTML='<div style="padding:20px;text-align:center;color:#e17055;font-size:13px;">Error al cargar</div>'; });
   }
-
-  /* ── Renderizar lista ── */
-  function renderUsuarios(lista) {
-    const list = document.getElementById('impUserList');
-    if (!list) return;
-    if (!lista.length) {
-      list.innerHTML = '<div style="padding:24px;text-align:center;color:#aaa;font-size:13px;">No hay usuarios disponibles</div>';
-      return;
-    }
-
-    // Agrupar por rol
-    const grupos = {};
-    lista.forEach(u => {
-      if (!grupos[u.etiqueta]) grupos[u.etiqueta] = [];
-      grupos[u.etiqueta].push(u);
-    });
-
-    let html = '';
-    for (const [etiqueta, users] of Object.entries(grupos)) {
-      html += `<div style="padding:8px 14px 4px; font-size:10px; font-weight:700;
-                           text-transform:uppercase; color:#aaa; letter-spacing:.06em;">
-                 ${etiqueta}
-               </div>`;
-      users.forEach(u => {
-        html += `
-          <form method="post" action="/superadmin/impersonar/${u.id}/" style="margin:0;">
-            <input type="hidden" name="csrfmiddlewaretoken" value="${getCsrf()}">
-            <button type="submit" title="Entrar como ${u.nombre}"
-                    style="width:100%; background:none; border:none; cursor:pointer;
-                           padding:8px 14px; display:flex; align-items:center; gap:10px;
-                           text-align:left; transition:background .15s; border-radius:0;">
-              <div style="width:34px; height:34px; border-radius:50%; background:#6c5ce7;
-                          color:#fff; display:flex; align-items:center; justify-content:center;
-                          font-weight:700; font-size:12px; flex-shrink:0;">
-                ${u.iniciales}
-              </div>
-              <div style="flex:1; min-width:0;">
-                <div style="font-size:13px; font-weight:600; color:#2d3436;
-                             white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                  ${u.nombre}
-                </div>
-                <div style="font-size:11px; color:#636e72;">@${u.username}</div>
-              </div>
-              <iconify-icon icon="${u.icono}" style="color:#aaa; font-size:16px; flex-shrink:0;"></iconify-icon>
-            </button>
-          </form>`;
+  function renderUsuarios(lista){
+    const list=document.getElementById('impUserList'); if(!list) return;
+    if(!lista.length){ list.innerHTML='<div style="padding:24px;text-align:center;color:#aaa;font-size:13px;">No hay usuarios disponibles</div>'; return; }
+    const grupos={};
+    lista.forEach(u=>{ if(!grupos[u.etiqueta]) grupos[u.etiqueta]=[]; grupos[u.etiqueta].push(u); });
+    let html='';
+    for(const [etiqueta,users] of Object.entries(grupos)){
+      html+=`<div style="padding:8px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;color:#aaa;letter-spacing:.06em;">${etiqueta}</div>`;
+      users.forEach(u=>{
+        html+=`<form method="post" action="/superadmin/impersonar/${u.id}/" style="margin:0;"><input type="hidden" name="csrfmiddlewaretoken" value="${getCsrf()}"><button type="submit" style="width:100%;background:none;border:none;cursor:pointer;padding:8px 14px;display:flex;align-items:center;gap:10px;text-align:left;transition:background .15s;border-radius:0;"><div style="width:34px;height:34px;border-radius:50%;background:#6c5ce7;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">${u.iniciales}</div><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;color:#2d3436;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${u.nombre}</div><div style="font-size:11px;color:#636e72;">@${u.username}</div></div><iconify-icon icon="${u.icono}" style="color:#aaa;font-size:16px;flex-shrink:0;"></iconify-icon></button></form>`;
       });
     }
-    list.innerHTML = html;
-
-    /* Hover effect */
-    list.querySelectorAll('button[type=submit]').forEach(btn => {
-      btn.addEventListener('mouseenter', () => btn.style.background = '#f8f7ff');
-      btn.addEventListener('mouseleave', () => btn.style.background = 'none');
+    list.innerHTML=html;
+    list.querySelectorAll('button[type=submit]').forEach(btn=>{
+      btn.addEventListener('mouseenter',()=>btn.style.background='#f8f7ff');
+      btn.addEventListener('mouseleave',()=>btn.style.background='none');
     });
   }
-
-  /* ── Filtro búsqueda ── */
-  window.filtrarUsuarios = function (q) {
-    const lower = q.toLowerCase().trim();
-    if (!lower) { renderUsuarios(_usuarios); return; }
-    renderUsuarios(_usuarios.filter(u =>
-      u.nombre.toLowerCase().includes(lower) ||
-      u.username.toLowerCase().includes(lower) ||
-      u.etiqueta.toLowerCase().includes(lower)
-    ));
+  window.filtrarUsuarios=function(q){
+    const lower=q.toLowerCase().trim();
+    if(!lower){renderUsuarios(_usuarios);return;}
+    renderUsuarios(_usuarios.filter(u=>u.nombre.toLowerCase().includes(lower)||u.username.toLowerCase().includes(lower)||u.etiqueta.toLowerCase().includes(lower)));
   };
-
-  /* ── CSRF helper ── */
-  function getCsrf() {
-    const m = document.cookie.match(/csrftoken=([^;]+)/);
-    return m ? m[1] : '';
-  }
-
-  /* ── Init al cargar DOM ── */
-  document.addEventListener('DOMContentLoaded', function () {
+  function getCsrf(){ const m=document.cookie.match(/csrftoken=([^;]+)/); return m?m[1]:''; }
+  document.addEventListener('DOMContentLoaded',function(){
     applyDrawerState();
-    // Ajustar tab cuando el sidebar se colapsa/expande
-    const observer = new MutationObserver(() => { if (!_drawerOpen) applyDrawerState(); });
-    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    const observer=new MutationObserver(()=>{ if(!_drawerOpen) applyDrawerState(); });
+    observer.observe(document.body,{attributes:true,attributeFilter:['class']});
   });
 }());
 </script>
-
-{% endif %}{# fin bloque super_admin #}
+{% endif %}
 
 <style>
-/* Posicionar botón de cerrar sesión al final del sidebar */
-.sidebar-menu {
-    display: flex;
-    flex-direction: column;
-    min-height: 100%;
-}
-.sidebar-logout-item {
-    margin-top: auto !important;
-}
+.sidebar-menu { display:flex; flex-direction:column; min-height:100%; }
+.sidebar-logout-item { margin-top: auto !important; }
 </style>
 
 {% with rol_sidebar=request.session.superadmin_rol_activo|default:user.usuarioperfiloptimizador.rol %}
 {% if rol_sidebar == 'operador' %}
 <style>
-#cgOpNotifContainer {
-  position: fixed;
-  top: 18px;
-  right: 18px;
-  z-index: 99999;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  pointer-events: none;
-}
-.cg-op-notif {
-  pointer-events: all;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  background: #b91c1c;
-  color: #fff;
-  border-radius: 10px;
-  box-shadow: 0 4px 18px rgba(0,0,0,.28);
-  padding: 13px 14px 13px 16px;
-  min-width: 280px;
-  max-width: 360px;
-  animation: cgNotifIn .35s cubic-bezier(.22,1,.36,1);
-}
-@keyframes cgNotifIn {
-  from { opacity:0; transform: translateX(60px); }
-  to   { opacity:1; transform: translateX(0); }
-}
-.cg-op-notif-icon {
-  font-size: 22px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-.cg-op-notif-body {
-  flex: 1;
-}
-.cg-op-notif-title {
-  font-weight: 700;
-  font-size: 13px;
-  margin-bottom: 3px;
-  letter-spacing: .01em;
-}
-.cg-op-notif-msg {
-  font-size: 12px;
-  opacity: .9;
-  line-height: 1.4;
-}
-.cg-op-notif-link {
-  display: inline-block;
-  margin-top: 7px;
-  background: rgba(255,255,255,.18);
-  color: #fff;
-  border-radius: 5px;
-  padding: 3px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  text-decoration: none;
-  border: 1px solid rgba(255,255,255,.35);
-  transition: background .15s;
-}
-.cg-op-notif-link:hover { background: rgba(255,255,255,.3); color:#fff; }
-.cg-op-notif-close {
-  background: none;
-  border: none;
-  color: rgba(255,255,255,.75);
-  font-size: 17px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 2px;
-  flex-shrink: 0;
-  transition: color .15s;
-}
-.cg-op-notif-close:hover { color: #fff; }
+#cgOpNotifContainer{position:fixed;top:18px;right:18px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+.cg-op-notif{pointer-events:all;display:flex;align-items:flex-start;gap:10px;background:#b91c1c;color:#fff;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.28);padding:13px 14px 13px 16px;min-width:280px;max-width:360px;animation:cgNotifIn .35s cubic-bezier(.22,1,.36,1);}
+@keyframes cgNotifIn{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:translateX(0)}}
+.cg-op-notif-icon{font-size:22px;flex-shrink:0;margin-top:1px}.cg-op-notif-body{flex:1}.cg-op-notif-title{font-weight:700;font-size:13px;margin-bottom:3px}.cg-op-notif-msg{font-size:12px;opacity:.9;line-height:1.4}
+.cg-op-notif-link{display:inline-block;margin-top:7px;background:rgba(255,255,255,.18);color:#fff;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;text-decoration:none;border:1px solid rgba(255,255,255,.35);transition:background .15s}
+.cg-op-notif-link:hover{background:rgba(255,255,255,.3);color:#fff}
+.cg-op-notif-close{background:none;border:none;color:rgba(255,255,255,.75);font-size:17px;line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0;transition:color .15s}
+.cg-op-notif-close:hover{color:#fff}
 </style>
-
 <script>
-(function () {
+(function(){
   'use strict';
-  const BADGE_KEY = 'cg_op_nuevos';
-  const badge = document.getElementById('cgNavBadge');
-  const OP_HOME = '{% url "operador_home" %}';
-
-  /* ── Crear contenedor de notificaciones en el body (no en el aside) ── */
-  let _notifContainer = document.getElementById('cgOpNotifContainer');
-  if (!_notifContainer) {
-    _notifContainer = document.createElement('div');
-    _notifContainer.id = 'cgOpNotifContainer';
-    document.body.appendChild(_notifContainer);
+  const BADGE_KEY='cg_op_nuevos', badge=document.getElementById('cgNavBadge'), OP_HOME='{% url "operador_home" %}';
+  let _notifContainer=document.getElementById('cgOpNotifContainer');
+  if(!_notifContainer){_notifContainer=document.createElement('div');_notifContainer.id='cgOpNotifContainer';document.body.appendChild(_notifContainer);}
+  function setBadge(n){if(!badge)return;if(n>0){badge.textContent=n>99?'99+':String(n);badge.style.display='inline-block';}else{badge.style.display='none';badge.textContent='';}}
+  function sumarBadge(c){const p=parseInt(localStorage.getItem(BADGE_KEY)||'0',10);const t=p+c;localStorage.setItem(BADGE_KEY,String(t));setBadge(t);}
+  setBadge(parseInt(localStorage.getItem(BADGE_KEY)||'0',10));
+  if(window.location.pathname===OP_HOME){localStorage.setItem(BADGE_KEY,'0');setBadge(0);}
+  function mostrarNotifProyecto(nombre){
+    const el=document.createElement('div');el.className='cg-op-notif';
+    const nh=nombre?`<b>${nombre}</b>`:'un proyecto';
+    el.innerHTML=`<span class="cg-op-notif-icon">🔴</span><div class="cg-op-notif-body"><div class="cg-op-notif-title">Nuevo proyecto asignado</div><div class="cg-op-notif-msg">Se te asignó ${nh}.</div><a href="${OP_HOME}" class="cg-op-notif-link">Ver mis proyectos →</a></div><button class="cg-op-notif-close" title="Cerrar">✕</button>`;
+    el.querySelector('.cg-op-notif-close').addEventListener('click',function(){el.style.transition='opacity .2s,transform .2s';el.style.opacity='0';el.style.transform='translateX(40px)';setTimeout(()=>el.remove(),220);});
+    _notifContainer.appendChild(el);
   }
-
-  /* ── Badge en sidebar ── */
-  function setBadge(n) {
-    if (!badge) return;
-    if (n > 0) {
-      badge.textContent = n > 99 ? '99+' : String(n);
-      badge.style.display = 'inline-block';
-    } else {
-      badge.style.display = 'none';
-      badge.textContent = '';
-    }
-  }
-
-  function sumarBadge(cant) {
-    const prev = parseInt(localStorage.getItem(BADGE_KEY) || '0', 10);
-    const total = prev + cant;
-    localStorage.setItem(BADGE_KEY, String(total));
-    setBadge(total);
-  }
-
-  const NOTIF_KEY = 'cg_op_notifs_pendientes'; // lista JSON de {nombre, ts}
-
-  // Restaurar badge guardado
-  setBadge(parseInt(localStorage.getItem(BADGE_KEY) || '0', 10));
-
-  // Limpiar badge si estamos en la lista de proyectos
-  if (window.location.pathname === OP_HOME) {
-    localStorage.setItem(BADGE_KEY, '0');
-    setBadge(0);
-  }
-
-  /* ── Notificación roja persistente ── */
-  function mostrarNotifProyecto(nombre) {
-    const container = _notifContainer;
-    if (!container) return;
-
-    const el = document.createElement('div');
-    el.className = 'cg-op-notif';
-    const nombreHtml = nombre ? `<b>${nombre}</b>` : 'un proyecto';
-    el.innerHTML = `
-      <span class="cg-op-notif-icon">🔴</span>
-      <div class="cg-op-notif-body">
-        <div class="cg-op-notif-title">Nuevo proyecto asignado</div>
-        <div class="cg-op-notif-msg">Se te asignó ${nombreHtml}.</div>
-        <a href="${OP_HOME}" class="cg-op-notif-link">Ver mis proyectos →</a>
-      </div>
-      <button class="cg-op-notif-close" title="Cerrar">✕</button>
-    `;
-
-    el.querySelector('.cg-op-notif-close').addEventListener('click', function () {
-      el.style.animation = 'none';
-      el.style.transition = 'opacity .2s, transform .2s';
-      el.style.opacity = '0';
-      el.style.transform = 'translateX(40px)';
-      setTimeout(() => el.remove(), 220);
-    });
-
-    container.appendChild(el);
-  }
-
-  /* ── Persistir notificación para mostrar al próximo page load ── */
-  function guardarNotifPendiente(nombre) {
-    try {
-      const lista = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-      lista.push({ nombre: nombre || '', ts: Date.now() });
-      localStorage.setItem(NOTIF_KEY, JSON.stringify(lista));
-    } catch (_) {}
-  }
-
-  function mostrarNotifsPendientes() {
-    try {
-      const lista = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-      if (!lista.length) return;
-      localStorage.removeItem(NOTIF_KEY);
-      // Mostrar con pequeño delay para que el DOM esté visible
-      setTimeout(function () {
-        lista.forEach(function (item) {
-          mostrarNotifProyecto(item.nombre || '');
-        });
-      }, 400);
-    } catch (_) {}
-  }
-
-  /* ── Manejador central: llega notificación de nuevo proyecto ── */
-  function onNuevoProyecto(ev) {
-    const nombre = (ev && ev.nombre) ? ev.nombre : '';
-    const cant = (ev && ev.cant) ? ev.cant : 1;
-    sumarBadge(cant);
-    mostrarNotifProyecto(nombre);
-  }
-
-  // Al cargar la página, mostrar notifs que llegaron mientras se navegaba
+  function mostrarNotifsPendientes(){try{const l=JSON.parse(localStorage.getItem('cg_op_notifs_pendientes')||'[]');if(!l.length)return;localStorage.removeItem('cg_op_notifs_pendientes');setTimeout(function(){l.forEach(function(i){mostrarNotifProyecto(i.nombre||'');});},400);}catch(_){}}
   mostrarNotifsPendientes();
-
-  // ── Consultar notificaciones pendientes en el SERVIDOR (funciona cross-device) ──
-  function _fetchNotifs() {
-    fetch('/api/operador/notificaciones/', { credentials: 'same-origin' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) {
-        if (!d || !d.notificaciones || !d.notificaciones.length) return;
-        d.notificaciones.forEach(function (n) {
-          sumarBadge(1);
-          mostrarNotifProyecto(n.proyecto_nombre || '');
-        });
-      })
-      .catch(function () {});
-  }
-
-  // Consulta inmediata al cargar y luego cada 5 segundos (sin recarga de página)
-  _fetchNotifs();
-  setInterval(_fetchNotifs, 5000);
-
-  /* ── 1. BroadcastChannel: INSTANTÁNEO (misma máquina/navegador) ── */
-  if (window.BroadcastChannel) {
-    try {
-      const bc = new BroadcastChannel('cg_op_{{ user.id }}');
-      bc.onmessage = function (ev) {
-        if (ev.data && ev.data.tipo === 'nuevo_proyecto') {
-          // Consultar el servidor para obtener el nombre real y no duplicar
-          _fetchNotifs();
-        }
-      };
-    } catch (_) {}
-  }
-
-  /* ── 2. SSE: fallback para otros dispositivos/navegadores ── */
-  if (!window.EventSource) return;
-  let _es = null;
-
-  function conectarSSE() {
-    if (_es) return;
-    _es = new EventSource('{% url "operador_proyectos_sse" %}');
-    _es.addEventListener('cambio', function (e) {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.nuevos > 0) {
-          // Consultar el servidor para obtener nombre y detalles reales
-          _fetchNotifs();
-        }
-      } catch (_) {}
-    });
-  }
-
-  if (document.visibilityState !== 'hidden') conectarSSE();
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible') conectarSSE();
-  });
+  function _fetchNotifs(){fetch('/api/operador/notificaciones/',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(!d||!d.notificaciones||!d.notificaciones.length)return;d.notificaciones.forEach(function(n){sumarBadge(1);mostrarNotifProyecto(n.proyecto_nombre||'');});}).catch(function(){});}
+  _fetchNotifs();setInterval(_fetchNotifs,5000);
+  if(window.BroadcastChannel){try{const bc=new BroadcastChannel('cg_op_{{ user.id }}');bc.onmessage=function(ev){if(ev.data&&ev.data.tipo==='nuevo_proyecto')_fetchNotifs();};}catch(_){}}
+  if(!window.EventSource)return;
+  let _es=null;
+  function conectarSSE(){if(_es)return;_es=new EventSource('{% url "operador_proyectos_sse" %}');_es.addEventListener('cambio',function(e){try{const d=JSON.parse(e.data);if(d.nuevos>0)_fetchNotifs();}catch(_){}});}
+  if(document.visibilityState!=='hidden')conectarSSE();
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')conectarSSE();});
 }());
 </script>
 {% endif %}
 
 {% if rol_sidebar == 'enchapador' %}
 <style>
-#cgEnchNotifContainer { position:fixed; top:18px; right:18px; z-index:99999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
-.cg-ench-notif {
-  pointer-events:all;
-  background:#92400e;
-  color:#fff;
-  border-radius:10px;
-  padding:12px 14px 12px 12px;
-  min-width:270px; max-width:340px;
-  display:flex; align-items:flex-start; gap:10px;
-  box-shadow:0 4px 18px rgba(0,0,0,.28);
-  animation:cgEnchNotifIn .35s cubic-bezier(.22,1,.36,1) both;
-}
-@keyframes cgEnchNotifIn {
-  from { opacity:0; transform:translateX(60px) scale(.95); }
-  to   { opacity:1; transform:translateX(0) scale(1); }
-}
-.cg-ench-notif-icon { font-size:22px; flex-shrink:0; margin-top:1px; }
-.cg-ench-notif-body { flex:1; min-width:0; }
-.cg-ench-notif-title { font-weight:700; font-size:13px; margin-bottom:2px; }
-.cg-ench-notif-msg   { font-size:12px; opacity:.9; }
-.cg-ench-notif-link  { display:inline-block; margin-top:5px; font-size:12px; color:#fde68a; text-decoration:underline; }
-.cg-ench-notif-close { background:none; border:none; color:rgba(255,255,255,.75); font-size:17px; line-height:1; cursor:pointer; padding:0 2px; flex-shrink:0; transition:color .15s; }
-.cg-ench-notif-close:hover { color:#fff; }
+#cgEnchNotifContainer{position:fixed;top:18px;right:18px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+.cg-ench-notif{pointer-events:all;background:#92400e;color:#fff;border-radius:10px;padding:12px 14px 12px 12px;min-width:270px;max-width:340px;display:flex;align-items:flex-start;gap:10px;box-shadow:0 4px 18px rgba(0,0,0,.28);animation:cgEnchNotifIn .35s cubic-bezier(.22,1,.36,1) both;}
+@keyframes cgEnchNotifIn{from{opacity:0;transform:translateX(60px) scale(.95)}to{opacity:1;transform:translateX(0) scale(1)}}
+.cg-ench-notif-icon{font-size:22px;flex-shrink:0;margin-top:1px}.cg-ench-notif-body{flex:1;min-width:0}.cg-ench-notif-title{font-weight:700;font-size:13px;margin-bottom:2px}.cg-ench-notif-msg{font-size:12px;opacity:.9}
+.cg-ench-notif-link{display:inline-block;margin-top:5px;font-size:12px;color:#fde68a;text-decoration:underline}
+.cg-ench-notif-close{background:none;border:none;color:rgba(255,255,255,.75);font-size:17px;line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0;transition:color .15s}.cg-ench-notif-close:hover{color:#fff}
 </style>
 <script>
-(function () {
+(function(){
   'use strict';
-  const ENCH_HOME = '{% url "enchapador_home" %}';
-
-  let _enchContainer = document.getElementById('cgEnchNotifContainer');
-  if (!_enchContainer) {
-    _enchContainer = document.createElement('div');
-    _enchContainer.id = 'cgEnchNotifContainer';
-    document.body.appendChild(_enchContainer);
-  }
-
-  function mostrarNotifEnchapado(nombre) {
-    const el = document.createElement('div');
-    el.className = 'cg-ench-notif';
-    const nombreHtml = nombre ? `<b>${nombre}</b>` : 'un proyecto';
-    el.innerHTML = `
-      <span class="cg-ench-notif-icon">🪵</span>
-      <div class="cg-ench-notif-body">
-        <div class="cg-ench-notif-title">Proyecto listo para enchapado</div>
-        <div class="cg-ench-notif-msg">${nombreHtml} está listo para encharpar.</div>
-        <a href="${ENCH_HOME}" class="cg-ench-notif-link">Ver proyectos pendientes →</a>
-      </div>
-      <button class="cg-ench-notif-close" title="Cerrar">✕</button>
-    `;
-    el.querySelector('.cg-ench-notif-close').addEventListener('click', function () {
-      el.style.transition = 'opacity .2s, transform .2s';
-      el.style.opacity = '0';
-      el.style.transform = 'translateX(40px)';
-      setTimeout(() => el.remove(), 220);
-    });
+  const ENCH_HOME='{% url "enchapador_home" %}';
+  let _enchContainer=document.getElementById('cgEnchNotifContainer');
+  if(!_enchContainer){_enchContainer=document.createElement('div');_enchContainer.id='cgEnchNotifContainer';document.body.appendChild(_enchContainer);}
+  function mostrarNotifEnchapado(nombre){
+    const el=document.createElement('div');el.className='cg-ench-notif';
+    const nh=nombre?`<b>${nombre}</b>`:'un proyecto';
+    el.innerHTML=`<span class="cg-ench-notif-icon">🪵</span><div class="cg-ench-notif-body"><div class="cg-ench-notif-title">Proyecto listo para enchapado</div><div class="cg-ench-notif-msg">${nh} está listo para encharpar.</div><a href="${ENCH_HOME}" class="cg-ench-notif-link">Ver proyectos pendientes →</a></div><button class="cg-ench-notif-close" title="Cerrar">✕</button>`;
+    el.querySelector('.cg-ench-notif-close').addEventListener('click',function(){el.style.transition='opacity .2s,transform .2s';el.style.opacity='0';el.style.transform='translateX(40px)';setTimeout(()=>el.remove(),220);});
     _enchContainer.appendChild(el);
   }
-
-  function _fetchEnchNotifs() {
-    fetch('/api/enchapador/notificaciones/', { credentials: 'same-origin' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) {
-        if (!d || !d.notificaciones || !d.notificaciones.length) return;
-        d.notificaciones.forEach(function (n) {
-          mostrarNotifEnchapado(n.proyecto_nombre || '');
-        });
-      })
-      .catch(function () {});
-  }
-
-  _fetchEnchNotifs();
-  setInterval(_fetchEnchNotifs, 5000);
+  function _fetchEnchNotifs(){fetch('/api/enchapador/notificaciones/',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(!d||!d.notificaciones||!d.notificaciones.length)return;d.notificaciones.forEach(function(n){mostrarNotifEnchapado(n.proyecto_nombre||'');});}).catch(function(){});}
+  _fetchEnchNotifs();setInterval(_fetchEnchNotifs,5000);
 }());
 </script>
 {% endif %}

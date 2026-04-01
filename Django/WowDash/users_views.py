@@ -48,7 +48,7 @@ def addUser(request):
         if is_org_admin(ctx) and not is_support(ctx):
             try:
                 # Limitar los roles que puede asignar (sin super_admin ni org_admin)
-                allowed_roles = ['vendedor', 'subordinador', 'operador']
+                allowed_roles = ['vendedor', 'supervisor', 'operador', 'enchapador']
                 perfil_form.fields['rol'].choices = [c for c in UsuarioPerfilOptimizador.ROLES if c[0] in allowed_roles]
                 # Forzar organización y deshabilitar campo
                 if 'organizacion' in perfil_form.fields:
@@ -73,7 +73,7 @@ def addUser(request):
                     if is_org_admin(ctx) and not is_support(ctx):
                         perfil.organizacion_id = ctx.get('organization_id')
                         # Evitar elevación de rol por manipulación del POST
-                        if perfil.rol not in ['vendedor', 'subordinador', 'operador']:
+                        if perfil.rol not in ['vendedor', 'supervisor', 'operador', 'enchapador']:
                             perfil.rol = 'vendedor'
                     try:
                         # Si el modelo tiene must_change_password, marcarlo
@@ -95,7 +95,7 @@ def addUser(request):
         perfil_form = UsuarioPerfilForm()
         if is_org_admin(ctx) and not is_support(ctx):
             try:
-                allowed_roles = ['vendedor', 'subordinador', 'operador']
+                allowed_roles = ['vendedor', 'supervisor', 'operador', 'enchapador']
                 perfil_form.fields['rol'].choices = [c for c in UsuarioPerfilOptimizador.ROLES if c[0] in allowed_roles]
                 if 'organizacion' in perfil_form.fields:
                     perfil_form.fields['organizacion'].initial = ctx.get('organization_id')
@@ -261,7 +261,7 @@ def editUser(request, user_id):
         # Ajustes de permisos para org_admin
         if is_org_admin(ctx) and not is_support(ctx):
             try:
-                allowed_roles = ['vendedor', 'subordinador', 'operador']
+                allowed_roles = ['vendedor', 'supervisor', 'operador', 'enchapador']
                 perfil_form.fields['rol'].choices = [c for c in UsuarioPerfilOptimizador.ROLES if c[0] in allowed_roles]
                 # Deshabilitar organización para evitar cambios
                 if 'organizacion' in perfil_form.fields:
@@ -285,7 +285,7 @@ def editUser(request, user_id):
                     if is_org_admin(ctx) and not is_support(ctx):
                         # Forzar organización y evitar elevación de rol
                         perfil.organizacion_id = ctx.get('organization_id')
-                        if perfil.rol not in ['vendedor', 'subordinador', 'operador']:
+                        if perfil.rol not in ['vendedor', 'supervisor', 'operador', 'enchapador']:
                             perfil.rol = 'vendedor'
                     perfil.save()
                     _audit(request, 'UPDATE_USER', user)
@@ -301,7 +301,7 @@ def editUser(request, user_id):
         perfil_form = UsuarioPerfilForm(instance=perfil)
         if is_org_admin(ctx) and not is_support(ctx):
             try:
-                allowed_roles = ['vendedor', 'subordinador', 'operador']
+                allowed_roles = ['vendedor', 'supervisor', 'operador', 'enchapador']
                 perfil_form.fields['rol'].choices = [c for c in UsuarioPerfilOptimizador.ROLES if c[0] in allowed_roles]
                 if 'organizacion' in perfil_form.fields:
                     perfil_form.fields['organizacion'].disabled = True

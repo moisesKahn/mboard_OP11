@@ -29,7 +29,8 @@ ROL_HOME = {
     'enchapador':  'enchapador_home',
     'vendedor':    'proyectos',
     'org_admin':   'proyectos',
-    'subordinador':'proyectos',
+    'subordinado': 'proyectos',
+    'subordinador':'proyectos',  # backward compat
     'supervisor':  'proyectos',
     'autoservicio':'autoservicio_home',
 }
@@ -71,7 +72,8 @@ def usuarios_impersonables(request):
         'operador':    'Operador',
         'enchapador':  'Enchapador',
         'supervisor':  'Supervisor',
-        'subordinador':'Subordinador',
+        'subordinado': 'Subordinado',
+        'subordinador':'Subordinado',   # backward compat
         'autoservicio':'Autoservicio',
     }
     ICONOS = {
@@ -80,7 +82,8 @@ def usuarios_impersonables(request):
         'operador':    'lucide:hammer',
         'enchapador':  'lucide:layers',
         'supervisor':  'lucide:eye',
-        'subordinador':'lucide:user-minus',
+        'subordinado': 'lucide:user-minus',
+        'subordinador':'lucide:user-minus',  # backward compat
         'autoservicio':'lucide:monitor',
     }
 

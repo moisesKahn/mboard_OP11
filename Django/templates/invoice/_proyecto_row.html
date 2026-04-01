@@ -1,0 +1,84 @@
+<tr>
+    <td>
+        {% if proyecto.public_id %}
+            <span class="badge bg-primary-50 text-primary-700 border border-primary-200">{{ proyecto.public_id }}</span>
+        {% elif proyecto.folio %}
+            <span class="badge bg-primary-50 text-primary-700 border border-primary-200">{{ proyecto.folio }}</span>
+        {% else %}
+            <span class="text-xs text-secondary-light">—</span>
+        {% endif %}
+    </td>
+    <td>
+        <div class="d-flex align-items-center">
+            <div class="w-32-px h-32-px bg-primary-50 text-primary-600 rounded-circle d-flex align-items-center justify-content-center me-12">
+                <iconify-icon icon="solar:document-text-outline" class="text-lg"></iconify-icon>
+            </div>
+            <div>
+                <h6 class="text-md mb-0 fw-medium">{{ proyecto.nombre }}</h6>
+                <span class="text-sm text-secondary-light">#{{ proyecto.codigo }}</span>
+            </div>
+        </div>
+    </td>
+    <td>
+        <div>
+            <h6 class="text-sm mb-0 fw-medium">{{ proyecto.cliente.nombre }}</h6>
+            <span class="text-xs text-secondary-light">{{ proyecto.cliente.rut }}</span>
+        </div>
+    </td>
+    {% if not rol == 'autoservicio' %}
+    <td>
+        {% if can_asignar %}
+            <select class="form-select form-select-sm operador-select" data-project-id="{{ proyecto.id }}" onchange="assignOperador(this)" style="max-width: 240px;">
+                <option value="">-- Sin asignar --</option>
+                {% for op in proyecto.available_operadores %}
+                    <option value="{{ op.id }}" {% if proyecto.operador and proyecto.operador.id == op.id %}selected{% endif %}>{{ op.name }}</option>
+                {% endfor %}
+            </select>
+        {% else %}
+            <span class="text-sm {% if not proyecto.operador %}text-secondary-light{% endif %}">
+                {% if proyecto.operador %}{{ proyecto.operador.get_full_name|default:proyecto.operador.username }}{% else %}—{% endif %}
+            </span>
+        {% endif %}
+    </td>
+    {% endif %}
+    <td><span class="text-sm text-secondary-light">{{ proyecto.fecha_creacion|date:"d M Y" }}</span></td>
+    {% if not rol == 'autoservicio' %}
+    <td>
+        {% if can_cambiar_estado %}
+            <select class="form-select form-select-sm status-select" data-project-id="{{ proyecto.id }}" onchange="updateProjectStatus(this)" style="max-width: 130px;">
+                {% for value, label in estados %}
+                    <option value="{{ value }}" {% if proyecto.estado == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        {% else %}
+            <span class="badge {% if proyecto.estado == 'borrador' %}bg-warning-100 text-warning-700{% elif proyecto.estado == 'optimizado' %}bg-info-100 text-info-700{% elif proyecto.estado == 'aprobado' %}bg-success-100 text-success-700{% elif proyecto.estado == 'asignado' %}bg-success-200 text-success-800{% elif proyecto.estado == 'completado' %}bg-success-600 text-white{% elif proyecto.estado == 'cancelado' %}bg-danger-100 text-danger-700{% else %}bg-secondary-100 text-secondary-700{% endif %} px-2 py-1">{{ proyecto.get_estado_display }}</span>
+        {% endif %}
+    </td>
+    {% endif %}
+    <td>
+        <button type="button" class="w-32-px h-32-px bg-warning-focus text-warning-main rounded-circle d-inline-flex align-items-center justify-content-center prm-trigger me-1" data-resumen-id="{{ proyecto.id }}" data-resumen-hover="{{ proyecto.id }}" title="Vista rapida">
+            <iconify-icon icon="ri:eye-line"></iconify-icon>
+        </button>
+        <a href="{% url 'exportar_pdf_json' proyecto.id %}" target="_blank" class="w-32-px h-32-px bg-primary-light text-primary-600 rounded-circle d-inline-flex align-items-center justify-content-center" title="PDF">
+            <iconify-icon icon="iconamoon:eye-light"></iconify-icon>
+        </a>
+        {% if rol == 'autoservicio' %}
+            <a href="javascript:void(0)" class="w-32-px h-32-px bg-info-focus text-info-main rounded-circle d-inline-flex align-items-center justify-content-center" onclick="duplicateProject('{{ proyecto.id }}')" title="Copiar">
+                <iconify-icon icon="solar:copy-outline"></iconify-icon>
+            </a>
+        {% else %}
+            <a href="{% url 'optimizador_abrir' proyecto.id %}" class="w-32-px h-32-px bg-success-focus text-success-main rounded-circle d-inline-flex align-items-center justify-content-center" title="Editar">
+                <iconify-icon icon="lucide:edit"></iconify-icon>
+            </a>
+            {% if can_eliminar %}
+            <a href="javascript:void(0)" class="w-32-px h-32-px bg-danger-focus text-danger-main rounded-circle d-inline-flex align-items-center justify-content-center" onclick="deleteProject('{{ proyecto.id }}')" title="Eliminar">
+                <iconify-icon icon="mingcute:delete-2-line"></iconify-icon>
+            </a>
+            {% else %}
+            <span class="w-32-px h-32-px bg-secondary-100 text-secondary-400 rounded-circle d-inline-flex align-items-center justify-content-center" title="Sin permiso" style="cursor:not-allowed;">
+                <iconify-icon icon="mingcute:delete-2-line"></iconify-icon>
+            </span>
+            {% endif %}
+        {% endif %}
+    </td>
+</tr>

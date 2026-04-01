@@ -147,3 +147,25 @@ def is_subordinador(ctx: Dict[str, Any]) -> bool:
     return ctx.get('role') == 'subordinador'
 
 
+
+
+def is_subordinado(ctx: Dict[str, Any]) -> bool:
+    """Subordinado: nivel global, gestiona organizaciones y usuarios."""
+    return ctx.get('role') in ('subordinado', 'subordinador')  # backward compat
+
+
+def is_supervisor(ctx: Dict[str, Any]) -> bool:
+    """Supervisor: asigna operadores y cambia estados dentro de una organización."""
+    return ctx.get('role') == 'supervisor'
+
+
+def can_approve_projects(ctx: Dict[str, Any]) -> bool:
+    """Roles que pueden asignar operadores y cambiar estado de proyectos."""
+    return ctx.get('role') in ('super_admin', 'org_admin', 'subordinado',
+                               'subordinador', 'supervisor')
+
+
+def can_delete_projects(ctx: Dict[str, Any]) -> bool:
+    """Roles que pueden eliminar proyectos."""
+    return ctx.get('role') in ('super_admin', 'org_admin', 'subordinado',
+                               'subordinador', 'supervisor')

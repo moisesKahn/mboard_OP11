@@ -10,6 +10,7 @@ PUBLIC_PATH_PREFIXES = (
     '/logout/',
     '/auth/login',
     '/api/auth/login',
+    '/visor/',          # Visor público de proyectos (sin login)
     settings.STATIC_URL,
     settings.MEDIA_URL,
 )

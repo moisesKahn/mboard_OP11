@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consultar Estado de Proyecto</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/lib/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/remixicon.css' %}">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="https://code.iconify.design/iconify-icon/1.0.8/iconify-icon.min.js"></script>
+    <style>
+        body { background:#f5f6fa; }
+        .visor-wrap { min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:40px 16px 60px; }
+        .visor-header { text-align:center; margin-bottom:28px; }
+        .visor-header img { max-height:44px; margin-bottom:14px; }
+        .visor-header h3 { font-size:1.45rem; font-weight:700; color:#1e2d3d; margin-bottom:5px; }
+        .visor-header p  { color:#6b7a99; font-size:.93rem; }
+        .search-card { background:#fff; border-radius:16px; box-shadow:0 4px 24px rgba(67,97,238,.09); padding:32px; width:100%; max-width:740px; }
+        .estado-pill { display:inline-flex; align-items:center; gap:8px; font-size:1rem; font-weight:700; padding:8px 22px; border-radius:50px; }
+        .estado-borrador            { background:#fff8e1; color:#f59e0b; border:1.5px solid #fcd34d; }
+        .estado-en_proceso          { background:#eff6ff; color:#3b82f6; border:1.5px solid #93c5fd; }
+        .estado-optimizado          { background:#f0fdfa; color:#0d9488; border:1.5px solid #5eead4; }
+        .estado-aprobado            { background:#f0fdf4; color:#16a34a; border:1.5px solid #86efac; }
+        .estado-asignado            { background:#f0fdf4; color:#15803d; border:1.5px solid #4ade80; }
+        .estado-produccion          { background:#faf5ff; color:#7c3aed; border:1.5px solid #c4b5fd; }
+        .estado-enchapado_pendiente { background:#fff7ed; color:#ea580c; border:1.5px solid #fdba74; }
+        .estado-completado          { background:#ecfdf5; color:#166534; border:1.5px solid #4ade80; }
+        .estado-pausado             { background:#f9fafb; color:#6b7280; border:1.5px solid #d1d5db; }
+        .estado-cancelado           { background:#fef2f2; color:#dc2626; border:1.5px solid #fca5a5; }
+        .info-block { background:#f8fafc; border:1px solid #e9ecef; border-radius:10px; padding:13px 16px; height:100%; }
+        .info-block .lbl { font-size:.7rem; text-transform:uppercase; letter-spacing:1.2px; color:#94a3b8; margin-bottom:3px; }
+        .info-block .val { font-size:.97rem; font-weight:600; color:#1e2d3d; margin:0; }
+        .sec-title { font-size:.75rem; text-transform:uppercase; letter-spacing:1.3px; color:#94a3b8; margin:22px 0 10px; display:flex; align-items:center; gap:6px; }
+        .mat-card { background:#f8fafc; border:1px solid #e9ecef; border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+        .pieza-tag { background:#eff6ff; color:#3b82f6; border-radius:6px; font-size:.77rem; padding:2px 9px; margin:2px 3px 2px 0; display:inline-block; }
+        #result-area,#error-area,#loading-area { display:none; }
+        .back-link { color:#6b7a99; text-decoration:none; font-size:.9rem; }
+        .back-link:hover { color:#4361ee; }
+    </style>
+</head>
+<body>
+<div class="visor-wrap">
+    <div class="visor-header">
+        <a href="{% url 'signin' %}"><img src="{% static 'images/logo.png' %}" alt="MBoard" onerror="this.style.display='none'"></a>
+        <h3>Consultar Estado de Proyecto</h3>
+        <p>Ingresa el ID del proyecto para ver su estado e informacion</p>
+    </div>
+    <div class="search-card">
+        <div class="d-flex gap-3 mb-4">
+            <div class="icon-field flex-grow-1">
+                <span class="icon top-50 translate-middle-y"><iconify-icon icon="solar:hashtag-outline"></iconify-icon></span>
+                <input type="number" id="input-id" min="1" class="form-control h-48-px bg-neutral-50 radius-12"
+                    placeholder="Ej: 1220" onkeydown="if(event.key==='Enter') buscarProyecto()">
+            </div>
+            <button class="btn btn-primary-600 h-48-px px-24 radius-12 d-flex align-items-center gap-2"
+                    onclick="buscarProyecto()" id="btn-buscar">
+                <iconify-icon icon="ion:search-outline"></iconify-icon><span>Buscar</span>
+            </button>
+        </div>
+        <div id="loading-area" class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+            <span class="text-secondary-light">Buscando...</span>
+        </div>
+        <div id="error-area" class="alert alert-danger radius-12 d-flex align-items-center gap-2">
+            <iconify-icon icon="solar:close-circle-outline" style="font-size:1.3rem;flex-shrink:0;"></iconify-icon>
+            <span id="error-msg"></span>
+        </div>
+        <div id="result-area">
+            <div class="text-center mb-4">
+                <div class="sec-title justify-content-center" style="margin-bottom:8px;">Estado del proyecto</div>
+                <span id="estado-badge" class="estado-pill"></span>
+            </div>
+            <hr class="border-neutral-100 mb-3">
+            <div class="row g-3 mb-1">
+                <div class="col-6 col-md-3"><div class="info-block"><div class="lbl">ID</div><p class="val" id="r-id"></p></div></div>
+                <div class="col-6 col-md-3"><div class="info-block"><div class="lbl">Fecha creacion</div><p class="val" id="r-fecha"></p></div></div>
+                <div class="col-6 col-md-3"><div class="info-block"><div class="lbl">Total piezas</div><p class="val" id="r-piezas"></p></div></div>
+                <div class="col-6 col-md-3"><div class="info-block"><div class="lbl">Tableros</div><p class="val" id="r-tableros"></p></div></div>
+                <div class="col-12 col-md-6"><div class="info-block"><div class="lbl">Nombre</div><p class="val" id="r-nombre"></p></div></div>
+                <div class="col-12 col-md-6"><div class="info-block"><div class="lbl">Cliente</div><p class="val" id="r-cliente"></p></div></div>
+                <div class="col-12 col-md-6"><div class="info-block"><div class="lbl">Organizacion</div><p class="val" id="r-org"></p></div></div>
+                <div class="col-12 col-md-6" id="r-operador-wrap" style="display:none"><div class="info-block"><div class="lbl">Operador asignado</div><p class="val" id="r-operador"></p></div></div>
+            </div>
+            <div id="r-mats-wrap">
+                <div class="sec-title"><iconify-icon icon="ri:stack-line"></iconify-icon>Materiales y Piezas</div>
+                <div id="r-mats-body"></div>
+            </div>
+        </div>
+        <hr class="border-neutral-100 mt-4 mb-3">
+        <div class="text-center">
+            <a href="{% url 'signin' %}" class="back-link">
+                <iconify-icon icon="ri:arrow-left-line" class="me-1"></iconify-icon>Volver al inicio de sesion
+            </a>
+        </div>
+    </div>
+</div>
+<script>
+const EL={'borrador':'solar:pen-new-square-outline','en_proceso':'ri:loader-4-line','optimizado':'solar:check-square-outline','aprobado':'solar:verified-check-outline','asignado':'lucide:user-check','produccion':'ri:tools-line','enchapado_pendiente':'ri:layers-line','completado':'solar:check-circle-bold','pausado':'ri:pause-circle-line','cancelado':'ri:close-circle-line'};
+const ELB={'borrador':'Borrador','en_proceso':'En Proceso','optimizado':'Optimizado','aprobado':'Aprobado','asignado':'Asignado','produccion':'En Produccion','enchapado_pendiente':'Enchapado Pendiente','completado':'Completado','pausado':'Pausado','cancelado':'Cancelado'};
+function buscarProyecto(){
+    const id=document.getElementById('input-id').value.trim();
+    if(!id){document.getElementById('input-id').focus();return;}
+    show('loading-area');hide('result-area');hide('error-area');
+    document.getElementById('btn-buscar').disabled=true;
+    fetch('/visor/api/?id='+encodeURIComponent(id),{headers:{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}})
+    .then(r=>{
+        if(!r.ok && r.status!==200){throw new Error('HTTP '+r.status);}
+        return r.text();
+    })
+    .then(txt=>{
+        hide('loading-area');document.getElementById('btn-buscar').disabled=false;
+        console.log('Respuesta raw:', txt.substring(0,200));
+        let d;
+        try{d=JSON.parse(txt);}catch(e){
+            console.error('JSON parse error:', e, txt.substring(0,300));
+            document.getElementById('error-msg').textContent='Respuesta inesperada: '+txt.substring(0,80);show('error-area');return;
+        }
+        if(!d.ok){document.getElementById('error-msg').textContent=d.error||'Proyecto no encontrado.';show('error-area');return;}
+        render(d);show('result-area');
+    }).catch(err=>{
+        hide('loading-area');
+        document.getElementById('btn-buscar').disabled=false;
+        document.getElementById('error-msg').textContent='Error de conexion: '+err.message;
+        show('error-area');
+    });
+}
+function render(d){
+    const e=d.estado||'borrador';
+    const b=document.getElementById('estado-badge');
+    b.className='estado-pill estado-'+e;
+    b.innerHTML='<iconify-icon icon="'+(EL[e]||'ri:question-line')+'"></iconify-icon>'+(ELB[e]||e);
+    set('r-id','#'+d.public_id);set('r-nombre',d.nombre);set('r-cliente',d.cliente_nombre+' — '+d.cliente_rut);
+    set('r-org',d.organizacion);set('r-piezas',d.total_piezas);set('r-tableros',d.total_tableros);set('r-fecha',d.fecha_creacion);
+    if(d.operador){set('r-operador',d.operador);show('r-operador-wrap');}else{hide('r-operador-wrap');}
+    const wrap=document.getElementById('r-mats-body');wrap.innerHTML='';
+    if(d.materiales&&d.materiales.length){
+        d.materiales.forEach(m=>{
+            const pHtml=(m.piezas&&m.piezas.length)?m.piezas.map(p=>'<span class="pieza-tag">'+p.nombre+' '+p.ancho+'x'+p.largo+' (x'+p.cantidad+')</span>').join(''):'<span class="text-secondary-light text-xs">Sin detalle</span>';
+            wrap.innerHTML+='<div class="mat-card"><div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><span class="fw-semibold d-flex align-items-center gap-2"><iconify-icon icon="ri:stack-line" class="text-primary-600"></iconify-icon>'+m.material+'</span><span class="text-xs text-secondary-light d-flex gap-3">'+(m.cantidad_tableros?'<span>'+m.cantidad_tableros+' tablero'+(m.cantidad_tableros!==1?'s':'')+'</span>':'')+(m.eficiencia?'<span>'+m.eficiencia+'% efic.</span>':'')+(m.tapacanto?'<span>'+m.tapacanto+'</span>':'')+'</span></div><div>'+pHtml+'</div></div>';
+        });
+        show('r-mats-wrap');
+    }else{hide('r-mats-wrap');}
+}
+function show(id){const el=document.getElementById(id);if(el)el.style.display='';}
+function hide(id){const el=document.getElementById(id);if(el)el.style.display='none';}
+function set(id,v){const el=document.getElementById(id);if(el)el.textContent=v!=null?v:'—';}
+</script>
+</body>
+</html>
