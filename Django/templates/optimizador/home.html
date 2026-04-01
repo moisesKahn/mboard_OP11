@@ -1662,6 +1662,11 @@
         try{
             // limpiar datos de cabecera
             ['rutCliente','folioProyecto','nombreProyecto'].forEach(id=>{ const el=document.getElementById(id); if (el) el.value=''; });
+            // Liberar campos que puedan haber quedado bloqueados al cargar un proyecto existente
+            const rutEl = document.getElementById('rutCliente');
+            if(rutEl){ rutEl.disabled = false; rutEl.readOnly = false; }
+            const nomEl = document.getElementById('clienteInput');
+            if(nomEl){ nomEl.disabled = false; nomEl.readOnly = false; }
             limpiarCliente();
             const badge = document.getElementById('clienteNuevoBadge'); if(badge) badge.style.display='none';
             const res = document.getElementById('resultadosOptimizacion'); if (res){ res.style.display='none'; res.removeAttribute('data-proyecto-id'); res.innerHTML=''; }
@@ -1879,8 +1884,10 @@
     /** Limpia la selección actual de cliente */
     function limpiarCliente(){
         clienteSeleccionado = null;
+        const rutIn = document.getElementById('rutCliente');
         const nomIn = document.getElementById('clienteInput');
         const badge = document.getElementById('clienteNuevoBadge');
+        if(rutIn){ rutIn.value = ''; rutIn.disabled = false; rutIn.readOnly = false; }
         if(nomIn){ nomIn.value = ''; nomIn.readOnly = false; }
         if(badge) badge.style.display = 'none';
         try{ checkOptimizarBtn(); }catch(_){}
