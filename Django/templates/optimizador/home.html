@@ -34,6 +34,17 @@
         color: #9aa0a6;
         opacity: .75;
     }
+    /* X de cierre en pestañas de material */
+    .mat-tab-close {
+        display:inline-flex;align-items:center;justify-content:center;
+        width:16px;height:16px;margin-left:6px;
+        border-radius:50%;font-size:11px;line-height:1;
+        color:inherit;opacity:0;transition:opacity .15s,background .15s;
+        vertical-align:middle;
+    }
+    .nav-link:hover .mat-tab-close,
+    .nav-link.active .mat-tab-close { opacity:.55; }
+    .mat-tab-close:hover { opacity:1!important; background:rgba(0,0,0,.12); }
     /* Dropdown personalizado para clientes */
     .dropdown-clientes { position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #dee2e6; border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.08); z-index:1050; padding:6px 0; max-height:260px; overflow-y:auto; font-size:14px; }
     .dropdown-clientes .estado { padding:6px 12px; color:#6c757d; font-style:italic; }
@@ -331,9 +342,10 @@
         <div class="mb-3 d-flex justify-content-between align-items-end">
             <ul class="nav nav-tabs" id="materialTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="material1-tab" data-bs-toggle="tab" data-bs-target="#material1" 
+            <button class="nav-link active" id="material1-tab" data-bs-toggle="tab" data-bs-target="#material1"
                 type="button" role="tab" ondblclick="duplicarMaterial(1)" title="Doble clic para duplicar material">
-                        Material 1
+                Material 1
+                <span class="mat-tab-close" onclick="cerrarMaterial(1,event)" title="Eliminar este material">&times;</span>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -2107,6 +2119,56 @@
     }
 
     // Agregar nueva pestaña de material
+    /** Elimina la pestaña de un material. Siempre deja al menos 1 pestaña abierta. */
+    function cerrarMaterial(idx, event) {
+        // Evitar que el clic propague al botón padre (no activar la pestaña)
+        if (event) { event.stopPropagation(); event.preventDefault(); }
+
+        // Contar pestañas de material reales (excluir el botón Agregar)
+        const allTabs = Array.from(document.querySelectorAll('#materialTabs .nav-item'))
+            .filter(li => {
+                const btn = li.querySelector('button');
+                return btn && btn.id && btn.id !== 'add-material-tab';
+            });
+        if (allTabs.length <= 1) {
+            mostrarAvisoTab('Debe haber al menos un material');
+            return;
+        }
+
+        const tabBtn = document.getElementById(`material${idx}-tab`);
+        const tabPane = document.getElementById(`material${idx}`);
+        const wasActive = tabBtn && tabBtn.classList.contains('active');
+
+        // Si era la activa, activar la anterior (o la primera disponible)
+        if (wasActive) {
+            const remaining = allTabs
+                .map(li => li.querySelector('button'))
+                .filter(btn => btn && btn.id !== `material${idx}-tab`);
+            const target = remaining[remaining.length - 1] || remaining[0];
+            if (target) {
+                // Guardar índice antes de cambiar
+                const targetIdx = parseInt((target.id.match(/material(\d+)-tab/) || [])[1]);
+                activeMaterialIndex = targetIdx;
+                new bootstrap.Tab(target).show();
+                // Restaurar piezas del material destino
+                const st = materialState[targetIdx];
+                renderPiezasToDOM(st && st.piezas ? st.piezas : []);
+                try { applyConfigToTab(targetIdx); } catch(_e){}
+            }
+        }
+
+        // Limpiar estado del material eliminado
+        delete materialState[idx];
+        delete _materialDirty[idx];
+
+        // Eliminar pestaña y contenido del DOM
+        if (tabBtn) { const li = tabBtn.closest('li'); if (li) li.remove(); }
+        if (tabPane) tabPane.remove();
+
+        try { updatePdfButton(); } catch(_e){}
+        try { checkOptimizarBtn(); } catch(_e){}
+    }
+
     function agregarMaterial() {
         // Bloquear si el material actual tiene piezas sin optimizar
         const prevIdx = activeMaterialIndex;
@@ -2127,9 +2189,11 @@
         newTab.className = 'nav-item';
         newTab.setAttribute('role', 'presentation');
         newTab.innerHTML = `
-            <button class="nav-link" id="material${contadorMateriales}-tab" data-bs-toggle="tab" 
-                    data-bs-target="#material${contadorMateriales}" type="button" role="tab" ondblclick="duplicarMaterial(${contadorMateriales})" title="Doble clic para duplicar material">
+            <button class="nav-link" id="material${contadorMateriales}-tab" data-bs-toggle="tab"
+                    data-bs-target="#material${contadorMateriales}" type="button" role="tab"
+                    ondblclick="duplicarMaterial(${contadorMateriales})" title="Doble clic para duplicar material">
                 Material ${contadorMateriales}
+                <span class="mat-tab-close" onclick="cerrarMaterial(${contadorMateriales},event)" title="Eliminar este material">&times;</span>
             </button>
         `;
         
