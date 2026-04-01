@@ -43,7 +43,15 @@
 </style>
 <!-- Overlay animación optimización central -->
 <link rel="stylesheet" href="/static/css/optimizer_anim.css">
-<div id="optimizerAnimOverlay"><canvas></canvas><div class="oa-label">Optimizando…</div></div>
+<div id="optimizerAnimOverlay">
+  <div class="oa-card">
+    <canvas></canvas>
+    <div class="oa-bottom">
+      <div class="oa-label">Optimizando…</div>
+      <div class="oa-bar-wrap"><div class="oa-bar"></div></div>
+    </div>
+  </div>
+</div>
 <script src="/static/js/optimizer_anim.js"></script>
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
     <h6 class="fw-semibold mb-0">Optimizador de Materiales{% if autoservicio %} (Autoservicio){% endif %}</h6>
@@ -364,12 +372,95 @@
         <i class="ri-checkbox-circle-line"></i> Finalizar
     </button>
     {% else %}
-    <button id="btnDescargarPDF" class="btn btn-outline-secondary ms-2" onclick="descargarPDF()">
-        <i class="ri-file-download-line"></i> PDF
+    <button id="btnGuardarProyecto" class="btn btn-success ms-2" onclick="abrirModalGuardarProyecto()" disabled title="Ver resumen y guardar proyecto">
+        <i class="ri-save-3-line"></i> Guardar Proyecto
     </button>
     {% endif %}
     <span id="alertaGating" class="ms-3 text-danger small" style="display:none;"></span>
 </div>
+
+<!-- Modal Guardar Proyecto (no-autoservicio) -->
+{% if not autoservicio %}
+<style>
+#modalGuardarProyecto .mgp-header{background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);padding:20px 24px;border-radius:8px 8px 0 0;}
+#modalGuardarProyecto .mgp-info-bar{background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:10px 20px;display:flex;flex-wrap:wrap;gap:20px;font-size:13px;}
+#modalGuardarProyecto .mgp-info-bar .lbl{color:#64748b;margin-right:4px;}
+#modalGuardarProyecto table thead th{background:#334155!important;color:#e2e8f0!important;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px;border-color:#475569!important;padding:10px 14px;}
+#modalGuardarProyecto table tbody td{padding:12px 14px;vertical-align:middle;border-color:#e2e8f0;font-size:13px;color:#1e293b;}
+#modalGuardarProyecto table tfoot td{background:#f1f5f9;font-weight:700;padding:10px 14px;color:#1e293b;border-color:#e2e8f0;font-size:13px;}
+#modalGuardarProyecto .badge-opt{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;font-size:11px;font-weight:600;}
+#modalGuardarProyecto .badge-opt.ok{background:#dcfce7;color:#166534;}
+#modalGuardarProyecto .badge-opt.warn{background:#fef9c3;color:#854d0e;}
+</style>
+<div class="modal fade" id="modalGuardarProyecto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius:10px;overflow:hidden;">
+            <!-- Header oscuro -->
+            <div class="mgp-header d-flex align-items-start justify-content-between gap-3">
+                <div>
+                    <div class="text-white fw-bold" style="font-size:18px;"><i class="ri-save-3-line me-2"></i>Resumen del Proyecto</div>
+                    <div class="text-slate-400 mt-1" style="font-size:12px;color:#94a3b8;" id="mgp-subtitulo"></div>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="text-center px-3 py-1 rounded" style="background:rgba(255,255,255,.07);">
+                        <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;">ID Proyecto</div>
+                        <div class="fw-bold" style="font-size:22px;color:#fbbf24;letter-spacing:1px;" id="mgp-folio">—</div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <!-- Barra info cliente -->
+            <div class="mgp-info-bar">
+                <div><span class="lbl">Cliente:</span><strong id="mgp-cliente">—</strong></div>
+                <div><span class="lbl">RUT:</span><span id="mgp-rut">—</span></div>
+                <div><span class="lbl">Proyecto:</span><span id="mgp-nombre">—</span></div>
+            </div>
+            <!-- Tabla materiales -->
+            <div class="modal-body p-0" style="max-height:55vh;overflow-y:auto;">
+                <div class="table-responsive">
+                    <table class="table mb-0" style="table-layout:fixed;width:100%;">
+                        <colgroup>
+                            <col style="width:36%">
+                            <col style="width:10%">
+                            <col style="width:14%">
+                            <col style="width:12%">
+                            <col style="width:28%">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>Material</th>
+                                <th class="text-center">Tableros</th>
+                                <th class="text-center">Piezas</th>
+                                <th class="text-center">Aprovech.</th>
+                                <th>Tapacanto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mgp-tabla-materiales"></tbody>
+                        <tfoot><tr id="mgp-tabla-footer-row"></tr></tfoot>
+                    </table>
+                </div>
+                <div id="mgp-alerta" class="alert alert-warning mx-3 my-2 py-2 d-none" style="font-size:13px;">
+                    <i class="ri-error-warning-line me-1"></i><span id="mgp-alerta-msg"></span>
+                </div>
+            </div>
+            <!-- Footer -->
+            <div class="modal-footer" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 20px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="ri-close-line"></i> Cerrar
+                </button>
+                <div class="d-flex gap-2 ms-auto">
+                    <button type="button" id="mgp-btn-pdf" class="btn btn-sm" style="background:#3b82f6;color:#fff;border:none;" onclick="generarPDFDesdeModal()">
+                        <i class="ri-file-pdf-line me-1"></i> Generar PDF
+                    </button>
+                    <button type="button" id="mgp-btn-finalizar" class="btn btn-success btn-sm fw-semibold" onclick="finalizarProyectoDesdeModal()">
+                        <i class="ri-checkbox-circle-line me-1"></i> Finalizar Proyecto
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Toast: Generando PDF (no desplaza el layout) -->
 <div id="toastGenerandoPdf" class="alert alert-secondary shadow-sm py-2 px-3">
@@ -522,12 +613,32 @@
     const materialState = {}; // { [index]: { piezas: [...], resultado: {...} } }
     let _dirty = false; // cambios sin optimizar en el material/proyecto actual
     const _materialDirty = {}; // { [index]: boolean } estado dirty por pestaña
-    // Habilita el botón Optimizar solo cuando hay al menos una pieza con ancho/alto válidos
+
+    /** Centraliza la lógica de habilitación del botón Optimizar.
+     *  Requiere: ≥1 pieza válida + cliente seleccionado (o al menos RUT+nombre ingresado). */
+    function checkOptimizarBtn(){
+        const btn = document.getElementById('btnOptimizar');
+        if(!btn) return;
+        // Condición 1: hay piezas válidas
+        let piezas;
+        try{ piezas = piezasFromDOM(); }catch(_){ piezas = []; }
+        const tienePiezas = piezas.some(p => Number(p.ancho)>0 && Number(p.alto)>0 && Number(p.cantidad)>0);
+        // Condición 2: hay cliente seleccionado o al menos RUT+nombre rellenados
+        const rutVal   = (document.getElementById('rutCliente')?.value || '').trim();
+        const nomVal   = (document.getElementById('clienteInput')?.value || '').trim();
+        const tieneCliente = !!(clienteSeleccionado) || (rutVal.length >= 3 && nomVal.length >= 2);
+        const ok = tienePiezas && tieneCliente;
+        btn.disabled = !ok;
+        // Tooltip explicativo
+        if(!tienePiezas) btn.title = 'Agrega al menos una pieza con dimensiones';
+        else if(!tieneCliente) btn.title = 'Ingresa el RUT y nombre del cliente antes de optimizar';
+        else btn.title = 'Optimizar distribución de piezas';
+        return ok;
+    }
+
+    // Habilita el botón Optimizar solo cuando hay piezas válidas Y cliente registrado
     document.addEventListener('input', function(e){
-        if (!document.getElementById('btnOptimizar')) return;
-        const piezas = piezasFromDOM();
-        const ok = piezas.some(p => Number(p.ancho)>0 && Number(p.alto)>0 && Number(p.cantidad)>0);
-        document.getElementById('btnOptimizar').disabled = !ok;
+        checkOptimizarBtn();
     });
     let activeMaterialIndex = 1;
     // Visualización manual
@@ -1153,18 +1264,25 @@
         btn.appendChild(span);
     }
 
-    // Control del botón PDF: habilitar/deshabilitar de forma centralizada
+    // Control del botón PDF / Guardar Proyecto: habilitar/deshabilitar de forma centralizada
     function setPdfButton(enabled){
+        // Botón PDF clásico (si existe aún en algún contexto)
         const b = document.getElementById('btnDescargarPDF');
-        if(!b) return;
-        b.disabled = !enabled;
-        b.classList.toggle('gated', !enabled);
-        if(!enabled){
-            b.style.cursor = 'not-allowed';
-            b.setAttribute('title','PDF no disponible hasta que se genere el resultado');
-        } else {
-            b.style.cursor = '';
-            b.removeAttribute('title');
+        if(b){
+            b.disabled = !enabled;
+            b.classList.toggle('gated', !enabled);
+            b.style.cursor = enabled ? '' : 'not-allowed';
+            if(!enabled) b.setAttribute('title','PDF no disponible hasta que se genere el resultado');
+            else b.removeAttribute('title');
+        }
+        // Botón Guardar Proyecto (reemplaza al PDF en modo no-autoservicio)
+        const bg = document.getElementById('btnGuardarProyecto');
+        if(bg){
+            bg.disabled = !enabled;
+            bg.classList.toggle('gated', !enabled);
+            bg.style.cursor = enabled ? '' : 'not-allowed';
+            if(!enabled) bg.setAttribute('title','Optimiza todos los materiales para guardar');
+            else bg.setAttribute('title','Ver resumen y guardar proyecto');
         }
     }
 
@@ -1174,19 +1292,165 @@
         try{
             const cont = document.getElementById('resultadosOptimizacion');
             const hasProyecto = !!(cont && cont.getAttribute('data-proyecto-id'));
-            // Si estamos bloqueando explícitamente (durante optimización), respetarlo
             if (window._bloquearPDF) { setPdfButton(false); return; }
-            // Verificar que TODOS los materiales están optimizados
             let allOptimized = true;
             for (let i = 1; i <= contadorMateriales; i++){
                 const st = materialState[i];
-                if (!st || !st.resultado || _materialDirty[i]){
-                    allOptimized = false;
-                    break;
-                }
+                if (!st || !st.resultado || _materialDirty[i]){ allOptimized = false; break; }
             }
             setPdfButton(hasProyecto && allOptimized);
         }catch(e){ console.warn('updatePdfButton error', e); }
+    }
+
+    /** Abre el modal de resumen/guardar proyecto (modo no-autoservicio) */
+    function abrirModalGuardarProyecto(){
+        const cont = document.getElementById('resultadosOptimizacion');
+        const proyectoId = cont ? cont.getAttribute('data-proyecto-id') : null;
+
+        // Recopilar datos de cabecera
+        const folio   = document.getElementById('folioProyecto')?.value || document.getElementById('resFolio')?.textContent || '—';
+        const cliente = document.getElementById('clienteInput')?.value || document.getElementById('resCliente')?.textContent || '—';
+        const rut     = document.getElementById('rutCliente')?.value || document.getElementById('resClienteRut')?.textContent || '—';
+        const nombre  = document.getElementById('nombreProyecto')?.value || document.getElementById('resNombre')?.textContent || '—';
+
+        document.getElementById('mgp-folio').textContent     = folio;
+        document.getElementById('mgp-cliente').textContent   = cliente;
+        document.getElementById('mgp-rut').textContent       = rut;
+        document.getElementById('mgp-nombre').textContent    = nombre;
+        document.getElementById('mgp-subtitulo').textContent = nombre !== '—' ? `Proyecto: ${nombre}` : '';
+
+        // Verificar qué materiales están optimizados
+        let pendientes = [];
+        for(let i = 1; i <= contadorMateriales; i++){
+            const st = materialState[i];
+            if(!st || !st.resultado || _materialDirty[i]) pendientes.push(i);
+        }
+
+        const alerta = document.getElementById('mgp-alerta');
+        const alertaMsg = document.getElementById('mgp-alerta-msg');
+        if(pendientes.length > 0){
+            alertaMsg.textContent = `Material(es) ${pendientes.join(', ')} sin optimizar o con cambios pendientes.`;
+            alerta.classList.remove('d-none');
+        } else {
+            alerta.classList.add('d-none');
+        }
+
+        // Construir tabla de materiales
+        let filas = '';
+        let totalTableros = 0, totalPiezas = 0;
+        for(let i = 1; i <= contadorMateriales; i++){
+            const st = materialState[i];
+            const matSel = document.getElementById(`tableroSelect${i}`);
+            const tapSel = document.getElementById(`tapacantoSelect${i}`);
+            const matNombre = matSel?.selectedOptions[0]?.text?.replace(/\s*\(.*\)$/,'').trim() || `Material ${i}`;
+            const tapNombre = tapSel?.selectedOptions[0]?.text || '—';
+
+            let tableros = '—', piezas = 0, aprovech = '—';
+            if(st && st.resultado){
+                const res = st.resultado;
+                tableros = (res.tableros || []).length;
+                totalTableros += tableros;
+                // Contar piezas únicas (por nombre+cantidad)
+                (st.piezas || []).forEach(p => { piezas += parseInt(p.cantidad) || 0; });
+                totalPiezas += piezas;
+                aprovech = typeof res.aprovechamiento === 'number'
+                    ? res.aprovechamiento.toFixed(1) + '%'
+                    : '—';
+            }
+            const optimizado = st && st.resultado && !_materialDirty[i];
+            const icono = optimizado
+                ? '<i class="ri-checkbox-circle-line text-success me-1"></i>'
+                : '<i class="ri-error-warning-line text-warning me-1"></i>';
+
+            filas += `<tr>
+                <td>${icono}<strong>${matNombre}</strong></td>
+                <td class="text-center">${tableros}</td>
+                <td class="text-center">${piezas > 0 ? piezas : '—'}</td>
+                <td class="text-center">${aprovech}</td>
+                <td style="font-size:12px;">${tapNombre !== 'Seleccionar tapacanto...' ? tapNombre : '—'}</td>
+            </tr>`;
+        }
+
+        document.getElementById('mgp-tabla-materiales').innerHTML = filas;
+        // El tfoot tiene un <tr> fijo (id=mgp-tabla-footer-row); rellenar sus celdas
+        const tfootRow = document.getElementById('mgp-tabla-footer-row');
+        if(tfootRow) tfootRow.innerHTML =
+            `<td class="ps-3 fw-bold">Totales</td><td class="text-center fw-bold">${totalTableros || '—'}</td><td class="text-center fw-bold">${totalPiezas || '—'}</td><td colspan="2"></td>`;
+
+        // Botón finalizar: solo activo si hay proyecto guardado y todos optimizados
+        const btnFin = document.getElementById('mgp-btn-finalizar');
+        if(btnFin){
+            const puedeF = !!proyectoId && pendientes.length === 0;
+            btnFin.disabled = !puedeF;
+            btnFin.title = puedeF ? 'Marcar proyecto como completado' : 'Optimiza todos los materiales primero';
+        }
+        // Botón PDF: solo activo si hay proyecto guardado y todos optimizados
+        const btnPdf = document.getElementById('mgp-btn-pdf');
+        if(btnPdf){
+            const puedeP = !!proyectoId && pendientes.length === 0;
+            btnPdf.disabled = !puedeP;
+            btnPdf.title = puedeP ? 'Generar PDF del proyecto' : 'Optimiza todos los materiales primero';
+        }
+
+        // Abrir modal Bootstrap
+        const modalEl = document.getElementById('modalGuardarProyecto');
+        if(modalEl) new bootstrap.Modal(modalEl).show();
+    }
+
+    /** Genera el PDF SIN cerrar el modal — el modal permanece abierto */
+    function generarPDFDesdeModal(){
+        // Solo llama a descargarPDF; la animación corre encima del modal (z-index 2000 > 1055 del modal)
+        descargarPDF();
+    }
+
+    /** Compat: alias por si queda alguna referencia anterior */
+    function cerrarModalGuardarYPDF(){
+        generarPDFDesdeModal();
+    }
+
+    /** Finaliza el proyecto (estado → completado) desde el modal de guardar */
+    async function finalizarProyectoDesdeModal(){
+        const cont = document.getElementById('resultadosOptimizacion');
+        const proyectoId = cont ? cont.getAttribute('data-proyecto-id') : null;
+        if(!proyectoId){ alert('No hay proyecto guardado.'); return; }
+
+        const btn = document.getElementById('mgp-btn-finalizar');
+        const textoOrig = btn ? btn.innerHTML : '';
+        if(btn){ btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Finalizando…'; }
+
+        try{
+            const fd = new FormData();
+            fd.append('proyecto_id', proyectoId);
+            fd.append('estado', 'completado');
+            fd.append('csrfmiddlewaretoken', getCsrfToken());
+            const resp = await fetch('{% url "update_project_status" %}', { method:'POST', body: fd, credentials:'same-origin' });
+            const data = await resp.json();
+            if(data.success){
+                // Cerrar modal
+                const modalEl = document.getElementById('modalGuardarProyecto');
+                if(modalEl){ const m = bootstrap.Modal.getInstance(modalEl); if(m) m.hide(); }
+                // Toast de éxito
+                const toast = document.createElement('div');
+                toast.className = 'alert alert-success position-fixed shadow';
+                toast.style.cssText = 'right:16px;bottom:16px;z-index:9999;min-width:260px;font-size:14px;';
+                toast.innerHTML = '<i class="ri-checkbox-circle-line me-2"></i><strong>Proyecto finalizado</strong> correctamente.';
+                document.body.appendChild(toast);
+                setTimeout(()=>{ toast.remove(); }, 3000);
+                // Resetear a estado de nuevo proyecto después de un pequeño delay
+                setTimeout(()=>{
+                    try{ limpiarProyectoCompleto(); }catch(_){}
+                    try{ nuevoProyecto(); }catch(_){}
+                    try{ checkOptimizarBtn(); }catch(_){}
+                }, 600);
+            } else {
+                alert(data.message || 'Error al finalizar el proyecto');
+                if(btn){ btn.disabled = false; btn.innerHTML = textoOrig; }
+            }
+        } catch(e){
+            console.error('Error finalizando proyecto:', e);
+            alert('Error de red al finalizar el proyecto.');
+            if(btn){ btn.disabled = false; btn.innerHTML = textoOrig; }
+        }
     }
 
     function limpiarProyectoCompleto(){
@@ -1404,6 +1668,7 @@
         const dd = document.getElementById('clientesDropdown');
         if(dd) dd.style.display = 'none';
         generarNombreProyecto();
+        try{ checkOptimizarBtn(); }catch(_){}
     }
 
     /** Limpia la selección actual de cliente */
@@ -1413,6 +1678,7 @@
         const badge = document.getElementById('clienteNuevoBadge');
         if(nomIn){ nomIn.value = ''; nomIn.readOnly = false; }
         if(badge) badge.style.display = 'none';
+        try{ checkOptimizarBtn(); }catch(_){}
     }
 
     /** Busca clientes por RUT en el servidor y actualiza el dropdown.
@@ -4755,7 +5021,7 @@
     // Nuevo flujo rápido de PDF (snapshot HTML + caché)
     async function descargarPDF() {
         if (window._bloquearPDF) { alert('Actualizando ID/archivo. Intenta nuevamente en unos segundos.'); return; }
-        const btn = document.getElementById('btnDescargarPDF');
+        const btn = document.getElementById('btnDescargarPDF') || document.getElementById('btnGuardarProyecto');
         if (btn) { btn.disabled = true; btn.classList.add('disabled'); btn.style.cursor = 'progress'; }
         const resumenEl = document.getElementById('resumenProyecto');
         let proyectoId = resumenEl ? resumenEl.getAttribute('data-proyecto-id') : null;

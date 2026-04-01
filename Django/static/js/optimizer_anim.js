@@ -5,7 +5,7 @@
   function rand(min,max){ return Math.random()*(max-min)+min; }
   function lerp(a,b,t){ return a+(b-a)*t; }
   // Paleta de grises (como el configurador 3D)
-  const PALETTE = ['#cfd8dc','#b0bec5'];
+  const PALETTE = ['#6366f1','#818cf8','#4f46e5','#7c3aed','#a5b4fc','#8b5cf6'];
 
   class BoardAnimation {
     constructor(canvas, mode){
@@ -103,11 +103,24 @@
     }
     draw(dt){
       const ctx = this.ctx; const {width,height} = this.canvas;
-      ctx.clearRect(0,0,width,height);
+      // Fondo degradado oscuro
+      const bgGrad = ctx.createLinearGradient(0,0,width,height);
+      bgGrad.addColorStop(0,'#1e293b'); bgGrad.addColorStop(1,'#0f172a');
+      ctx.fillStyle = bgGrad; ctx.fillRect(0,0,width,height);
+
       if(this.mode==='opt'){
+        // Grid sutil de fondo
+        ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1;
+        const step = 28;
+        for(let x=0;x<width;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,height); ctx.stroke(); }
+        for(let y=0;y<height;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(width,y); ctx.stroke(); }
         // Borde con pulso alpha
         const pulse = (Math.sin(this.elapsed/600)+1)/2; // 0..1
-        ctx.strokeStyle=`rgba(255,255,255,${0.40 + pulse*0.25})`; ctx.lineWidth=2; ctx.strokeRect(6,6,width-12,height-12);
+        // Glow en borde
+        ctx.shadowColor='#818cf8'; ctx.shadowBlur = 8 + pulse*6;
+        ctx.strokeStyle=`rgba(129,140,248,${0.30 + pulse*0.30})`; ctx.lineWidth=2;
+        ctx.strokeRect(6,6,width-12,height-12);
+        ctx.shadowBlur=0;
         this.cells.forEach(c=>{
           const tIn = Math.min(1, (this.elapsed - c.tEnter)/650);
           const eased = tIn<0?0:(tIn*tIn*(3-2*tIn));
@@ -116,10 +129,17 @@
           c.y = lerp(c.y, c.baseY, 0.10);
           const scale = eased*0.95 + 0.05;
           ctx.save(); ctx.translate(c.x, c.y); ctx.scale(scale, scale);
-          ctx.fillStyle = c.color; ctx.globalAlpha = 0.85 + pulse*0.10;
-          ctx.beginPath(); ctx.rect(-c.w/2,-c.h/2,c.w,c.h); ctx.fill();
-          // borde sutil
-          ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=1.1; ctx.stroke();
+          // Glow por pieza
+          ctx.shadowColor = c.color; ctx.shadowBlur = 10 + pulse*8;
+          ctx.fillStyle = c.color; ctx.globalAlpha = 0.88 + pulse*0.08;
+          // Borde redondeado
+          const r = 5, hw = c.w/2, hh = c.h/2;
+          ctx.beginPath(); ctx.moveTo(-hw+r,-hh); ctx.lineTo(hw-r,-hh); ctx.arcTo(hw,-hh,hw,-hh+r,r);
+          ctx.lineTo(hw,hh-r); ctx.arcTo(hw,hh,hw-r,hh,r); ctx.lineTo(-hw+r,hh); ctx.arcTo(-hw,hh,-hw,hh-r,r);
+          ctx.lineTo(-hw,-hh+r); ctx.arcTo(-hw,-hh,-hw+r,-hh,r); ctx.closePath(); ctx.fill();
+          // Highlight interior
+          ctx.shadowBlur=0; ctx.globalAlpha = 0.18;
+          ctx.fillStyle='#fff'; ctx.fillRect(-hw+r,-hh,c.w-2*r,hh*0.35);
           ctx.restore();
         });
       } else {
@@ -157,12 +177,9 @@
     const el = typeof selector==='string'? document.querySelector(selector): selector;
     if(!el) return { finish:()=>{} };
     el.classList.add('oa-visible');
-    // insertar etiqueta si no existe
-    if(!el.querySelector('.oa-label')){
-      const lbl = document.createElement('div'); lbl.className='oa-label'; lbl.textContent = (mode==='opt'? 'Optimizando…':'Generando PDF…'); el.appendChild(lbl);
-    } else {
-      el.querySelector('.oa-label').textContent = (mode==='opt'? 'Optimizando…':'Generando PDF…');
-    }
+    // actualizar etiqueta
+    const lblEl = el.querySelector('.oa-label');
+    if(lblEl) lblEl.textContent = (mode==='opt'? 'Optimizando…':'Generando PDF…');
     const canvas = el.querySelector('canvas'); if(!canvas){ return { finish:()=> el.classList.remove('oa-visible') }; }
     canvas.width = 320; canvas.height = 220;
     const anim = new BoardAnimation(canvas, mode);
