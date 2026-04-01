@@ -41,18 +41,174 @@
     .dropdown-clientes button.item:hover { background:#f1f5f9; }
     .dropdown-clientes .nuevo { color:#0d6efd; font-weight:600; }
 </style>
-<!-- Overlay animación optimización central -->
-<link rel="stylesheet" href="/static/css/optimizer_anim.css">
+<!-- ═══ OVERLAY ANIMACIÓN OPTIMIZADOR (inline → sin caché) ═══ -->
+<style>
+#optimizerAnimOverlay{
+  position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:2000;background:rgba(15,23,42,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  opacity:0;transition:opacity .35s ease;pointer-events:none;font-family:system-ui,sans-serif;
+}
+#optimizerAnimOverlay.oa-visible{opacity:1;pointer-events:auto}
+#optimizerAnimOverlay .oa-card{
+  background:linear-gradient(145deg,#1e293b,#0f172a);
+  border:1px solid rgba(99,102,241,.4);
+  border-radius:20px;
+  padding:28px 32px;
+  display:flex;flex-direction:column;align-items:center;gap:20px;
+  box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.04),0 0 40px rgba(99,102,241,.15);
+  min-width:300px;
+}
+#optimizerAnimOverlay canvas{
+  width:300px;height:200px;max-width:85vw;
+  border-radius:12px;
+  display:block;
+}
+#optimizerAnimOverlay .oa-bottom{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;}
+#optimizerAnimOverlay .oa-label{
+  color:#e2e8f0;font-size:13px;font-weight:600;
+  letter-spacing:1.2px;text-transform:uppercase;
+}
+#optimizerAnimOverlay .oa-bar-wrap{
+  width:100%;background:rgba(255,255,255,.08);border-radius:99px;height:4px;overflow:hidden;
+}
+#optimizerAnimOverlay .oa-bar{
+  height:4px;border-radius:99px;
+  background:linear-gradient(90deg,#6366f1,#818cf8,#a5b4fc,#6366f1);
+  background-size:300% 100%;
+  animation:oa-shimmer 1.8s ease-in-out infinite;
+  width:70%;
+}
+@keyframes oa-shimmer{
+  0%{background-position:100% center}
+  100%{background-position:-100% center}
+}
+</style>
 <div id="optimizerAnimOverlay">
   <div class="oa-card">
-    <canvas></canvas>
+    <canvas id="oaCanvas"></canvas>
     <div class="oa-bottom">
-      <div class="oa-label">Optimizando…</div>
+      <div class="oa-label" id="oaLabel">Optimizando…</div>
       <div class="oa-bar-wrap"><div class="oa-bar"></div></div>
     </div>
   </div>
 </div>
-<script src="/static/js/optimizer_anim.js"></script>
+<script>
+// ═══ OptimizerAnim inline (sin caché externa) ═══
+(function(){
+  function rand(min,max){ return Math.random()*(max-min)+min; }
+  function lerp(a,b,t){ return a+(b-a)*t; }
+  const PAL = ['#6366f1','#818cf8','#4f46e5','#7c3aed','#a5b4fc','#8b5cf6','#c4b5fd'];
+
+  class Anim {
+    constructor(canvas, mode){
+      this.cv = canvas; this.ctx = canvas.getContext('2d');
+      this.mode = mode; this.running = true;
+      this.elapsed = 0; this.lastTs = null; this.shuffleTimer = 0;
+      this.cells = []; this._setup();
+      requestAnimationFrame(t=>this._loop(t));
+    }
+    _setup(){
+      const W = this.cv.width, H = this.cv.height;
+      const mg = 18, pad = 6, aW = W-mg*2, aH = H-mg*2;
+      const sizes = [
+        {w:aW*.33,h:aH*.38},{w:aW*.21,h:aH*.38},
+        {w:aW*.28,h:aH*.26},{w:aW*.20,h:aH*.26},
+        {w:aW*.23,h:aH*.32},{w:aW*.25,h:aH*.32},{w:aW*.18,h:aH*.32}
+      ];
+      sizes.forEach(s=>{s.w*=rand(.92,1.07);s.h*=rand(.90,1.07);});
+      const rows=[sizes.slice(0,4),sizes.slice(4)];
+      let yC=mg, ci=0;
+      rows.forEach(row=>{
+        let xC=mg; const rH=Math.max(...row.map(p=>p.h));
+        row.forEach(p=>{
+          this.cells.push({
+            bx:xC+p.w/2, by:yC+rH/2,
+            x:rand(0,W), y:rand(0,H),
+            w:p.w, h:p.h,
+            color:PAL[ci%PAL.length],
+            tE:rand(0,400)
+          });
+          ci++; xC+=p.w+pad;
+        });
+        yC+=rH+pad;
+      });
+    }
+    _shuffle(){
+      const idx=[...this.cells.keys()];
+      for(let i=idx.length-1;i>0;i--){const j=0|Math.random()*(i+1);[idx[i],idx[j]]=[idx[j],idx[i]];}
+      const dest=idx.map(i=>({x:this.cells[i].bx,y:this.cells[i].by}));
+      this.cells.forEach((c,i)=>{c.bx=dest[i].x;c.by=dest[i].y;});
+    }
+    _loop(ts){
+      if(!this.running)return;
+      if(!this.lastTs)this.lastTs=ts;
+      const dt=ts-this.lastTs; this.lastTs=ts;
+      this.elapsed+=dt; this.shuffleTimer+=dt;
+      if(this.shuffleTimer>1700){this._shuffle();this.shuffleTimer=0;}
+      this._draw();
+      requestAnimationFrame(t=>this._loop(t));
+    }
+    _draw(){
+      const ctx=this.ctx, W=this.cv.width, H=this.cv.height;
+      // Fondo degradado oscuro
+      const bg=ctx.createLinearGradient(0,0,W,H);
+      bg.addColorStop(0,'#1e293b'); bg.addColorStop(1,'#0f172a');
+      ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+      // Grid tenue
+      ctx.strokeStyle='rgba(255,255,255,0.035)'; ctx.lineWidth=1;
+      for(let x=0;x<W;x+=26){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+      for(let y=0;y<H;y+=26){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+      // Pulso
+      const pulse=(Math.sin(this.elapsed/550)+1)/2;
+      // Borde glow
+      ctx.save(); ctx.shadowColor='#818cf8'; ctx.shadowBlur=10+pulse*8;
+      ctx.strokeStyle=`rgba(129,140,248,${.25+pulse*.3})`; ctx.lineWidth=2;
+      ctx.strokeRect(5,5,W-10,H-10); ctx.restore();
+      // Piezas
+      this.cells.forEach(c=>{
+        const tIn=Math.min(1,(this.elapsed-c.tE)/700);
+        const e=tIn<0?0:tIn*tIn*(3-2*tIn);
+        c.x=lerp(c.x,c.bx,.09); c.y=lerp(c.y,c.by,.09);
+        const sc=e*.95+.05;
+        ctx.save();
+        ctx.translate(c.x,c.y); ctx.scale(sc,sc);
+        ctx.shadowColor=c.color; ctx.shadowBlur=12+pulse*10;
+        ctx.globalAlpha=.82+pulse*.12;
+        ctx.fillStyle=c.color;
+        // Rect redondeado
+        const r=6,hw=c.w/2,hh=c.h/2;
+        ctx.beginPath();
+        ctx.moveTo(-hw+r,-hh); ctx.lineTo(hw-r,-hh); ctx.arcTo(hw,-hh,hw,-hh+r,r);
+        ctx.lineTo(hw,hh-r); ctx.arcTo(hw,hh,hw-r,hh,r);
+        ctx.lineTo(-hw+r,hh); ctx.arcTo(-hw,hh,-hw,hh-r,r);
+        ctx.lineTo(-hw,-hh+r); ctx.arcTo(-hw,-hh,-hw+r,-hh,r);
+        ctx.closePath(); ctx.fill();
+        // Highlight
+        ctx.shadowBlur=0; ctx.globalAlpha=.15;
+        ctx.fillStyle='#fff';
+        ctx.fillRect(-hw+r,-hh,(c.w-2*r)*1,hh*.38);
+        ctx.restore();
+      });
+    }
+    stop(){ this.running=false; }
+  }
+
+  window.OptimizerAnim = {
+    start(selector, mode){
+      const el = typeof selector==='string' ? document.querySelector(selector) : selector;
+      if(!el) return {finish:()=>{}};
+      const lbl = el.querySelector('.oa-label')||document.getElementById('oaLabel');
+      if(lbl) lbl.textContent = mode==='pdf' ? 'Generando PDF…' : 'Optimizando…';
+      el.classList.add('oa-visible');
+      const cv = el.querySelector('canvas')||document.getElementById('oaCanvas');
+      if(!cv) return {finish:()=>el.classList.remove('oa-visible')};
+      cv.width=320; cv.height=214;
+      const anim = new Anim(cv, mode);
+      return { finish(){ anim.stop(); el.classList.remove('oa-visible'); } };
+    }
+  };
+})();
+</script>
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
     <h6 class="fw-semibold mb-0">Optimizador de Materiales{% if autoservicio %} (Autoservicio){% endif %}</h6>
     <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" onclick="nuevoProyecto()" title="Iniciar un proyecto en blanco">
